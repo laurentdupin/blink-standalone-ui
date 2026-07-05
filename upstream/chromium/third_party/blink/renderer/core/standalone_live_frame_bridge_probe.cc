@@ -47,6 +47,7 @@
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
+#include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
 #include "cc/paint/paint_op.h"
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
@@ -479,6 +480,7 @@ extern "C" int StandaloneRendererMediaQueryDiagnosticFieldAt(int,
 void ResetStandaloneStackingPaintProvenanceForProbe();
 std::string StandaloneStackingPaintProvenanceJsonForProbe();
 void InstallStandaloneMojoThunksForStandaloneRenderer();
+void InstallStandaloneMojoCoreForStandaloneRenderer();
 
 namespace {
 
@@ -8930,6 +8932,376 @@ class StandaloneChromiumRootFrameSinkProbe final
   std::string failure_reason_;
   raw_ptr<base::RunLoop> copy_run_loop_ = nullptr;
   base::WeakPtrFactory<StandaloneChromiumRootFrameSinkProbe> weak_factory_{
+      this};
+};
+
+class StandaloneAsyncFrameSinkProbeClient final
+    : public cc::LayerTreeFrameSinkClient {
+ public:
+  void SetBeginFrameSource(viz::BeginFrameSource* source) override {
+    begin_frame_source_set = source != nullptr;
+  }
+
+  std::optional<viz::HitTestRegionList> BuildHitTestData() override {
+    return std::nullopt;
+  }
+
+  void ReclaimResources(std::vector<viz::ReturnedResource> resources) override {
+    reclaimed_resources += static_cast<int>(resources.size());
+  }
+
+  void SetTreeActivationCallback(base::RepeatingClosure callback) override {}
+
+  void DidReceiveCompositorFrameAck() override { ++ack_count; }
+
+  void DidPresentCompositorFrame(
+      uint32_t frame_token,
+      const viz::FrameTimingDetails& details) override {}
+
+  void DidLoseLayerTreeFrameSink() override { lost = true; }
+
+  void OnDraw(const gfx::Transform& transform,
+              const gfx::Rect& viewport,
+              bool resourceless_software_draw,
+              bool skip_draw) override {}
+
+  void SetMemoryPolicy(const cc::ManagedMemoryPolicy& policy) override {}
+
+  void SetExternalTilePriorityConstraints(
+      const gfx::Rect& viewport_rect,
+      const gfx::Transform& transform) override {}
+
+  bool begin_frame_source_set = false;
+  bool lost = false;
+  int ack_count = 0;
+  int reclaimed_resources = 0;
+};
+
+class StandaloneChromiumAsyncFrameSinkProbe final {
+ public:
+  explicit StandaloneChromiumAsyncFrameSinkProbe(const gfx::Size& viewport)
+      : viewport_(viewport) {}
+
+  StandaloneChromiumAsyncFrameSinkProbe(
+      const StandaloneChromiumAsyncFrameSinkProbe&) = delete;
+  StandaloneChromiumAsyncFrameSinkProbe& operator=(
+      const StandaloneChromiumAsyncFrameSinkProbe&) = delete;
+
+  ~StandaloneChromiumAsyncFrameSinkProbe() {
+    async_frame_sink_.reset();
+    root_frame_sink_.reset();
+    frame_sink_manager_.reset();
+  }
+
+  std::string Run() {
+    if (!CreateRootAndAsyncFrameSink()) {
+      return BuildJson(false);
+    }
+    if (!SubmitAndCopy(viewport_, SkColors::kBlue, "initial")) {
+      return BuildJson(false);
+    }
+
+    const gfx::Size resized(std::max(1, viewport_.width() / 2),
+                            std::max(1, viewport_.height() / 2));
+    if (!SubmitAndCopy(resized, SkColors::kGreen, "resized")) {
+      return BuildJson(false);
+    }
+
+    return BuildJson(true);
+  }
+
+ private:
+  bool CreateRootAndAsyncFrameSink() {
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
+    if (!task_runner) {
+      failure_reason_ =
+          "chromium async frame sink probe requires a current task runner";
+      return false;
+    }
+    if (!EnsureStandaloneChromiumDisplayGLInitialized(
+            &failure_reason_, "chromium async frame sink")) {
+      return false;
+    }
+
+    gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
+    gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
+        gpu::GrContextType::kGL;
+    output_surface_provider_ = std::make_unique<StandaloneOutputSurfaceProvider>(
+        gpu_thread_holder_, &failure_reason_,
+        /*use_vulkan_offscreen=*/false,
+        /*use_d3d12_offscreen=*/false, &vulkan_context_provider_available_,
+        &shared_context_state_is_vulkan_, &offscreen_skia_dependency_);
+
+    viz::FrameSinkManagerImpl::InitParams manager_params(
+        output_surface_provider_.get());
+    frame_sink_manager_ =
+        std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
+    frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_,
+                                             /*report_activation=*/true);
+    frame_sink_manager_->SetFrameSinkDebugLabel(
+        frame_sink_id_, "standalone-renderer-chromium-async-probe");
+
+    renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
+    renderer_settings_.requires_alpha_channel = true;
+
+    mojo::AssociatedRemote<viz::mojom::CompositorFrameSink>
+        root_associated_frame_sink_remote;
+    mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient>
+        async_client_receiver;
+
+    auto params = viz::mojom::RootCompositorFrameSinkParams::New();
+    params->frame_sink_id = frame_sink_id_;
+    params->widget = gpu::kNullSurfaceHandle;
+    params->gpu_compositing = true;
+    params->renderer_settings = renderer_settings_;
+    params->compositor_frame_sink = root_associated_frame_sink_remote
+                                        .BindNewEndpointAndPassDedicatedReceiver();
+    params->compositor_frame_sink_client =
+        async_client_receiver.InitWithNewPipeAndPassRemote();
+    params->display_private =
+        display_private_remote_.BindNewEndpointAndPassReceiver();
+
+    root_frame_sink_ = viz::RootCompositorFrameSinkImpl::Create(
+        std::move(params), frame_sink_manager_.get(),
+        output_surface_provider_.get(), viz::BeginFrameSource::kNotRestartableId,
+        /*run_all_compositor_stages_before_draw=*/true, &debug_settings_,
+        /*hint_session_factory=*/nullptr);
+    if (!root_frame_sink_) {
+      failure_reason_ = "RootCompositorFrameSinkImpl::Create returned null";
+      return false;
+    }
+    root_frame_sink_->SetDisplayVisible(true);
+    root_frame_sink_->Resize(viewport_);
+
+    StandaloneRasterContextProviderPair context_providers =
+        CreateStandaloneRasterContextProviders(
+            "chromium async frame sink", gpu_thread_holder_,
+            &gpu_context_created_, &raster_context_created_,
+            &shared_image_interface_available_, &failure_reason_);
+
+    async_root_receiver_ =
+        std::make_unique<mojo::Receiver<viz::mojom::CompositorFrameSink>>(
+            root_frame_sink_.get());
+
+    cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams async_params;
+    async_params.compositor_task_runner = task_runner;
+    async_params.pipes.compositor_frame_sink_remote =
+        async_root_receiver_->BindNewPipeAndPassRemote(task_runner);
+    async_params.pipes.client_receiver = std::move(async_client_receiver);
+    async_params.auto_needs_begin_frame = true;
+    async_params.no_compositor_frame_acks = false;
+    async_frame_sink_ =
+        std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
+            std::move(context_providers.compositor),
+            /*worker_context_provider=*/nullptr,
+            /*shared_image_interface=*/nullptr, &async_params);
+    TraceLiveFrameProbeStage("chromium async frame sink before BindToClient");
+    if (!async_frame_sink_->BindToClient(&client_)) {
+      failure_reason_ = "AsyncLayerTreeFrameSink::BindToClient failed";
+      return false;
+    }
+    TraceLiveFrameProbeStage("chromium async frame sink after BindToClient");
+    base::RunLoop().RunUntilIdle();
+    return true;
+  }
+
+  bool SubmitAndCopy(const gfx::Size& size,
+                     SkColor4f color,
+                     const char* label) {
+    surface_id_allocator_.GenerateId();
+    const viz::LocalSurfaceId local_surface_id =
+        surface_id_allocator_.GetCurrentLocalSurfaceId();
+    root_frame_sink_->Resize(size);
+    async_frame_sink_->SetLocalSurfaceId(local_surface_id);
+    async_frame_sink_->SubmitCompositorFrame(BuildSolidColorFrame(size, color),
+                                             /*hit_test_data_changed=*/true);
+    base::RunLoop().RunUntilIdle();
+    root_frame_sink_->ForceImmediateDrawAndSwapIfPossible();
+    base::RunLoop().RunUntilIdle();
+
+    const viz::SurfaceId current_surface_id =
+        root_frame_sink_->CurrentSurfaceId();
+    if (!current_surface_id.is_valid() ||
+        current_surface_id.local_surface_id() != local_surface_id) {
+      std::ostringstream out;
+      out << "chromium async frame sink " << label
+          << " did not activate submitted LocalSurfaceId";
+      failure_reason_ = out.str();
+      return false;
+    }
+
+    return RequestAndWaitForCopy(local_surface_id, size, label);
+  }
+
+  viz::CompositorFrame BuildSolidColorFrame(const gfx::Size& size,
+                                            SkColor4f color) {
+    viz::CompositorFrame frame;
+    frame.metadata.device_scale_factor = 1.0f;
+    frame.metadata.page_scale_factor = 1.0f;
+    frame.metadata.scrollable_viewport_size = gfx::SizeF(size);
+    frame.metadata.visible_viewport_size = size;
+    frame.metadata.root_background_color = SkColors::kTransparent;
+    frame.metadata.begin_frame_ack = viz::BeginFrameAck::CreateManualAckWithDamage();
+    frame.metadata.frame_token = ++frame_token_;
+
+    auto render_pass = viz::CompositorRenderPass::Create();
+    render_pass->SetNew(viz::CompositorRenderPassId{1}, gfx::Rect(size),
+                        gfx::Rect(size), gfx::Transform());
+    viz::SharedQuadState* shared_quad_state =
+        render_pass->CreateAndAppendSharedQuadState();
+    shared_quad_state->SetAll(
+        gfx::Transform(), gfx::Rect(size), gfx::Rect(size),
+        gfx::MaskFilterInfo(), std::nullopt,
+        /*contents_opaque=*/true, /*opacity_f=*/1.0f, SkBlendMode::kSrcOver,
+        /*sorting_context=*/0, /*layer_id=*/1,
+        /*fast_rounded_corner=*/false);
+    viz::SolidColorDrawQuad* quad =
+        render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+    quad->SetNew(shared_quad_state, gfx::Rect(size), gfx::Rect(size), color,
+                 /*anti_aliasing_off=*/true);
+    frame.render_pass_list.push_back(std::move(render_pass));
+    return frame;
+  }
+
+  bool RequestAndWaitForCopy(const viz::LocalSurfaceId& local_surface_id,
+                             const gfx::Size& size,
+                             const char* label) {
+    copy_completed_ = false;
+    copy_succeeded_ = false;
+    copy_pixels_ = 0;
+    copy_failure_.clear();
+
+    auto request = std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA,
+        viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+        base::BindOnce(&StandaloneChromiumAsyncFrameSinkProbe::OnCopyOutput,
+                       weak_factory_.GetWeakPtr(), std::string(label)));
+    viz::SetCopyOutputRequestResultSize(request.get(), gfx::Rect(size), size,
+                                        size);
+    request->set_result_task_runner(
+        base::SequencedTaskRunner::GetCurrentDefault());
+    frame_sink_manager_->RequestCopyOfOutput(
+        viz::SurfaceId(frame_sink_id_, local_surface_id), std::move(request),
+        /*capture_exact_surface_id=*/true, base::Seconds(5));
+
+    root_frame_sink_->ForceImmediateDrawAndSwapIfPossible();
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    copy_run_loop_ = &run_loop;
+    base::OneShotTimer timeout;
+    timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+    run_loop.Run();
+    timeout.Stop();
+    copy_run_loop_ = nullptr;
+
+    if (!copy_completed_) {
+      std::ostringstream out;
+      out << "chromium async frame sink " << label
+          << " CopyOutput did not complete";
+      failure_reason_ = out.str();
+      return false;
+    }
+    if (!copy_succeeded_) {
+      if (copy_failure_.empty()) {
+        copy_failure_ = "CopyOutput failed";
+      }
+      failure_reason_ = "chromium async frame sink ";
+      failure_reason_ += label;
+      failure_reason_ += " ";
+      failure_reason_ += copy_failure_;
+      return false;
+    }
+    return true;
+  }
+
+  void OnCopyOutput(std::string label,
+                    std::unique_ptr<viz::CopyOutputResult> output) {
+    if (!output) {
+      copy_failure_ = label + " CopyOutput returned no result";
+      FinishCopy(false);
+      return;
+    }
+    if (output->IsEmpty()) {
+      copy_failure_ = label + " CopyOutput returned empty result: " +
+                      StandaloneCopyOutputErrorName(output->error());
+      FinishCopy(false);
+      return;
+    }
+    viz::CopyOutputResult::ScopedSkBitmap scoped_bitmap =
+        output->ScopedAccessSkBitmap();
+    SkBitmap bitmap = scoped_bitmap.GetOutScopedBitmap();
+    if (!bitmap.readyToDraw()) {
+      copy_failure_ = label + " CopyOutput bitmap is not drawable";
+      FinishCopy(false);
+      return;
+    }
+    SkPixmap pixmap;
+    if (!bitmap.peekPixels(&pixmap)) {
+      copy_failure_ = label + " CopyOutput bitmap has no pixels";
+      FinishCopy(false);
+      return;
+    }
+    copy_pixels_ += pixmap.width() * pixmap.height();
+    FinishCopy(copy_pixels_ > 0);
+  }
+
+  void FinishCopy(bool succeeded) {
+    copy_succeeded_ = succeeded;
+    copy_completed_ = true;
+    if (copy_run_loop_) {
+      copy_run_loop_->Quit();
+    }
+  }
+
+  std::string BuildJson(bool success) const {
+    std::ostringstream out;
+    out << "{\n"
+        << "  \"success\": " << (success ? "true" : "false") << ",\n"
+        << "  \"path\": \"RootCompositorFrameSinkImpl+AsyncLayerTreeFrameSink\",\n"
+        << "  \"viewport\": \"" << viewport_.width() << "x"
+        << viewport_.height() << "\",\n"
+        << "  \"begin_frame_source_set\": "
+        << (client_.begin_frame_source_set ? 1 : 0) << ",\n"
+        << "  \"acks\": " << client_.ack_count << ",\n"
+        << "  \"reclaimed_resources\": " << client_.reclaimed_resources
+        << ",\n"
+        << "  \"copy_pixels\": " << copy_pixels_ << ",\n"
+        << "  \"failure\": \""
+        << EscapeStandaloneProbeJsonString(failure_reason_) << "\"\n"
+        << "}\n";
+    return out.str();
+  }
+
+  gfx::Size viewport_;
+  const viz::FrameSinkId frame_sink_id_{780, 1};
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  std::unique_ptr<StandaloneOutputSurfaceProvider> output_surface_provider_;
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
+  std::unique_ptr<viz::RootCompositorFrameSinkImpl> root_frame_sink_;
+  std::unique_ptr<cc::mojo_embedder::AsyncLayerTreeFrameSink>
+      async_frame_sink_;
+  std::unique_ptr<mojo::Receiver<viz::mojom::CompositorFrameSink>>
+      async_root_receiver_;
+  StandaloneAsyncFrameSinkProbeClient client_;
+  viz::RendererSettings renderer_settings_;
+  viz::DebugRendererSettings debug_settings_;
+  raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
+      nullptr;
+  bool vulkan_context_provider_available_ = false;
+  bool shared_context_state_is_vulkan_ = false;
+  bool gpu_context_created_ = false;
+  bool raster_context_created_ = false;
+  bool shared_image_interface_available_ = false;
+  viz::ParentLocalSurfaceIdAllocator surface_id_allocator_;
+  mojo::AssociatedRemote<viz::mojom::DisplayPrivate> display_private_remote_;
+  uint32_t frame_token_ = 0;
+  bool copy_completed_ = false;
+  bool copy_succeeded_ = false;
+  int copy_pixels_ = 0;
+  std::string copy_failure_;
+  std::string failure_reason_;
+  raw_ptr<base::RunLoop> copy_run_loop_ = nullptr;
+  base::WeakPtrFactory<StandaloneChromiumAsyncFrameSinkProbe> weak_factory_{
       this};
 };
 
@@ -20398,6 +20770,17 @@ std::string RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(
   return probe.Run();
 }
 
+std::string RunStandaloneChromiumAsyncFrameSinkProbeForStandaloneRenderer(
+    int width,
+    int height) {
+  InstallStandaloneMojoCoreForStandaloneRenderer();
+  const int safe_width = std::max(1, width);
+  const int safe_height = std::max(1, height);
+  StandaloneChromiumAsyncFrameSinkProbe probe(
+      gfx::Size(safe_width, safe_height));
+  return probe.Run();
+}
+
 }  // namespace
 
 extern "C" const char*
@@ -20418,6 +20801,17 @@ StandaloneBlinkLiveFrameBridgeRunChromiumRootFrameSinkProbeForStandaloneRenderer
   probe_json =
       RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(width,
                                                                   height);
+  return probe_json.c_str();
+}
+
+extern "C" const char*
+StandaloneBlinkLiveFrameBridgeRunChromiumAsyncFrameSinkProbeForStandaloneRenderer(
+    int width,
+    int height) {
+  static std::string probe_json;
+  probe_json =
+      RunStandaloneChromiumAsyncFrameSinkProbeForStandaloneRenderer(width,
+                                                                   height);
   return probe_json.c_str();
 }
 

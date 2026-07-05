@@ -28,6 +28,8 @@ option(BLINK_STANDALONE_DAWN_D3D12_AUTO_DETECT
   "Enable Dawn/D3D12 wiring automatically when the repo-local Dawn probe output exists." ON)
 option(BLINK_STANDALONE_USE_VCPKG_DEPS
   "Use vcpkg/system packages for libxml2/Iconv/ZLIB instead of only source-owned repository dependencies." ON)
+option(BLINK_STANDALONE_MOJO_CORE_PROOF
+  "Build the guarded standalone Mojo Core legacy proof used by the Chromium async frame-sink probe." ON)
 set(BLINK_STANDALONE_DAWN_D3D12_LIBS
   ""
   CACHE STRING
@@ -42,6 +44,9 @@ set(BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR
   "Path to the Dawn source checkout used for the D3D12 Dawn build.")
 set(BLINK_STANDALONE_DAWN_D3D12_BUILDFLAGS_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium/standalone_renderer/stubs/dawn_d3d12_buildflags
+)
+set(BLINK_STANDALONE_MOJO_LEGACY_CORE_BUILDFLAGS_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium/standalone_renderer/stubs/mojo_legacy_core_buildflags
 )
 if(WIN32 AND NOT BLINK_STANDALONE_DAWN_D3D12 AND
     BLINK_STANDALONE_DAWN_D3D12_AUTO_DETECT)
@@ -2011,6 +2016,11 @@ if(BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
     ${BLINK_STANDALONE_RELEASE_LEVEL_BUILDFLAGS_DIR}
   )
 endif()
+if(BLINK_STANDALONE_MOJO_CORE_PROOF)
+  target_include_directories(blink_standalone_live_renderer_objects BEFORE PRIVATE
+    ${BLINK_STANDALONE_MOJO_LEGACY_CORE_BUILDFLAGS_DIR}
+  )
+endif()
 set_property(TARGET blink_standalone_live_renderer_objects PROPERTY
   MSVC_RUNTIME_LIBRARY "MultiThreaded")
 
@@ -2031,6 +2041,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_RELEASE_LEVEL_BUILDFLAGS_DIR}
     )
   endif()
+  if(BLINK_STANDALONE_MOJO_CORE_PROOF)
+    target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
+      ${BLINK_STANDALONE_MOJO_LEGACY_CORE_BUILDFLAGS_DIR}
+    )
+  endif()
 
   target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
     ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
@@ -2048,6 +2063,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/third_party/xxhash
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/dawn/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/khronos
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan-headers/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan_memory_allocator/include

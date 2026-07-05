@@ -3048,7 +3048,6 @@ set(BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_errors.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_context.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_util.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/functions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/handle_signal_tracker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/message.cc
@@ -3061,6 +3060,135 @@ set(BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/c/system/thunks.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_native_struct_unsupported.cc
 )
+
+set(BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_endpoint.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_endpoint.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle_security_util_win.cc
+)
+
+set_source_files_properties(${BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "IS_MOJO_CPP_PLATFORM_IMPL=1")
+
+set(BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/core_ipcz.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/fuzzing_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_api.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/base_shared_memory_service.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/data_pipe.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/driver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/envelope.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/invitation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/mojo_message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/mojo_trap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/object.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/ring_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/shared_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/shared_buffer_mapping.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/transmissible_platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/transport.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/wrapped_platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/scoped_ipcz_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/atomic_flag.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/broker_host.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/broker_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/channel_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/configuration.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/connection_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/core.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/data_pipe_consumer_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/data_pipe_control_message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/data_pipe_producer_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/entrypoints.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/handle_table.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/invitation_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/message_pipe_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/node_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/node_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/platform_handle_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/platform_handle_in_transit.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/platform_handle_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/platform_shared_memory_mapping.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/request_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/shared_buffer_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/user_message_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/watch.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/watcher_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/watcher_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/message_queue.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/name.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/port.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/port_locker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/port_ref.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ports/user_message.cc
+)
+
+list(REMOVE_DUPLICATES BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES)
+
+set(BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/api.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/api_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/api_object.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/application_object.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/block_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/block_allocator_pool.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/box.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/buffer_pool.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/driver_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/driver_memory_mapping.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/driver_object.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/driver_transport.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/fragment.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/fragment_ref.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/link_side.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/link_type.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/local_router_link.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/node_connector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/node_link.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/node_link_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/node_messages.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/node_name.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/parcel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/parcel_wrapper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/pending_transaction_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/ref_counted_fragment.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/remote_router_link.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/route_edge.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/router.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/router_link_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/trap_event_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/ipcz/trap_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/util/ref_counted.cc
+)
+
+set_source_files_properties(${BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "MOJO_SYSTEM_IMPL_IMPLEMENTATION=1;IS_MOJO_CORE_PORTS_IMPL=1")
+
+set_property(SOURCE
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/features.cc
+  APPEND PROPERTY COMPILE_DEFINITIONS IS_MOJO_CORE_EMBEDDER_FEATURES_IMPL)
+
+set_source_files_properties(
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_phase1_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/standalone_live_frame_bridge_probe.cc
+  PROPERTIES
+    COMPILE_DEFINITIONS "BLINK_STANDALONE_HAVE_MOJO_CORE_PROOF=1")
 
 set(BLINK_STANDALONE_VIZ_COMMON_VALUE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/client/shared_image_interface.cc
@@ -3728,6 +3856,7 @@ set(BLINK_STANDALONE_BASE_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/environment.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/scoped_environment_variable_override.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/discardable_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/current_process.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_enumerator.cc
@@ -3915,6 +4044,7 @@ set(BLINK_STANDALONE_BASE_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/pe_image_reader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/registry.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/security_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/nt_status.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/access_token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/access_control_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/com_init_balancer.cc
@@ -4122,6 +4252,7 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CC_COMPOSITOR_SOURCES}
   ${BLINK_STANDALONE_CC_PHASE1_EXPLICIT_SOURCES}
   ${BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES}
   ${BLINK_STANDALONE_NATIVE_MOJOM_TRAIT_SOURCES}
   ${BLINK_STANDALONE_VIZ_COMMON_VALUE_SOURCES}
   ${BLINK_STANDALONE_VIZ_PUBLIC_CPP_MOJOM_TRAIT_SOURCES}
@@ -4140,6 +4271,13 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_BASE_RUNTIME_SOURCES}
   ${BLINK_STANDALONE_BLINK_RUNTIME_OWNER_SOURCES}
 )
+
+if(BLINK_STANDALONE_MOJO_CORE_PROOF)
+  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES}
+    ${BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES}
+  )
+endif()
 
 set(BLINK_STANDALONE_LIBYUV_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/compare.cc
