@@ -18,7 +18,14 @@
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 #include "ui/gfx/mojom/native_handle_types.mojom-shared.h"
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+#define BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS 0
+#else
+#define BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS 1
+#endif
+
+#if BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE))
 #include "ui/gfx/native_pixmap_handle.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
 
@@ -49,7 +56,8 @@ struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
 };
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
+#if BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE))
 template <>
 struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
     StructTraits<gfx::mojom::NativePixmapPlaneDataView,
@@ -142,6 +150,40 @@ struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
 };
 #endif  // BUILDFLAG(IS_WIN)
 
+#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+template <>
+struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
+    StructTraits<gfx::mojom::DXGIHandleDataView, gfx::DXGIHandle> {
+  static PlatformHandle buffer_handle(gfx::DXGIHandle&) {
+    return PlatformHandle();
+  }
+
+  static const gfx::DXGIHandleToken& token(const gfx::DXGIHandle& handle) {
+    return handle.token();
+  }
+
+  static base::UnsafeSharedMemoryRegion& shared_memory_handle(
+      gfx::DXGIHandle& handle) {
+    return handle.region_;
+  }
+
+  static bool Read(gfx::mojom::DXGIHandleDataView data,
+                   gfx::DXGIHandle* handle);
+};
+
+template <>
+struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
+    StructTraits<gfx::mojom::DXGIHandleTokenDataView, gfx::DXGIHandleToken> {
+  static const base::UnguessableToken& value(
+      const gfx::DXGIHandleToken& input) {
+    return input;
+  }
+
+  static bool Read(gfx::mojom::DXGIHandleTokenDataView& input,
+                   gfx::DXGIHandleToken* output);
+};
+#endif  // defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+
 #if BUILDFLAG(IS_APPLE)
 struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
     IOSurfaceHandle {
@@ -214,11 +256,12 @@ struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || \
+    (defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN))
   static gfx::DXGIHandle& dxgi_handle(gfx::GpuMemoryBufferHandle& handle) {
     return handle.dxgi_handle_;
   }
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || standalone generated snapshot compatibility
 
 #if BUILDFLAG(IS_ANDROID)
   static base::android::ScopedHardwareBufferHandle&
@@ -232,5 +275,7 @@ struct COMPONENT_EXPORT(GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS)
 };
 
 }  // namespace mojo
+
+#undef BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS
 
 #endif  // UI_GFX_MOJOM_NATIVE_HANDLE_TYPES_MOJOM_TRAITS_H_

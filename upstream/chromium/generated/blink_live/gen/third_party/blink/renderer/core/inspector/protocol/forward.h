@@ -12,10 +12,10 @@
 #include <memory>
 #include <vector>
 
-#include "third_party/inspector_protocol\crdtp/error_support.h"
-#include "third_party/inspector_protocol\crdtp/dispatch.h"
-#include "third_party/inspector_protocol\crdtp/frontend_channel.h"
-#include "third_party/inspector_protocol\crdtp/protocol_core.h"
+#include "third_party/inspector_protocol/crdtp/error_support.h"
+#include "third_party/inspector_protocol/crdtp/dispatch.h"
+#include "third_party/inspector_protocol/crdtp/frontend_channel.h"
+#include "third_party/inspector_protocol/crdtp/protocol_core.h"
 
 #include "third_party/blink/renderer/core/inspector/v8_inspector_string.h"
 

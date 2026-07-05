@@ -1,5 +1,9 @@
 #include "html_css_renderer/vulkan_window_host.h"
 
+#include "build/build_config.h"
+
+#if BUILDFLAG(IS_WIN)
+
 #include <algorithm>
 #include <memory>
 #include <optional>
@@ -328,3 +332,53 @@ NativePresentationResult VulkanWindowHost::Present(
 }
 
 }  // namespace html_css_renderer
+
+#else
+
+#include <memory>
+#include <string>
+#include <utility>
+
+namespace html_css_renderer {
+namespace {
+
+NativePresentationResult UnsupportedResult(std::string operation) {
+  NativePresentationResult result;
+  result.failure_reason =
+      "native Vulkan window presentation is only implemented for Win32 in "
+      "this standalone build";
+  result.diagnostics.push_back(std::move(operation) + " unsupported: " +
+                               result.failure_reason);
+  return result;
+}
+
+}  // namespace
+
+class VulkanWindowHost::Impl {
+ public:
+  NativePresentationResult Initialize(const NativeWindowConfig&) {
+    return UnsupportedResult("initialize");
+  }
+
+  NativePresentationResult Present(const CompositorFrameResult&) {
+    return UnsupportedResult("present");
+  }
+};
+
+VulkanWindowHost::VulkanWindowHost() : impl_(std::make_unique<Impl>()) {}
+
+VulkanWindowHost::~VulkanWindowHost() = default;
+
+NativePresentationResult VulkanWindowHost::Initialize(
+    const NativeWindowConfig& config) {
+  return impl_->Initialize(config);
+}
+
+NativePresentationResult VulkanWindowHost::Present(
+    const CompositorFrameResult& frame) {
+  return impl_->Present(frame);
+}
+
+}  // namespace html_css_renderer
+
+#endif  // BUILDFLAG(IS_WIN)

@@ -8,9 +8,9 @@
 
 #include "third_party/blink/renderer/core/inspector/protocol/protocol.h"
 
-#include "third_party/inspector_protocol\crdtp/cbor.h"
-#include "third_party/inspector_protocol\crdtp/find_by_first.h"
-#include "third_party/inspector_protocol\crdtp/span.h"
+#include "third_party/inspector_protocol/crdtp/cbor.h"
+#include "third_party/inspector_protocol/crdtp/find_by_first.h"
+#include "third_party/inspector_protocol/crdtp/span.h"
 
 namespace blink {
 namespace protocol {

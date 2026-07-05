@@ -5,9 +5,18 @@
 #ifndef GPU_IPC_COMMON_LUID_MOJOM_TRAITS_H_
 #define GPU_IPC_COMMON_LUID_MOJOM_TRAITS_H_
 
-#include "base/win/windows_types.h"
+#include "build/build_config.h"
 #include "gpu/ipc/common/gpu_ipc_common_export.h"
 #include "gpu/ipc/common/luid.mojom-shared.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/win/windows_types.h"
+#elif defined(HTML_CSS_RENDERER_STANDALONE)
+struct CHROME_LUID {
+  int32_t HighPart = 0;
+  uint32_t LowPart = 0;
+};
+#endif
 
 namespace mojo {
 

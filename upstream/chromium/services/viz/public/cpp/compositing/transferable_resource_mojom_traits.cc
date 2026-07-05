@@ -186,7 +186,8 @@ bool StructTraits<viz::mojom::TransferableResourceDataView,
   out->is_backed_by_surface_view = data.is_backed_by_surface_view();
 #endif
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   out->wants_promotion_hint = data.wants_promotion_hint();
 #endif
 

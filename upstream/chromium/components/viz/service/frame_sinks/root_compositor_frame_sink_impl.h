@@ -75,7 +75,7 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
 
   // mojom::DisplayPrivate:
   void SetDisplayVisible(bool visible) override;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   void DisableSwapUntilResize(DisableSwapUntilResizeCallback callback) override;
 #endif
   void Resize(const gfx::Size& size) override;

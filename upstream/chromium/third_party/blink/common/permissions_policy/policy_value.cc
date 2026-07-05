@@ -4,6 +4,7 @@
 
 #include "third_party/blink/public/common/permissions_policy/policy_value.h"
 
+#include "base/notreached.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_value.mojom.h"
 
 namespace blink {

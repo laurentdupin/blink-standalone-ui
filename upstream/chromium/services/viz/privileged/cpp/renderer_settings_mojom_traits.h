@@ -13,7 +13,7 @@
 #include "services/viz/privileged/mojom/compositing/renderer_settings.mojom-shared.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "components/viz/common/display/overlay_strategy.h"
 #endif
 
@@ -125,7 +125,7 @@ struct StructTraits<viz::mojom::RendererSettingsDataView,
     return input.occlusion_culler_settings;
   }
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   static std::vector<viz::OverlayStrategy> overlay_strategies(
       const viz::RendererSettings& input) {
     return input.overlay_strategies;

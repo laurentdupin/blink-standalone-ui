@@ -56,7 +56,7 @@
 #include <GLES2/gl2.h>
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/command_buffer/service/drm_modifiers_filter_vulkan.h"
 #endif
@@ -483,7 +483,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   // Initialize Ozone GPU after the watchdog in case it hangs. The sandbox
   // may also have started at this point.
   ui::OzonePlatform::InitParams params;
@@ -495,7 +495,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   params.allow_sync_and_real_buffer_page_flip_testing = true;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   ui::OzonePlatform::InitializeForGPU(params);
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
   gl::GLDisplay* gl_display = nullptr;
 
@@ -762,7 +762,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 #endif
 
 #if BUILDFLAG(USE_WEBGPU_ON_VULKAN_VIA_GL_INTEROP)
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!ui::OzonePlatform::GetInstance()
            ->GetPlatformProperties()
            .webgpu_on_vulkan_via_gl_interop) {
@@ -770,7 +770,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
         .status_values[GPU_FEATURE_TYPE_WEBGPU_ON_VK_VIA_GL_INTEROP] =
         kGpuFeatureStatusDisabled;
   }
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
   if (gpu_feature_info_
           .status_values[GPU_FEATURE_TYPE_WEBGPU_ON_VK_VIA_GL_INTEROP] ==
@@ -859,7 +859,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   // We need to get supported formats before sandboxing to avoid an known
   // issue which breaks the camera preview. (b/166850715)
   {
@@ -874,7 +874,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
           gl_ozone->CanImportNativePixmap(viz::MultiPlaneFormat::kP010);
     }
   }
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
   if (gl_use_swiftshader_) {
     AdjustInfoToSwiftShader();
@@ -1003,7 +1003,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 
   init_successful_ = true;
   SetSkiaBackendType();
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
   [[maybe_unused]] auto* factory =
       ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
@@ -1030,7 +1030,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     filter_set = true;
   }
 #endif  // BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_CHROMEOS)
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
   RecordUMA();
   if (!watchdog_thread_) {
@@ -1079,7 +1079,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   default_offscreen_surface_ =
       gl::init::CreateOffscreenGLSurface(gl_display, gfx::Size());
 #else  // !BUILDFLAG(IS_ANDROID)
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   ui::OzonePlatform::InitParams params;
   params.single_process = true;
 
@@ -1087,7 +1087,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   params.allow_sync_and_real_buffer_page_flip_testing = true;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   ui::OzonePlatform::InitializeForGPU(params);
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
   bool needs_more_info = true;
 
@@ -1213,7 +1213,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
         kGpuFeatureStatusDisabled;
   }
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   auto* surface_factory =
       ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
   auto* gl_ozone = surface_factory->GetCurrentGLOzone();
@@ -1223,7 +1223,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
     gpu_feature_info_.supports_p010_gl_native_pixmap =
         gl_ozone->CanImportNativePixmap(viz::MultiPlaneFormat::kP010);
   }
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
   DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
 #endif  // BUILDFLAG(IS_ANDROID)

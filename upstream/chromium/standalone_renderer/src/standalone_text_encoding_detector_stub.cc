@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/text/text_encoding_detector.h"
 
+#include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
+
 namespace blink {
 
 bool DetectTextEncoding(base::span<const uint8_t>,

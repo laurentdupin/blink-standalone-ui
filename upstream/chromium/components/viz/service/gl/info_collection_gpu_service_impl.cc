@@ -63,9 +63,11 @@ void InfoCollectionGpuServiceImpl::
   uint32_t d3d12_feature_level = 0;
   uint32_t highest_shader_model_version = 0;
   uint32_t directml_feature_level = 0;
+#if BUILDFLAG(IS_WIN)
   gpu::GetGpuSupportedDirectXVersion(d3d12_feature_level,
                                      highest_shader_model_version,
                                      directml_feature_level);
+#endif
   io_runner_->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), d3d12_feature_level,
                                 highest_shader_model_version,
@@ -87,7 +89,11 @@ void InfoCollectionGpuServiceImpl::GetGpuSupportedVulkanVersionInfoOnMain(
     GetGpuSupportedVulkanVersionInfoCallback callback) {
   DCHECK(main_runner_->BelongsToCurrentThread());
 
+#if BUILDFLAG(IS_WIN)
   uint32_t vulkan_version = gpu::GetGpuSupportedVulkanVersion(gpu_device_);
+#else
+  uint32_t vulkan_version = 0;
+#endif
   io_runner_->PostTask(FROM_HERE,
                        base::BindOnce(std::move(callback), vulkan_version));
 }

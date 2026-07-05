@@ -46,7 +46,7 @@
 #include "gpu/command_buffer/client/internal/mappable_buffer_io_surface.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "gpu/command_buffer/client/internal/mappable_buffer_native_pixmap.h"
 #include "ui/ozone/public/client_native_pixmap_factory_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -64,7 +64,9 @@ namespace gpu {
 
 namespace {
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_OZONE) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_MAC) || \
+    (BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)) || \
+    BUILDFLAG(IS_ANDROID)
 bool GMBIsNative(gfx::GpuMemoryBufferType gmb_type) {
   return gmb_type != gfx::EMPTY_BUFFER && gmb_type != gfx::SHARED_MEMORY_BUFFER;
 }
@@ -92,7 +94,9 @@ uint32_t ComputeTextureTargetForSharedImage(
     gfx::GpuMemoryBufferType client_gmb_type,
     scoped_refptr<SharedImageInterface> sii) {
   CHECK(sii);
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_OZONE) && !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_MAC) && \
+    (!BUILDFLAG(IS_OZONE) || defined(HTML_CSS_RENDERER_STANDALONE)) && \
+    !BUILDFLAG(IS_ANDROID)
   return GL_TEXTURE_2D;
 #elif BUILDFLAG(IS_MAC)
   // Check for IOSurfaces being used. We infer IOSurface based on scanout or
@@ -194,7 +198,7 @@ base::span<uint8_t> ClientSharedImage::ScopedMapping::GetMemoryForPlane(
   // include any bytes beyond the actual end of the final row.
   size_t span_length =
       Stride(plane_index) * (height_in_pixels - 1) + row_size_in_bytes;
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   // We are currently prevented from doing this tightening for
   // NativePixmap-backed MappableBuffers by the fact that
   // VideoFrame requires that the buffer returned from this method be of size
@@ -273,7 +277,7 @@ ClientSharedImage::CreateMappableBufferFromHandle(
           std::move(handle), size, format, is_read_only_cpu_usage);
     }
 #endif
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
     case gfx::NATIVE_PIXMAP: {
       // NOTE: This is not used beyond the lifetime of CreateFromHandle().
       auto client_native_pixmap_factory =

@@ -349,10 +349,14 @@ void RootCompositorFrameSinkImpl::SetDisplayVisible(bool visible) {
   display_->SetVisible(visible);
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 void RootCompositorFrameSinkImpl::DisableSwapUntilResize(
     DisableSwapUntilResizeCallback callback) {
+#if BUILDFLAG(IS_WIN)
   display_->DisableSwapUntilResize(std::move(callback));
+#else
+  std::move(callback).Run();
+#endif
 }
 #endif
 

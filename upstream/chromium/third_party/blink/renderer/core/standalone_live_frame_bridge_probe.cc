@@ -61,6 +61,17 @@
 #include "cc/trees/layer_tree_host_delegate.h"
 #include "cc/trees/layer_tree_host_single_thread_delegate.h"
 #include "cc/trees/layer_tree_settings.h"
+
+#if !BUILDFLAG(IS_WIN) && defined(HTML_CSS_RENDERER_STANDALONE)
+struct D3D12_RESOURCE_DESC {
+  uint64_t Width = 0;
+  uint32_t Height = 0;
+};
+
+struct ID3D12Resource {
+  D3D12_RESOURCE_DESC GetDesc() const { return {}; }
+};
+#endif
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
@@ -6213,8 +6224,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       SetFailure("Viz Display cannot initialize without GPU thread holder");
       return false;
     }
-    gpu::SurfaceHandle surface_handle = reinterpret_cast<gpu::SurfaceHandle>(
-        g_standalone_native_window_handle);
+    gpu::SurfaceHandle surface_handle =
+#if BUILDFLAG(IS_WIN)
+        reinterpret_cast<gpu::SurfaceHandle>(g_standalone_native_window_handle);
+#else
+        static_cast<gpu::SurfaceHandle>(
+            reinterpret_cast<uintptr_t>(g_standalone_native_window_handle));
+#endif
     if (surface_handle == gpu::kNullSurfaceHandle) {
       SetFailure("Viz Display received a null native surface handle");
       return false;

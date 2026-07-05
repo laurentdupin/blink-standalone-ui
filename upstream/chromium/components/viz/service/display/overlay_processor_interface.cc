@@ -25,7 +25,7 @@
 #elif BUILDFLAG(IS_ANDROID)
 #include "components/viz/service/display/overlay_processor_android.h"
 #include "components/viz/service/display/overlay_processor_surface_control.h"
-#elif BUILDFLAG(IS_OZONE)
+#elif BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "components/viz/service/display/overlay_processor_delegated.h"
 #include "components/viz/service/display/overlay_processor_ozone.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
@@ -36,7 +36,7 @@
 namespace viz {
 namespace {
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 class SharedImageManagerPixmapProvider
     : public OverlayProcessorOzone::PixmapProvider {
  public:
@@ -138,7 +138,7 @@ OverlayProcessorInterface::CreateOverlayProcessor(
               .disable_video_overlay_if_moving));
 #endif  // defined(HTML_CSS_RENDERER_STANDALONE)
 
-#elif BUILDFLAG(IS_OZONE)
+#elif BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #if !BUILDFLAG(IS_CASTOS)
   // In tests and Ozone/X11, we do not expect surfaceless surface support.
   // For CastOS, we always need OverlayProcessorOzone.

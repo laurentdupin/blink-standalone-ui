@@ -118,7 +118,7 @@
 #endif
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_window_surface.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
@@ -187,7 +187,7 @@ void RecordInsertRenderPassRecording(bool success) {
 #if BUILDFLAG(ENABLE_VULKAN)
 // Returns whether SkiaOutputDeviceX11 can be instantiated on this platform.
 bool MayFallBackToSkiaOutputDeviceX11() {
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   return ui::OzonePlatform::GetInstance()
       ->GetPlatformProperties()
       .skia_can_fall_back_to_x11;
@@ -1929,7 +1929,7 @@ bool SkiaOutputSurfaceImplOnGpu::Initialize() {
   TRACE_EVENT1("viz", "SkiaOutputSurfaceImplOnGpu::Initialize",
                "is_using_vulkan", is_using_vulkan());
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   gpu::SurfaceHandle surface_handle = dependency_->GetSurfaceHandle();
   if (surface_handle != gpu::kNullSurfaceHandle) {
     window_surface_ = ui::OzonePlatform::GetInstance()

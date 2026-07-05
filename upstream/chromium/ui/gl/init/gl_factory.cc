@@ -20,7 +20,7 @@
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_initializer.h"
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif

@@ -60,7 +60,7 @@ bool StructTraits<viz::mojom::RendererSettingsDataView, viz::RendererSettings>::
     return false;
   }
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!data.ReadOverlayStrategies(&out->overlay_strategies))
     return false;
 #endif

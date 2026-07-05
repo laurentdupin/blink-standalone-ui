@@ -38,7 +38,6 @@
 #include "base/threading/thread_checker_impl.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/timer/lap_timer.h"
-#include "base/win/scoped_handle.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
 #include "cc/animation/animation_id_provider.h"
@@ -245,6 +244,11 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#if !BUILDFLAG(IS_WIN)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 #include "unicode/ubidi.h"
 #include "unicode/uchar.h"
@@ -3156,6 +3160,8 @@ const WrapperTypeInfo& StylePropertyMap::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("StylePropertyMap");
 const WrapperTypeInfo& Observable::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("Observable");
+const WrapperTypeInfo& Subscriber::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("Subscriber");
 const WrapperTypeInfo& bindings::FrozenArrayBase::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("FrozenArrayBase");
 const WrapperTypeInfo& NamedNodeMap::wrapper_type_info_ =
@@ -3216,6 +3222,8 @@ const WrapperTypeInfo& Range::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("Range");
 const WrapperTypeInfo& AbstractRange::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("AbstractRange");
+const WrapperTypeInfo& OpaqueRange::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("OpaqueRange");
 const WrapperTypeInfo& StaticRange::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("StaticRange");
 const WrapperTypeInfo& NodeIterator::wrapper_type_info_ =
@@ -3226,6 +3234,8 @@ const WrapperTypeInfo& BeforeUnloadEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("BeforeUnloadEvent");
 const WrapperTypeInfo& RouteMap::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("RouteMap");
+const WrapperTypeInfo& Route::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("Route");
 const WrapperTypeInfo& NodeList::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("NodeList");
 const WrapperTypeInfo& FragmentDirective::wrapper_type_info_ =
@@ -3236,6 +3246,12 @@ const WrapperTypeInfo& RadioNodeList::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("RadioNodeList");
 const WrapperTypeInfo& CaretPosition::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("CaretPosition");
+const WrapperTypeInfo& CloseWatcher::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("CloseWatcher");
+const WrapperTypeInfo& FileList::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("FileList");
+const WrapperTypeInfo& HTMLDialogElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLDialogElement");
 
 const char* const V8ShadowRootMode::string_table_[] = {"open", "closed"};
 const char* const V8SlotAssignmentMode::string_table_[] = {"manual", "named"};
@@ -4868,11 +4884,13 @@ constinit thread_local ThreadStateStorage* g_thread_specific_
     BLINK_HEAP_THREAD_LOCAL_ATTRIBUTE = nullptr;
 
 namespace {
+#if BUILDFLAG(IS_WIN)
 constexpr unsigned long kStandaloneMemCommit = 0x1000;
 constexpr unsigned long kStandaloneMemReserve = 0x2000;
 constexpr unsigned long kStandaloneMemDecommit = 0x4000;
 constexpr unsigned long kStandaloneMemRelease = 0x8000;
 constexpr unsigned long kStandaloneMemReset = 0x80000;
+#endif
 constexpr unsigned long kStandalonePageNoAccess = 0x01;
 constexpr unsigned long kStandalonePageReadonly = 0x02;
 constexpr unsigned long kStandalonePageReadwrite = 0x04;
@@ -4884,15 +4902,35 @@ unsigned long StandalonePageProtection(
   switch (permission) {
     case v8::PageAllocator::kNoAccess:
     case v8::PageAllocator::kNoAccessWillJitLater:
+#if BUILDFLAG(IS_WIN)
       return kStandalonePageNoAccess;
+#else
+      return PROT_NONE;
+#endif
     case v8::PageAllocator::kRead:
+#if BUILDFLAG(IS_WIN)
       return kStandalonePageReadonly;
+#else
+      return PROT_READ;
+#endif
     case v8::PageAllocator::kReadWrite:
+#if BUILDFLAG(IS_WIN)
       return kStandalonePageReadwrite;
+#else
+      return PROT_READ | PROT_WRITE;
+#endif
     case v8::PageAllocator::kReadWriteExecute:
+#if BUILDFLAG(IS_WIN)
       return kStandalonePageExecuteReadwrite;
+#else
+      return PROT_READ | PROT_WRITE | PROT_EXEC;
+#endif
     case v8::PageAllocator::kReadExecute:
+#if BUILDFLAG(IS_WIN)
       return kStandalonePageExecuteRead;
+#else
+      return PROT_READ | PROT_EXEC;
+#endif
   }
 }
 
@@ -4902,6 +4940,7 @@ bool StandaloneNoAccessPermission(v8::PageAllocator::Permission permission) {
 }
 
 void* StandaloneTryAlignedReserve(size_t length, size_t alignment) {
+#if BUILDFLAG(IS_WIN)
   if (alignment <= 65536) {
     return nullptr;
   }
@@ -4928,6 +4967,30 @@ void* StandaloneTryAlignedReserve(size_t length, size_t alignment) {
     }
   }
   return nullptr;
+#else
+  if (length > std::numeric_limits<size_t>::max() - alignment) {
+    return nullptr;
+  }
+
+  const size_t reserve_length = length + alignment;
+  void* raw = mmap(nullptr, reserve_length, PROT_NONE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (raw == MAP_FAILED) {
+    return nullptr;
+  }
+  const uintptr_t raw_address = reinterpret_cast<uintptr_t>(raw);
+  const uintptr_t aligned_address =
+      (raw_address + alignment - 1) & ~(alignment - 1);
+  const size_t prefix = aligned_address - raw_address;
+  const size_t suffix = reserve_length - prefix - length;
+  if (prefix > 0) {
+    munmap(raw, prefix);
+  }
+  if (suffix > 0) {
+    munmap(reinterpret_cast<void*>(aligned_address + length), suffix);
+  }
+  return reinterpret_cast<void*>(aligned_address);
+#endif
 }
 
 class StandaloneV8PageAllocator final : public v8::PageAllocator {
@@ -4943,6 +5006,7 @@ class StandaloneV8PageAllocator final : public v8::PageAllocator {
                       size_t length,
                       size_t alignment,
                       Permission permissions) override {
+#if BUILDFLAG(IS_WIN)
     const unsigned long allocation_type =
         kStandaloneMemReserve |
         (StandaloneNoAccessPermission(permissions) ? 0 : kStandaloneMemCommit);
@@ -4963,10 +5027,32 @@ class StandaloneV8PageAllocator final : public v8::PageAllocator {
     }
     return VirtualAlloc(address, length, allocation_type,
                         StandalonePageProtection(permissions));
+#else
+    if (!address && alignment > page_size_) {
+      void* reserved = StandaloneTryAlignedReserve(length, alignment);
+      if (!reserved) {
+        return nullptr;
+      }
+      if (mprotect(reserved, length, StandalonePageProtection(permissions)) ==
+          0) {
+        return reserved;
+      }
+      munmap(reserved, length);
+      return nullptr;
+    }
+    void* result =
+        mmap(address, length, StandalonePageProtection(permissions),
+             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    return result == MAP_FAILED ? nullptr : result;
+#endif
   }
 
-  bool FreePages(void* address, size_t) override {
+  bool FreePages(void* address, size_t length) override {
+#if BUILDFLAG(IS_WIN)
     return !!VirtualFree(address, 0, kStandaloneMemRelease);
+#else
+    return munmap(address, length) == 0;
+#endif
   }
 
   bool ReleasePages(void* address, size_t length, size_t new_length) override {
@@ -4977,13 +5063,18 @@ class StandaloneV8PageAllocator final : public v8::PageAllocator {
       return FreePages(address, length);
     }
     auto* release_start = static_cast<uint8_t*>(address) + new_length;
+#if BUILDFLAG(IS_WIN)
     return !!VirtualFree(release_start, length - new_length,
                          kStandaloneMemDecommit);
+#else
+    return munmap(release_start, length - new_length) == 0;
+#endif
   }
 
   bool SetPermissions(void* address,
                       size_t length,
                       Permission permissions) override {
+#if BUILDFLAG(IS_WIN)
     if (!StandaloneNoAccessPermission(permissions) &&
         VirtualAlloc(address, length, kStandaloneMemCommit,
                      StandalonePageProtection(permissions)) != address) {
@@ -4992,27 +5083,48 @@ class StandaloneV8PageAllocator final : public v8::PageAllocator {
     unsigned long old_protect = 0;
     return !!VirtualProtect(address, length, StandalonePageProtection(permissions),
                             &old_protect);
+#else
+    return mprotect(address, length, StandalonePageProtection(permissions)) == 0;
+#endif
   }
 
   bool RecommitPages(void* address,
                      size_t length,
                      Permission permissions) override {
+#if BUILDFLAG(IS_WIN)
     return VirtualAlloc(address, length, kStandaloneMemCommit,
                         StandalonePageProtection(permissions)) == address;
+#else
+    return mprotect(address, length, StandalonePageProtection(permissions)) == 0;
+#endif
   }
 
   bool DiscardSystemPages(void* address, size_t size) override {
+#if BUILDFLAG(IS_WIN)
     return !!VirtualAlloc(address, size, kStandaloneMemReset,
                           kStandalonePageReadwrite);
+#else
+    return madvise(address, size, MADV_DONTNEED) == 0;
+#endif
   }
 
   bool DecommitPages(void* address, size_t size) override {
+#if BUILDFLAG(IS_WIN)
     return !!VirtualFree(address, size, kStandaloneMemDecommit);
+#else
+    return mprotect(address, size, PROT_NONE) == 0 &&
+           madvise(address, size, MADV_DONTNEED) == 0;
+#endif
   }
 
  private:
+#if BUILDFLAG(IS_WIN)
   size_t page_size_ = 4096;
   size_t allocation_granularity_ = 65536;
+#else
+  size_t page_size_ = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  size_t allocation_granularity_ = page_size_;
+#endif
 };
 
 class StandaloneV8TaskRunner final : public v8::TaskRunner {
@@ -6446,6 +6558,15 @@ void V8UnionURLPatternInitOrUSVString::Trace(Visitor*) const {}
 
 void Route::Trace(Visitor*) const {}
 
+const AtomicString& Route::InterfaceName() const {
+  static const AtomicString* name = new AtomicString("Route");
+  return *name;
+}
+
+ExecutionContext* Route::GetExecutionContext() const {
+  return nullptr;
+}
+
 void Filter::Trace(Visitor* visitor) const {
 }
 
@@ -7372,7 +7493,13 @@ void SpellChecker::DidEndEditingOnTextField(Element*) {}
 
 void ListedElement::UpdateWillValidateCache(WillValidateReason) {}
 
+#if !BUILDFLAG(IS_LINUX)
 void FontCache::PrewarmFamily(const AtomicString&) {}
+#endif
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+float FontCache::device_scale_factor_ = 1.0f;
+#endif
 
 
 void HTMLFormElement::InvalidateDefaultButtonStyle() const {}
@@ -7421,6 +7548,61 @@ void HitTestResult::OverrideNodeAndPosition(Node* node,
 }
 
 void OpaqueRange::Trace(Visitor*) const {}
+
+unsigned OpaqueRange::startOffset() const {
+  return start_offset_in_value_;
+}
+
+unsigned OpaqueRange::endOffset() const {
+  return end_offset_in_value_;
+}
+
+bool OpaqueRange::collapsed() const {
+  return start_offset_in_value_ == end_offset_in_value_;
+}
+
+Document& OpaqueRange::OwnerDocument() const {
+  return *owner_document_;
+}
+
+const AtomicString& CloseWatcher::InterfaceName() const {
+  static const AtomicString* name = new AtomicString("CloseWatcher");
+  return *name;
+}
+
+Node::InsertionNotificationRequest HTMLDialogElement::InsertedInto(
+    ContainerNode& insertion_point) {
+  return HTMLElement::InsertedInto(insertion_point);
+}
+
+void HTMLDialogElement::RemovedFrom(ContainerNode& insertion_point) {
+  HTMLElement::RemovedFrom(insertion_point);
+}
+
+void HTMLDialogElement::AttributeChanged(
+    const AttributeModificationParams& params) {
+  HTMLElement::AttributeChanged(params);
+}
+
+void HTMLDialogElement::ParseAttribute(
+    const AttributeModificationParams& params) {
+  HTMLElement::ParseAttribute(params);
+}
+
+bool HTMLDialogElement::IsKeyboardFocusableSlow(
+    UpdateBehavior update_behavior) const {
+  return HTMLElement::IsKeyboardFocusableSlow(update_behavior);
+}
+
+bool HTMLDialogElement::IsValidBuiltinCommand(HTMLElement& invoker,
+                                              CommandEventType command) {
+  return HTMLElement::IsValidBuiltinCommand(invoker, command);
+}
+
+bool HTMLDialogElement::HandleCommandInternal(HTMLElement& invoker,
+                                              CommandEventType command) {
+  return HTMLElement::HandleCommandInternal(invoker, command);
+}
 
 v8::Local<v8::Value> ScriptValue::V8Value() const {
   return v8::Local<v8::Value>();
@@ -14019,11 +14201,35 @@ std::string UnlocalizedTimeFormatWithPattern(const Time&,
   return std::string();
 }
 namespace internal {
+#if BUILDFLAG(IS_WIN)
 LockImpl::LockImpl() : native_handle_({0}) {}
 LockImpl::~LockImpl() = default;
 void LockImpl::LockInternal() {
   ::AcquireSRWLockExclusive(reinterpret_cast<PSRWLOCK>(&native_handle_));
 }
+#else
+LockImpl::LockImpl() {
+  pthread_mutexattr_t attrs;
+  pthread_mutexattr_init(&attrs);
+  pthread_mutex_init(&native_handle_, &attrs);
+  pthread_mutexattr_destroy(&attrs);
+}
+LockImpl::~LockImpl() {
+  pthread_mutex_destroy(&native_handle_);
+}
+void LockImpl::LockInternal() {
+  pthread_mutex_lock(&native_handle_);
+}
+
+void LockImpl::SetTrySpinCount(int) {}
+
+bool LockImpl::PriorityInheritanceAvailable() {
+  return false;
+}
+
+void dcheck_trylock_result(int) {}
+void dcheck_unlock_result(int) {}
+#endif
 }  // namespace internal
 CPU::CPU() = default;
 CPU::CPU(CPU&&) = default;

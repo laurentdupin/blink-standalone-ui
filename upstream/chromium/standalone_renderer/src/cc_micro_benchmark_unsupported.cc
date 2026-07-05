@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "cc/benchmarks/micro_benchmark_impl.h"
 

@@ -36,7 +36,7 @@
 #include "components/viz/service/frame_sinks/gmb_video_frame_pool_context_provider_impl.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
@@ -109,7 +109,7 @@ std::unique_ptr<VizCompositorThreadType> CreateAndStartCompositorThread() {
   if (should_use_io_pump) {
     thread_options.message_pump_type = base::MessagePumpType::IO;
   }
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   auto* platform = ui::OzonePlatform::GetInstance();
   thread_options.message_pump_type =
       platform->GetPlatformProperties().message_pump_type_for_viz_compositor;

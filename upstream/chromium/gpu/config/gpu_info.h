@@ -179,7 +179,7 @@ struct GPU_CONFIG_EXPORT VideoEncodeAcceleratorSupportedProfile {
 using VideoEncodeAcceleratorSupportedProfiles =
     std::vector<VideoEncodeAcceleratorSupportedProfile>;
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 enum class OverlaySupport {
   kNone = 0,
   kDirect = 1,
@@ -187,7 +187,9 @@ enum class OverlaySupport {
   kSoftware = 3
 };
 
+#if BUILDFLAG(IS_WIN)
 GPU_CONFIG_EXPORT const char* OverlaySupportToString(OverlaySupport support);
+#endif
 
 struct GPU_CONFIG_EXPORT OverlayInfo {
   OverlayInfo() = default;
@@ -216,7 +218,7 @@ struct GPU_CONFIG_EXPORT OverlayInfo {
   OverlaySupport p010_overlay_support = OverlaySupport::kNone;
 };
 
-#endif
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 
 #if BUILDFLAG(IS_MAC)
 GPU_CONFIG_EXPORT bool ValidateMacOSSpecificTextureTarget(int target);

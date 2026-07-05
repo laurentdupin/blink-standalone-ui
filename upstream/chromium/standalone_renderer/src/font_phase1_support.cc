@@ -8,12 +8,15 @@
 
 #include "third_party/blink/renderer/platform/fonts/font.h"
 
+#include "build/build_config.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 
 namespace blink {
 
+#if BUILDFLAG(IS_WIN)
 bool FontCache::antialiased_text_enabled_ = true;
 bool FontCache::lcd_text_enabled_ = true;
+#endif
 
 void FontCache::SetSystemFontFamily(const AtomicString&) {}
 

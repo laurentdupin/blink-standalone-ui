@@ -9,12 +9,19 @@
 #include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
 
+#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+#define BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS 0
+#else
+#define BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS 1
+#endif
+
 #if BUILDFLAG(IS_APPLE)
 #include "base/apple/scoped_mach_port.h"
 #include "ui/gfx/mac/io_surface.h"
 #endif  // BUILDFLAG(IS_APPLE)
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
+#if BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE))
 #include "ui/gfx/native_pixmap_handle.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
 
@@ -80,7 +87,8 @@ bool StructTraits<gfx::mojom::AHardwareBufferHandleDataView,
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
+#if BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE))
 mojo::PlatformHandle StructTraits<
     gfx::mojom::NativePixmapPlaneDataView,
     gfx::NativePixmapPlane>::buffer_handle(gfx::NativePixmapPlane& plane) {
@@ -174,6 +182,20 @@ bool StructTraits<gfx::mojom::DXGIHandleTokenDataView, gfx::DXGIHandleToken>::
 }
 #endif  // BUILDFLAG(IS_WIN)
 
+#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+bool StructTraits<gfx::mojom::DXGIHandleDataView, gfx::DXGIHandle>::Read(
+    gfx::mojom::DXGIHandleDataView,
+    gfx::DXGIHandle*) {
+  return false;
+}
+
+bool StructTraits<gfx::mojom::DXGIHandleTokenDataView, gfx::DXGIHandleToken>::
+    Read(gfx::mojom::DXGIHandleTokenDataView& input,
+         gfx::DXGIHandleToken* output) {
+  return input.ReadValue(output);
+}
+#endif  // defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+
 #if BUILDFLAG(IS_APPLE)
 IOSurfaceHandle::IOSurfaceHandle() = default;
 IOSurfaceHandle::IOSurfaceHandle(IOSurfaceHandle&&) = default;
@@ -211,7 +233,8 @@ gfx::mojom::GpuMemoryBufferPlatformHandleDataView::Tag UnionTraits<
     case gfx::IO_SURFACE_BUFFER:
       return Tag::kIoSurfaceHandle;
 #endif  // BUILDFLAG(IS_APPLE)
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
+#if BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE))
     case gfx::NATIVE_PIXMAP:
       return Tag::kNativePixmapHandle;
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
@@ -292,7 +315,8 @@ bool UnionTraits<gfx::mojom::GpuMemoryBufferPlatformHandleDataView,
 #endif
       return true;
 #endif  // BUILDFLAG(IS_APPLE)
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
+#if BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE))
     case Tag::kNativePixmapHandle:
       gmb_handle->type = gfx::NATIVE_PIXMAP;
       return data.ReadNativePixmapHandle(&gmb_handle->native_pixmap_handle_);
@@ -313,3 +337,5 @@ bool UnionTraits<gfx::mojom::GpuMemoryBufferPlatformHandleDataView,
 }
 
 }  // namespace mojo
+
+#undef BLINK_STANDALONE_HAS_NATIVE_PIXMAP_MOJOM_TRAITS

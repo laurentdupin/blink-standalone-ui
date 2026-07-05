@@ -1929,6 +1929,10 @@ function(blink_standalone_configure_abseil_target target_name)
       /wd4996
     )
   endif()
+  if(BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS)
+    target_compile_options(${target_name} PRIVATE
+      ${BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS})
+  endif()
 endfunction()
 
 add_library(blink_standalone_abseil_static STATIC
@@ -2766,7 +2770,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   set(_blink_standalone_static_dawn_libs_json)
   set(_blink_standalone_static_dawn_copy_commands)
   set(_blink_standalone_static_libcxx_libs_json)
+  set(_blink_standalone_static_libcxx_package_files_json)
   set(_blink_standalone_static_libcxx_copy_commands)
+  set(_blink_standalone_static_libcxx_ranlib_commands)
   if(WIN32 AND TARGET blink_standalone_chromium_libcxx_static)
     string(APPEND _blink_standalone_static_libcxx_libs_json
       ",\n    \"lib/$<TARGET_FILE_NAME:blink_standalone_chromium_libcxx_static>\""
@@ -2775,6 +2781,42 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:blink_standalone_chromium_libcxx_static>"
         "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_chromium_libcxx_static>"
+    )
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+    foreach(_blink_standalone_libcxx_lib IN ITEMS
+        "${BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB}"
+        "${BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB}")
+      get_filename_component(_blink_standalone_libcxx_lib_name
+        "${_blink_standalone_libcxx_lib}" NAME)
+      string(APPEND _blink_standalone_static_libcxx_libs_json
+        ",\n    \"lib/${_blink_standalone_libcxx_lib_name}\""
+      )
+      list(APPEND _blink_standalone_static_libcxx_copy_commands
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${_blink_standalone_libcxx_lib}"
+          "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/${_blink_standalone_libcxx_lib_name}"
+      )
+    endforeach()
+    get_filename_component(_blink_standalone_libcxx_lib_dir
+      "${BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB}" DIRECTORY)
+    get_filename_component(_blink_standalone_libcxxabi_lib_dir
+      "${BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB}" DIRECTORY)
+    list(APPEND _blink_standalone_static_libcxx_copy_commands
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${_blink_standalone_libcxx_lib_dir}/libc++"
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/libc++"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${_blink_standalone_libcxxabi_lib_dir}/libc++abi"
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/libc++abi"
+    )
+    string(APPEND _blink_standalone_static_libcxx_package_files_json
+      "\n    \"lib/libc++\",\n    \"lib/libc++abi\","
+    )
+    list(APPEND _blink_standalone_static_libcxx_ranlib_commands
+      COMMAND ${CMAKE_RANLIB}
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/libc++.a"
+      COMMAND ${CMAKE_RANLIB}
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/libc++abi.a"
     )
   endif()
   foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
@@ -2822,6 +2864,51 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       "Native MSVC/MSVC-STL package validated by static raw-output, D3D12/Vulkan external-target, host-collision probes, and a Godot editor diagnostic static link. Consumers must still match CRT family, architecture, configuration, and iterator debug level.")
     set(_blink_standalone_static_known_hazards_json
       "\"Native MSVC/MSVC-STL static host linking is validated for Godot with matching /MT CRT, architecture, configuration, and iterator debug level. Rebuild this package if the host switches CRT family or configuration.\",\n    \"ChromiumLLVM/libc++ static packages remain unsupported for Godot/MSVC-STL host linking; this support claim applies only to the native MSVC/MSVC-STL package.\"")
+  endif()
+
+  set(_blink_standalone_static_windows_system_libraries_json
+    [=[
+    "d3d11.lib",
+    "d3d12.lib",
+    "dcomp.lib",
+    "dwmapi.lib",
+    "dxcore.lib",
+    "dxgi.lib",
+    "kernel32.lib",
+    "mincore.lib",
+    "ole32.lib",
+    "oleaut32.lib",
+    "propsys.lib",
+    "runtimeobject.lib",
+    "shell32.lib",
+    "shcore.lib",
+    "user32.lib",
+    "winmm.lib",
+    "windowscodecs.lib",
+    "wbemuuid.lib",
+    "advapi32.lib",
+    "dbghelp.lib",
+    "ntdll.lib",
+    "psapi.lib",
+    "setupapi.lib",
+    "shlwapi.lib",
+    "ws2_32.lib",
+    "delayimp.lib"
+]=])
+  set(_blink_standalone_static_linux_system_libraries_json "")
+  if(NOT WIN32)
+    set(_blink_standalone_static_windows_system_libraries_json "")
+  endif()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_blink_standalone_static_linux_system_libraries_json
+      [=[
+    "pthread",
+    "dl",
+    "m",
+    "atomic",
+    "X11",
+    "xcb"
+]=])
   endif()
 
   set(_blink_standalone_static_package_manifest_content [=[
@@ -2912,32 +2999,10 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "bin/icudtl.dat"
   ],
   "windows_system_libraries": [
-    "d3d11.lib",
-    "d3d12.lib",
-    "dcomp.lib",
-    "dwmapi.lib",
-    "dxcore.lib",
-    "dxgi.lib",
-    "kernel32.lib",
-    "mincore.lib",
-    "ole32.lib",
-    "oleaut32.lib",
-    "propsys.lib",
-    "runtimeobject.lib",
-    "shell32.lib",
-    "shcore.lib",
-    "user32.lib",
-    "winmm.lib",
-    "windowscodecs.lib",
-    "wbemuuid.lib",
-    "advapi32.lib",
-    "dbghelp.lib",
-    "ntdll.lib",
-    "psapi.lib",
-    "setupapi.lib",
-    "shlwapi.lib",
-    "ws2_32.lib",
-    "delayimp.lib"
+@_blink_standalone_static_windows_system_libraries_json@
+  ],
+  "linux_system_libraries": [
+@_blink_standalone_static_linux_system_libraries_json@
   ],
   "known_hazards": [
     @_blink_standalone_static_known_hazards_json@,
@@ -2958,6 +3023,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "lib/$<TARGET_FILE_NAME:freetype>",
     "lib/$<TARGET_FILE_NAME:harfbuzz>",
     "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_libcxx_libs_json@@_blink_standalone_static_dawn_libs_json@,
+    @_blink_standalone_static_libcxx_package_files_json@
     "bin/icudtl.dat"
   ]
 }
@@ -3043,6 +3109,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       "${BLINK_STANDALONE_ICU_DATA_FILE}"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/icudtl.dat"
     ${_blink_standalone_dawn_d3d12_runtime_copy_commands}
+    ${_blink_standalone_static_libcxx_ranlib_commands}
     COMMAND ${CMAKE_COMMAND}
       -DPACKAGE_DIR="${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/verify_static_package_no_code_sidecars.cmake"

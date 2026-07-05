@@ -68,7 +68,7 @@
 #include "gpu/vulkan/fuchsia/vulkan_fuchsia_ext.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif
@@ -329,7 +329,7 @@ ExternalVkImageBacking::CreateWithPixmap(
     const SharedImageInfo& si_info,
     SurfaceHandle surface_handle,
     gfx::BufferUsage buffer_usage) {
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   // Create a pixmap.
   VulkanDeviceQueue* device_queue = nullptr;
   if (context_state->vk_context_provider()) {
@@ -354,7 +354,7 @@ ExternalVkImageBacking::CreateWithPixmap(
                        mailbox, si_info, std::move(handle));
 #else
   return nullptr;
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 }
 
 ExternalVkImageBacking::ExternalVkImageBacking(
@@ -379,7 +379,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
       command_pool_(command_pool),
       use_separate_gl_texture_(use_separate_gl_texture),
       enable_webgpu_on_vk_via_gl_interop_(enable_webgpu_on_vk_via_gl_interop) {
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!handle.is_null()) {
     // Create a pixmap is there is a valid handle.
     pixmap_ = ui::OzonePlatform::GetInstance()
@@ -388,7 +388,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
                       kNullSurfaceHandle, si_info.size, si_info.format,
                       std::move(handle).native_pixmap_handle());
   }
-#endif  // BUILDFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 }
 
 ExternalVkImageBacking::~ExternalVkImageBacking() {
@@ -719,7 +719,7 @@ scoped_refptr<gfx::NativePixmap> ExternalVkImageBacking::GetNativePixmap() {
 }
 
 gfx::GpuMemoryBufferHandle ExternalVkImageBacking::GetGpuMemoryBufferHandle() {
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   return gfx::GpuMemoryBufferHandle(pixmap_->ExportHandle());
 #else
   NOTREACHED() << "Illegal access to GetGpuMemoryBufferHandle for non OZONE "

@@ -85,6 +85,7 @@
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLInterface.h"
 #include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/gfx/mojom/dxgi_info.mojom.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
@@ -132,7 +133,7 @@
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif  // BUILDFLAG(IS_OZONE)
@@ -457,7 +458,7 @@ void GpuServiceImpl::InitializeWithHost(
     mojom::GpuServiceCreationParamsPtr creation_params,
     base::WaitableEvent* shutdown_event) {
   gpu::SyncPointManager* sync_point_manager = CreateSyncPointManager();
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   gpu::SharedImageManager* shared_image_manager =
       CreateSharedImageManager(creation_params->supports_overlays);
 #else
@@ -637,21 +638,27 @@ void GpuServiceImpl::CreateJpegEncodeAccelerator(
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 void GpuServiceImpl::RegisterDCOMPSurfaceHandle(
     mojo::PlatformHandle surface_handle,
     RegisterDCOMPSurfaceHandleCallback callback) {
+#if BUILDFLAG(IS_WIN)
   base::UnguessableToken token =
       gl::DCOMPSurfaceRegistry::GetInstance()->RegisterDCOMPSurfaceHandle(
           surface_handle.TakeHandle());
   std::move(callback).Run(token);
+#else
+  std::move(callback).Run(std::nullopt);
+#endif
 }
 
 void GpuServiceImpl::UnregisterDCOMPSurfaceHandle(
     const base::UnguessableToken& token) {
+#if BUILDFLAG(IS_WIN)
   gl::DCOMPSurfaceRegistry::GetInstance()->UnregisterDCOMPSurfaceHandle(token);
+#endif
 }
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void GpuServiceImpl::CreateVideoEncodeAcceleratorProvider(
@@ -781,14 +788,19 @@ void GpuServiceImpl::GetPeakMemoryUsage(uint32_t sequence_num,
                                 weak_ptr_, sequence_num, std::move(callback)));
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 void GpuServiceImpl::RequestDXGIInfo(RequestDXGIInfoCallback callback) {
+#if BUILDFLAG(IS_WIN)
   DCHECK(io_runner_->BelongsToCurrentThread());
   main_runner_->PostTask(
       FROM_HERE, base::BindOnce(&GpuServiceImpl::RequestDXGIInfoOnMainThread,
                                 weak_ptr_, std::move(callback)));
+#else
+  std::move(callback).Run(nullptr);
+#endif
 }
 
+#if BUILDFLAG(IS_WIN)
 void GpuServiceImpl::RequestDXGIInfoOnMainThread(
     RequestDXGIInfoCallback callback) {
   DCHECK(main_runner_->BelongsToCurrentThread());
@@ -796,6 +808,7 @@ void GpuServiceImpl::RequestDXGIInfoOnMainThread(
   io_runner_->PostTask(FROM_HERE,
                        base::BindOnce(std::move(callback), dxgi_info_.Clone()));
 }
+#endif
 #endif
 
 void GpuServiceImpl::LoseAllContexts() {
@@ -1329,6 +1342,9 @@ bool GpuServiceImpl::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
 bool GpuServiceImpl::IsGMBNV12Supported() {
   CHECK(main_runner_->BelongsToCurrentThread());
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   // Determine whether it's possible to create an NV12 NativePixmap with
   // GPU_READ_CPU_READ_WRITE usage (the relevant usage for the clients of this
   // method).
@@ -1354,6 +1370,7 @@ bool GpuServiceImpl::IsGMBNV12Supported() {
   }
 
   return true;
+#endif
 }
 #endif
 
@@ -1422,7 +1439,7 @@ gpu::SharedImageManager* GpuServiceImpl::CreateSharedImageManager(
   owned_shared_image_manager_ = std::make_unique<gpu::SharedImageManager>(
       thread_safe_manager, display_context_on_another_thread,
       vulkan_context_provider(), io_runner_);
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   owned_shared_image_manager_->SetSupportsOverlays(supports_overlays);
 #endif
   return owned_shared_image_manager_.get();

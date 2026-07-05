@@ -13,7 +13,7 @@
 #include "gpu/ipc/common/gpu_ipc_common_export.h"
 #include "gpu/ipc/common/gpu_preferences.mojom-shared.h"
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "base/message_loop/message_pump_type.h"
 #include "mojo/public/cpp/base/message_pump_type_mojom_traits.h"
 #endif
@@ -271,7 +271,7 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<gpu::mojom::GpuPreferencesDataView,
 
     out->enable_perf_data_collection = prefs.enable_perf_data_collection();
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
     if (!prefs.ReadMessagePumpType(&out->message_pump_type))
       return false;
 #endif
@@ -459,7 +459,7 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<gpu::mojom::GpuPreferencesDataView,
   static bool enable_perf_data_collection(const gpu::GpuPreferences& prefs) {
     return prefs.enable_perf_data_collection;
   }
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   static base::MessagePumpType message_pump_type(
       const gpu::GpuPreferences& prefs) {
     return prefs.message_pump_type;

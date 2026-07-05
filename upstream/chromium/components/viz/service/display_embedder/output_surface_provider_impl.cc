@@ -45,7 +45,7 @@
 #include "ui/base/cocoa/remote_layer_api.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "components/viz/service/display_embedder/software_output_device_ozone.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -158,7 +158,7 @@ OutputSurfaceProviderImpl::CreateSoftwareOutputDeviceForPlatform(
 #elif BUILDFLAG(IS_ANDROID)
   // Android does not do software compositing, so we can't get here.
   NOTREACHED();
-#elif BUILDFLAG(IS_OZONE)
+#elif BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   ui::SurfaceFactoryOzone* factory =
       ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
   std::unique_ptr<ui::PlatformWindowSurface> platform_window_surface =

@@ -90,7 +90,7 @@
 #include "gpu/ipc/service/dcomp_texture_win.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif  // BUILDFLAG(IS_OZONE)
 
@@ -254,7 +254,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
                              viz::mojom::SharedImageFormatPtr format,
                              gfx::mojom::BufferUsage buffer_usage,
                              CreateGpuMemoryBufferCallback callback) override;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   void CreateDCOMPTexture(
       int32_t route_id,
       mojo::PendingAssociatedReceiver<mojom::DCOMPTexture> receiver,
@@ -264,13 +264,15 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
       const std::vector<gpu::SyncToken>& sync_token_dependencies,
       uint64_t release_count,
       CopyToGpuMemoryBufferAsyncCallback callback) override;
-#endif  // BUILDFLAG(IS_WIN)
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   void CopyNativeGmbToSharedMemoryAsync(
       gfx::GpuMemoryBufferHandle buffer_handle,
       base::UnsafeSharedMemoryRegion shared_memory,
       CopyNativeGmbToSharedMemoryAsyncCallback callback) override;
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) ||
+        // defined(HTML_CSS_RENDERER_STANDALONE)
   void WaitForTokenInRange(int32_t routing_id,
                            int32_t start,
                            int32_t end,
@@ -656,7 +658,7 @@ void GpuChannelMessageFilter::DestroyCommandBuffer(
       std::move(callback));
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 void GpuChannelMessageFilter::CreateDCOMPTexture(
     int32_t route_id,
     mojo::PendingAssociatedReceiver<mojom::DCOMPTexture> receiver,
@@ -683,6 +685,10 @@ void GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync(
     uint64_t release_count,
     CopyToGpuMemoryBufferAsyncCallback callback) {
   TRACE_EVENT0("gpu", "GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync");
+#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
+  std::move(callback).Run(false);
+  return;
+#else
   gpu::Mailbox native_mailbox;
   if (!ReadMojomValue<gpu::mojom::Mailbox>(mailbox, &native_mailbox)) {
     std::move(callback).Run(false);
@@ -724,14 +730,20 @@ void GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync(
                          std::move(callback)));
   scheduler_->ScheduleTask(Scheduler::Task(it->second, std::move(run_on_main),
                                            sync_token_dependencies, release));
+#endif
 }
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
 void GpuChannelMessageFilter::CopyNativeGmbToSharedMemoryAsync(
     gfx::GpuMemoryBufferHandle buffer_handle,
     base::UnsafeSharedMemoryRegion shared_memory,
     CopyNativeGmbToSharedMemoryAsyncCallback callback) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN) && \
+    !BUILDFLAG(IS_ANDROID)
+  std::move(callback).Run(false);
+#else
   base::AutoLock auto_lock(gpu_channel_lock_);
   if (!gpu_channel_) {
     std::move(callback).Run(false);
@@ -743,8 +755,10 @@ void GpuChannelMessageFilter::CopyNativeGmbToSharedMemoryAsync(
           ->factory()
           ->CopyNativeBufferToSharedMemoryAsync(std::move(buffer_handle),
                                                 std::move(shared_memory)));
+#endif
 }
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) ||
+        // defined(HTML_CSS_RENDERER_STANDALONE)
 
 void GpuChannelMessageFilter::WaitForTokenInRange(
     int32_t routing_id,

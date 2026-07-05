@@ -25,7 +25,8 @@
 #include "third_party/skia/include/ports/SkFontMgr_mac_ct.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+#if (BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/skia/include/ports/SkFontConfigInterface.h"
 #include "third_party/skia/include/ports/SkFontMgr_FontConfigInterface.h"
 #include "third_party/skia/include/ports/SkFontScanner_Fontations.h"
@@ -44,7 +45,9 @@
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #endif
 
-#if defined(SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE)
+#if defined(SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE) || \
+    ((BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)) && \
+     defined(HTML_CSS_RENDERER_STANDALONE))
 #include "third_party/skia/include/ports/SkFontMgr_empty.h"
 #endif
 
@@ -83,6 +86,9 @@ static sk_sp<SkFontMgr> fontmgr_factory() {
   return SkFontMgr_New_Android(nullptr, SkFontScanner_Make_Fontations());
 #elif BUILDFLAG(IS_APPLE)
   return SkFontMgr_New_CoreText(nullptr);
+#elif (BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)) && \
+    defined(HTML_CSS_RENDERER_STANDALONE)
+  return SkFontMgr_New_Custom_Empty();
 #elif BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   sk_sp<SkFontConfigInterface> fci(SkFontConfigInterface::RefGlobal());
   return fci ? SkFontMgr_New_FCI(std::move(fci),

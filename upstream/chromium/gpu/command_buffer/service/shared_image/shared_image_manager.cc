@@ -37,9 +37,11 @@
 
 #if BUILDFLAG(IS_OZONE)
 #include "components/viz/common/gpu/vulkan_context_provider.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "gpu/config/gpu_finch_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
+#endif
 #endif
 
 #if DCHECK_IS_ON()
@@ -652,6 +654,8 @@ bool SharedImageManager::SupportsScanoutImages() {
   return true;
 #elif BUILDFLAG(IS_ANDROID)
   return true;
+#elif defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
 #elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
   return supports_overlays_on_ozone_;
 #elif BUILDFLAG(IS_WIN)

@@ -9,7 +9,13 @@
 
 namespace mojo {
 
-#if BUILDFLAG(IS_POSIX)
+#if BUILDFLAG(IS_POSIX) && defined(HTML_CSS_RENDERER_STANDALONE)
+mojo::PlatformHandle
+StructTraits<gfx::mojom::GpuFenceHandleDataView,
+             gfx::GpuFenceHandle>::native_handle(gfx::GpuFenceHandle& handle) {
+  return mojo::PlatformHandle(handle.Release());
+}
+#elif BUILDFLAG(IS_POSIX)
 mojo::PlatformHandle
 StructTraits<gfx::mojom::GpuFenceHandleDataView,
              gfx::GpuFenceHandle>::native_fd(gfx::GpuFenceHandle& handle) {
@@ -25,7 +31,10 @@ StructTraits<gfx::mojom::GpuFenceHandleDataView,
 
 bool StructTraits<gfx::mojom::GpuFenceHandleDataView, gfx::GpuFenceHandle>::
     Read(gfx::mojom::GpuFenceHandleDataView data, gfx::GpuFenceHandle* out) {
-#if BUILDFLAG(IS_POSIX)
+#if BUILDFLAG(IS_POSIX) && defined(HTML_CSS_RENDERER_STANDALONE)
+  out->Adopt(data.TakeNativeHandle().TakeFD());
+  return true;
+#elif BUILDFLAG(IS_POSIX)
   out->Adopt(data.TakeNativeFd().TakeFD());
   return true;
 #elif BUILDFLAG(IS_WIN)

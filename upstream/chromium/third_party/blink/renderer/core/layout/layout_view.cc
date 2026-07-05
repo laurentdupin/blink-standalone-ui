@@ -23,6 +23,8 @@
 
 #include <inttypes.h>
 
+#include <cstdio>
+
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/time/time.h"
@@ -81,6 +83,23 @@
 #endif
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+namespace standalone_renderer_probe {
+int StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer();
+}
+
+void TraceStandaloneLayoutViewStage(const char* stage) {
+  if (!standalone_renderer_probe::
+          StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer()) {
+    return;
+  }
+  std::fprintf(stderr, "layout_view.stage=%s\n", stage ? stage : "(null)");
+  std::fflush(stderr);
+}
+#else
+void TraceStandaloneLayoutViewStage(const char*) {}
+#endif
 
 LayoutView::LayoutView(ContainerNode* document)
     : LayoutBlockFlow(document),
@@ -858,8 +877,11 @@ const LayoutBox& LayoutView::RootBox() const {
 
 void LayoutView::LayoutRoot() {
   NOT_DESTROYED();
+  TraceStandaloneLayoutViewStage("LayoutRoot begin");
   if (ShouldUsePaginatedLayout()) {
+    TraceStandaloneLayoutViewStage("LayoutRoot before paginated width");
     intrinsic_logical_widths_ = LogicalWidth();
+    TraceStandaloneLayoutViewStage("LayoutRoot after paginated width");
   }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -870,31 +892,48 @@ void LayoutView::LayoutRoot() {
   // to date DSF when layout happens, we plumb this through to the FontCache, so
   // that we can correctly retrieve RenderStyleForStrike from out of
   // process. crbug.com/845468
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The standalone renderer owns device scale through its viewport path and may
+  // run with EmptyChromeClient, which has no platform screen integration.
+  FontCache::SetDeviceScaleFactor(1.0f);
+#else
   LocalFrame& frame = GetFrameView()->GetFrame();
   ChromeClient& chrome_client = frame.GetChromeClient();
   FontCache::SetDeviceScaleFactor(
       chrome_client.GetScreenInfo(frame).device_scale_factor);
 #endif
+#endif
 
+  TraceStandaloneLayoutViewStage("LayoutRoot before resize check");
   bool is_resizing_initial_containing_block =
       LogicalWidth() != ViewLogicalWidthForBoxSizing() ||
       LogicalHeight() != ViewLogicalHeightForBoxSizing();
+  TraceStandaloneLayoutViewStage("LayoutRoot after resize check");
   DCHECK(!initial_containing_block_resize_handled_list_);
   if (is_resizing_initial_containing_block) {
+    TraceStandaloneLayoutViewStage("LayoutRoot before resize handled list");
     initial_containing_block_resize_handled_list_ =
         MakeGarbageCollected<GCedHeapHashSet<Member<const LayoutObject>>>();
+    TraceStandaloneLayoutViewStage("LayoutRoot after resize handled list");
   }
 
+  TraceStandaloneLayoutViewStage("LayoutRoot before style");
   const auto& style = StyleRef();
+  TraceStandaloneLayoutViewStage("LayoutRoot before constraint builder");
   ConstraintSpaceBuilder builder(
       style.GetWritingMode(), style.GetWritingDirection(),
       /* is_new_fc */ true, /* adjust_inline_size_if_needed */ false);
+  TraceStandaloneLayoutViewStage("LayoutRoot before available size");
   builder.SetAvailableSize(InitialContainingBlockSize());
+  TraceStandaloneLayoutViewStage("LayoutRoot before fixed sizes");
   builder.SetIsFixedInlineSize(true);
   builder.SetIsFixedBlockSize(true);
 
+  TraceStandaloneLayoutViewStage("LayoutRoot before BlockNode layout");
   BlockNode(this).Layout(builder.ToConstraintSpace());
+  TraceStandaloneLayoutViewStage("LayoutRoot after BlockNode layout");
   initial_containing_block_resize_handled_list_ = nullptr;
+  TraceStandaloneLayoutViewStage("LayoutRoot done");
 }
 
 void LayoutView::UpdateHitTestResult(HitTestResult& result,

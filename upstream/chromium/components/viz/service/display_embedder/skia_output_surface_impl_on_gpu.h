@@ -77,7 +77,7 @@ class Recording;
 }  // namespace skgpu::graphite
 
 namespace ui {
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 class PlatformWindowSurface;
 #endif
 }  // namespace ui
@@ -524,7 +524,7 @@ class SkiaOutputSurfaceImplOnGpu
   ReleaseCallback CreateDestroyCopyOutputResourcesOnGpuThreadCallback(
       std::unique_ptr<gpu::SkiaImageRepresentation> representation);
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   // This should outlive gl_surface_ and vulkan_surface_.
   std::unique_ptr<ui::PlatformWindowSurface> window_surface_;
 #endif

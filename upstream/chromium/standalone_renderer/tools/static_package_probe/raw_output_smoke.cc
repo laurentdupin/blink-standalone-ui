@@ -7,12 +7,24 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <csignal>
+#include <cstdlib>
 
 #if defined(_WIN32)
 #include <windows.h>
 #endif
 
 namespace {
+
+const char* g_phase = "startup";
+
+void CrashSignalHandler(int signal) {
+  std::fprintf(stderr,
+               "static_raw_output_smoke: signal=%d phase=%s\n",
+               signal, g_phase ? g_phase : "(unknown)");
+  std::fflush(stderr);
+  std::_Exit(128 + signal);
+}
 
 bool Fail(const char* message) {
   std::fprintf(stderr, "static_raw_output_smoke: failed %s\n", message);
@@ -47,6 +59,8 @@ bool IsExpectedColor(const uint8_t* pixel,
 }  // namespace
 
 int main() {
+  std::signal(SIGSEGV, CrashSignalHandler);
+  std::signal(SIGABRT, CrashSignalHandler);
 #if defined(_WIN32)
   if (GetModuleHandleA("blink_standalone_renderer_c_api.dll") != nullptr) {
     return Fail("c_api_dll_loaded") ? 0 : 1;
@@ -60,6 +74,7 @@ int main() {
   config.no_script_profile = 1;
 
   blink_standalone_renderer_t* renderer = nullptr;
+  g_phase = "create";
   blink_standalone_status_code_t status =
       blink_standalone_renderer_create(&config, &renderer);
   if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
@@ -73,12 +88,14 @@ int main() {
       "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label>"
       "<input id='name' value='abc' data-godot-action='name'>";
 
+  g_phase = "set_document_html";
   status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
   if (status != BLINK_STANDALONE_STATUS_OK) {
     blink_standalone_renderer_destroy(renderer);
     return Fail("set_document_html") ? 0 : 1;
   }
 
+  g_phase = "advance_frame";
   status = blink_standalone_renderer_advance_frame(renderer, 0.0);
   if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr, "static_raw_output_smoke: advance_frame status=%d error=%s\n",
@@ -89,12 +106,14 @@ int main() {
   }
 
   blink_standalone_frame_output_t output = {};
+  g_phase = "get_latest_output";
   status = blink_standalone_renderer_get_latest_output(renderer, &output);
   if (status != BLINK_STANDALONE_STATUS_OK || !output.pixels) {
     blink_standalone_renderer_destroy(renderer);
     return Fail("get_latest_output") ? 0 : 1;
   }
 
+  g_phase = "inspect_output";
   bool ok = true;
   if (output.width != 160 || output.height != 120) {
     ok = Fail("dimensions");
@@ -142,6 +161,7 @@ int main() {
     ok = Fail("pixel_coverage");
   }
 
+  g_phase = "hit_metadata";
   const size_t hit_count = blink_standalone_renderer_hit_metadata_count(renderer);
   if (hit_count == 0) {
     ok = Fail("hit_count");
@@ -195,6 +215,7 @@ int main() {
     ok = Fail("hit_metadata");
   }
 
+  g_phase = "release_destroy";
   blink_standalone_renderer_release_latest_output(renderer);
   blink_standalone_renderer_destroy(renderer);
 

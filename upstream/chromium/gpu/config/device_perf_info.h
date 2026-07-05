@@ -13,6 +13,9 @@
 
 #if BUILDFLAG(IS_WIN)
 #include <d3dcommon.h>
+#elif defined(HTML_CSS_RENDERER_STANDALONE)
+using D3D_FEATURE_LEVEL = uint32_t;
+inline constexpr D3D_FEATURE_LEVEL D3D_FEATURE_LEVEL_1_0_CORE = 0;
 #endif
 
 namespace gpu {
@@ -49,7 +52,7 @@ struct GPU_CONFIG_EXPORT DevicePerfInfo {
   uint32_t total_physical_memory_mb = 0u;
   uint32_t total_disk_space_mb = 0u;
   uint32_t hardware_concurrency = 0u;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   // system commit limit (n pages) x page size.
   uint32_t system_commit_limit_mb = 0u;
   // If multiple GPUs are detected, this holds the highest feature level.

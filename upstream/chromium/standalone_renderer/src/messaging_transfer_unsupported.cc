@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/platform/blob/serialized_blob_mojom_traits.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
 #include "mojo/public/cpp/system/platform_handle.h"
+#include "perfetto/tracing/traced_value.h"
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 
 #include <tuple>

@@ -20,18 +20,30 @@ bool StructTraits<gpu::mojom::GpuDeviceDataView, gpu::GPUInfo::GPUDevice>::Read(
     gpu::GPUInfo::GPUDevice* out) {
   out->vendor_id = data.vendor_id();
   out->device_id = data.device_id();
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
   out->revision = data.revision();
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+#else
+  (void)data.revision();
+#endif
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) ||
+        // defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 #if BUILDFLAG(IS_WIN)
   out->sub_sys_id = data.sub_sys_id();
-#endif  // BUILDFLAG(IS_WIN)
+#else
+  (void)data.sub_sys_id();
+#endif
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   out->active = data.active();
   return data.ReadVendorString(&out->vendor_string) &&
          data.ReadDeviceString(&out->device_string) &&
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 #if BUILDFLAG(IS_WIN)
          data.ReadLuid(&out->luid) &&
 #endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
          data.ReadDriverVendor(&out->driver_vendor) &&
          data.ReadDriverVersion(&out->driver_version) &&
          data.ReadGpuPreference(&out->gpu_preference);
@@ -303,7 +315,7 @@ bool StructTraits<gpu::mojom::VideoEncodeAcceleratorSupportedProfileDataView,
          data.ReadProfile(&out->profile);
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 // static
 gpu::mojom::OverlaySupport
 EnumTraits<gpu::mojom::OverlaySupport, gpu::OverlaySupport>::ToMojom(
@@ -367,11 +379,18 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
   out->subpixel_font_rendering = data.subpixel_font_rendering();
   out->visibility_callback_call_count = data.visibility_callback_call_count();
 
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 #if BUILDFLAG(IS_WIN)
   out->directml_feature_level = data.directml_feature_level();
   out->d3d12_feature_level = data.d3d12_feature_level();
   out->vulkan_version = data.vulkan_version();
   out->shared_image_d3d = data.shared_image_d3d();
+#else
+  (void)data.directml_feature_level();
+  (void)data.d3d12_feature_level();
+  (void)data.vulkan_version();
+  (void)data.shared_image_d3d();
+#endif  // BUILDFLAG(IS_WIN)
 #endif
 #if BUILDFLAG(ENABLE_VULKAN)
   out->hardware_supports_vulkan = data.hardware_supports_vulkan();
@@ -397,8 +416,10 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
          data.ReadGlWsExtensions(&out->gl_ws_extensions) &&
          data.ReadGlImplementationParts(&out->gl_implementation_parts) &&
          data.ReadDirectRenderingVersion(&out->direct_rendering_version) &&
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 #if BUILDFLAG(IS_WIN)
          data.ReadOverlayInfo(&out->overlay_info) &&
+#endif  // BUILDFLAG(IS_WIN)
 #endif
          data.ReadVideoDecodeAcceleratorSupportedProfiles(
              &out->video_decode_accelerator_supported_profiles) &&

@@ -15,7 +15,9 @@ namespace mojo {
 template <>
 struct COMPONENT_EXPORT(GFX_SHARED_MOJOM_TRAITS)
     StructTraits<gfx::mojom::GpuFenceHandleDataView, gfx::GpuFenceHandle> {
-#if BUILDFLAG(IS_POSIX)
+#if BUILDFLAG(IS_POSIX) && defined(HTML_CSS_RENDERER_STANDALONE)
+  static mojo::PlatformHandle native_handle(gfx::GpuFenceHandle& handle);
+#elif BUILDFLAG(IS_POSIX)
   static mojo::PlatformHandle native_fd(gfx::GpuFenceHandle& handle);
 #elif BUILDFLAG(IS_WIN)
   static mojo::PlatformHandle native_handle(gfx::GpuFenceHandle& handle);

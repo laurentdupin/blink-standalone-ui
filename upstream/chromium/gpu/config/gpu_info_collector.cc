@@ -48,7 +48,7 @@
 #include "base/apple/foundation_util.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"           // nogncheck
 #include "ui/ozone/public/platform_gl_egl_utility.h"  // nogncheck
 #endif

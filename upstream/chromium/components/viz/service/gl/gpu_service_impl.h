@@ -194,13 +194,13 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
           jea_receiver) override;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   void RegisterDCOMPSurfaceHandle(
       mojo::PlatformHandle surface_handle,
       RegisterDCOMPSurfaceHandleCallback callback) override;
   void UnregisterDCOMPSurfaceHandle(
       const base::UnguessableToken& token) override;
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
   void CreateVideoEncodeAcceleratorProvider(
@@ -229,7 +229,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   void StartPeakMemoryMonitor(uint32_t sequence_num) override;
   void GetPeakMemoryUsage(uint32_t sequence_num,
                           GetPeakMemoryUsageCallback callback) override;
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   void RequestDXGIInfo(RequestDXGIInfoCallback callback) override;
 #endif
   void LoadedBlob(const gpu::GpuDiskCacheHandle& handle,

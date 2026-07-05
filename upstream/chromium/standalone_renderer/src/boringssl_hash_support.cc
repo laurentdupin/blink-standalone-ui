@@ -5,10 +5,12 @@
 #include <openssl/mem.h>
 
 #include <stddef.h>
-#include <windows.h>
 
 void OPENSSL_cleanse(void* ptr, size_t len) {
-  SecureZeroMemory(ptr, len);
+  volatile unsigned char* cursor = static_cast<volatile unsigned char*>(ptr);
+  while (len-- > 0) {
+    *cursor++ = 0;
+  }
 }
 
 int CRYPTO_memcmp(const void* a, const void* b, size_t len) {

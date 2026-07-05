@@ -22,9 +22,12 @@
 #include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/boringssl/src/include/openssl/rand.h"
+#endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/lss/linux_syscall_support.h"
 #elif BUILDFLAG(IS_MAC)
 // TODO(crbug.com/40641285): Waiting for this header to appear in the iOS SDK.
@@ -115,11 +118,13 @@ namespace {
 
 void RandBytesInternal(span<uint8_t> output, bool avoid_allocation) {
   // The BoringSSL experiment takes priority over everything else.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!avoid_allocation && internal::UseBoringSSLForRandBytes()) {
     // BoringSSL's RAND_bytes always returns 1. Any error aborts the program.
     (void)RAND_bytes(output.data(), output.size());
     return;
   }
+#endif
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
   // On Android it is mandatory to check that the kernel _version_ has the
   // support for a syscall before calling. The same check is made on Linux and

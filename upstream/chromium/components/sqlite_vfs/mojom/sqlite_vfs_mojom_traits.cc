@@ -52,7 +52,7 @@ bool StructTraits<sqlite_vfs::mojom::PendingReadWriteFileSetDataView,
   if (!data.ReadWalIndexFile(&out_pending_file_set->wal_index_file)) {
     return false;
   }
-#if !BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!data.ReadWalIndexFileReadOnly(
           &out_pending_file_set->wal_index_file_read_only)) {
     return false;

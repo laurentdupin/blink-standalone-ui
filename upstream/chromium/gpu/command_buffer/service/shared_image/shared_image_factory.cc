@@ -70,7 +70,7 @@
 
 #endif  // BUILDFLAG(ENABLE_VULKAN)
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "gpu/command_buffer/service/shared_image/ozone_image_backing_factory.h"
 #include "ui/ozone/public/gl_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -381,6 +381,7 @@ SharedImageFactory::SharedImageFactory(
     factories_.push_back(std::move(ahb_factory));
   }
 #elif BUILDFLAG(IS_OZONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   // For all Ozone platforms - Desktop Linux, ChromeOS, Fuchsia, CastOS.
   if (ui::OzonePlatform::GetInstance()
           ->GetPlatformRuntimeProperties()
@@ -389,6 +390,7 @@ SharedImageFactory::SharedImageFactory(
         context_state_, workarounds_);
     factories_.push_back(std::move(ozone_factory));
   }
+#endif
 
 #if BUILDFLAG(ENABLE_VULKAN) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA))
   if (gr_context_type_ == GrContextType::kVulkan
@@ -527,7 +529,7 @@ bool SharedImageFactory::IsNativeBufferSupported(
       return false;
   }
   NOTREACHED();
-#elif BUILDFLAG(IS_OZONE)
+#elif BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   return ui::OzonePlatform::GetInstance()->IsNativePixmapConfigSupported(format,
                                                                          usage);
 #elif BUILDFLAG(IS_WIN)
@@ -820,7 +822,7 @@ SharedImageFactory::CreateNativeGpuMemoryBufferHandle(
 #if BUILDFLAG(IS_APPLE)
   return IOSurfaceImageBackingFactory::CreateGpuMemoryBufferHandle(size,
                                                                    format);
-#elif BUILDFLAG(IS_OZONE)
+#elif BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   return OzoneImageBackingFactory::CreateGpuMemoryBufferHandle(
       shared_image_manager_->vulkan_context_provider(), size, format, usage);
 #elif defined(HTML_CSS_RENDERER_STANDALONE)

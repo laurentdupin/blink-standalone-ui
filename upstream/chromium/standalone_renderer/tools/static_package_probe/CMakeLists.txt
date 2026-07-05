@@ -51,6 +51,7 @@ _blink_static_json_array(_required_import_libraries required_import_libraries)
 _blink_static_json_array(_third_party_static_archives third_party_static_archives)
 _blink_static_json_array(_whole_archive_candidates whole_archive_candidates_msvc)
 _blink_static_json_array(_windows_system_libraries windows_system_libraries)
+_blink_static_json_array(_linux_system_libraries linux_system_libraries)
 _blink_static_json_array(_remaining_runtime_sidecars remaining_runtime_sidecars)
 _blink_static_json_array(_consumer_compile_definitions consumer_compile_definitions)
 
@@ -81,7 +82,11 @@ foreach(_lib IN LISTS _required_static_archives _required_import_libraries
     list(APPEND _normal_libraries "${_resolved_lib}")
   endif()
 endforeach()
-list(APPEND _normal_libraries ${_windows_system_libraries})
+if(WIN32)
+  list(APPEND _normal_libraries ${_windows_system_libraries})
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  list(APPEND _normal_libraries ${_linux_system_libraries})
+endif()
 
 set(_resolved_runtime_sidecars)
 foreach(_sidecar IN LISTS _remaining_runtime_sidecars)
@@ -94,14 +99,22 @@ function(_blink_static_configure_probe target_name)
     "${BLINK_STANDALONE_STATIC_PACKAGE_DIR}/include")
   target_compile_definitions(${target_name} PRIVATE
     ${_consumer_compile_definitions})
-  target_link_libraries(${target_name} PRIVATE ${_normal_libraries})
   if(MSVC)
+    target_link_libraries(${target_name} PRIVATE ${_normal_libraries})
     set_property(TARGET ${target_name} PROPERTY
       MSVC_RUNTIME_LIBRARY "MultiThreaded")
     foreach(_lib IN LISTS _resolved_whole_archive_candidates)
       target_link_options(${target_name} BEFORE PRIVATE
         "/WHOLEARCHIVE:${_lib}")
     endforeach()
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(${target_name} PRIVATE
+      -Wl,--start-group ${_normal_libraries} -Wl,--end-group)
+    target_link_options(${target_name} PRIVATE
+      -fuse-ld=lld
+      -nostdlib++)
+  else()
+    target_link_libraries(${target_name} PRIVATE ${_normal_libraries})
   endif()
   foreach(_sidecar IN LISTS _resolved_runtime_sidecars)
     add_custom_command(TARGET ${target_name} POST_BUILD

@@ -740,28 +740,6 @@ struct HttpResponseHeaders::ParsedHeader {
   size_t value_end = 0;
 };
 
-HttpResponseHeaders::~HttpResponseHeaders() = default;
-
-bool HttpUtil::IsTokenChar(char c) {
-  return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
-         (c >= 'a' && c <= 'z') ||
-         c == '!' || c == '#' || c == '$' || c == '%' || c == '&' ||
-         c == '\'' || c == '*' || c == '+' || c == '-' || c == '.' ||
-         c == '^' || c == '_' || c == '`' || c == '|' || c == '~';
-}
-
-bool HttpUtil::IsToken(std::string_view str) {
-  if (str.empty()) {
-    return false;
-  }
-  for (char c : str) {
-    if (!IsTokenChar(c)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 }  // namespace net
 
 namespace network::mojom {

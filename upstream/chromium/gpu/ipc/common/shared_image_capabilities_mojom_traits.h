@@ -24,10 +24,14 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<
     return input.supports_scanout_shared_images;
   }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   static bool supports_scanout_shared_images_for_software_video_frames(
       const gpu::SharedImageCapabilities& input) {
+#if BUILDFLAG(IS_WIN)
     return input.supports_scanout_shared_images_for_software_video_frames;
+#else
+    return false;
+#endif
   }
 #endif
 
@@ -74,10 +78,14 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<
     return input.shared_image_d3d;
   }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   static bool shared_image_swap_chain(
       const gpu::SharedImageCapabilities& input) {
+#if BUILDFLAG(IS_WIN)
     return input.shared_image_swap_chain;
+#else
+    return false;
+#endif
   }
 #endif
 

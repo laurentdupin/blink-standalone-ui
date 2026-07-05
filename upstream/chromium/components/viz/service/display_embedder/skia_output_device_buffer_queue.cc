@@ -36,7 +36,7 @@
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_surface.h"
 
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif  // BUILDFLAG(IS_OZONE)
 
@@ -151,7 +151,7 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
       workarounds_(deps->GetGpuDriverBugWorkarounds()),
       context_state_(deps->GetSharedContextState()),
       representation_factory_(representation_factory) {
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
   capabilities_.needs_background_image = ui::OzonePlatform::GetInstance()
                                              ->GetPlatformRuntimeProperties()
                                              .needs_background_image;
@@ -297,7 +297,7 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
 
   for (const auto& overlay : overlays) {
     auto mailbox = overlay.mailbox;
-#if BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
     if (overlay.is_solid_color) {
       DCHECK(overlay.color.has_value());
       DCHECK(capabilities_.supports_non_backed_solid_color_overlays ||
@@ -453,7 +453,8 @@ void SkiaOutputDeviceBufferQueue::ReleaseOverlays() {
 
     // SkiaRenderer wants to unlock resources for these released overlays as
     // well, so store their mailboxes here.
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_APPLE) || \
+    (BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE))
     // The root render pass buffers are managed by SkiaRenderer so we don't need
     // to explicitly return them via callback.
     released_overlays.push_back(overlay.mailbox());

@@ -127,3 +127,10 @@ set(BLINK_STANDALONE_ABSEIL_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/time/time.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/types/source_location.cc
 )
+
+if(NOT WIN32)
+  list(REMOVE_ITEM BLINK_STANDALONE_ABSEIL_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/win32_waiter.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_name_win.cc
+  )
+endif()

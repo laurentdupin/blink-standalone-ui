@@ -42,20 +42,33 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<gpu::mojom::GpuDeviceDataView,
     return input.device_id;
   }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   static uint32_t revision(const gpu::GPUInfo::GPUDevice& input) {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
     return input.revision;
+#else
+    return 0;
+#endif
   }
 #endif
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   static uint32_t sub_sys_id(const gpu::GPUInfo::GPUDevice& input) {
+#if BUILDFLAG(IS_WIN)
     return input.sub_sys_id;
+#else
+    return 0;
+#endif
   }
 
   static const CHROME_LUID luid(const gpu::GPUInfo::GPUDevice& input) {
+#if BUILDFLAG(IS_WIN)
     return input.luid;
+#else
+    return {};
+#endif
   }
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 
   static bool active(const gpu::GPUInfo::GPUDevice& input) {
     return input.active;
@@ -182,7 +195,7 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<
   }
 };
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
 template <>
 struct GPU_IPC_COMMON_EXPORT EnumTraits<gpu::mojom::OverlaySupport,
                                         gpu::OverlaySupport> {
@@ -344,25 +357,46 @@ struct GPU_IPC_COMMON_EXPORT StructTraits<gpu::mojom::GpuInfoDataView,
     return input.can_support_threaded_texture_mailbox;
   }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
   static uint32_t directml_feature_level(const gpu::GPUInfo& input) {
+#if BUILDFLAG(IS_WIN)
     return input.directml_feature_level;
+#else
+    return 0;
+#endif
   }
 
   static uint32_t d3d12_feature_level(const gpu::GPUInfo& input) {
+#if BUILDFLAG(IS_WIN)
     return input.d3d12_feature_level;
+#else
+    return 0;
+#endif
   }
 
   static uint32_t vulkan_version(const gpu::GPUInfo& input) {
+#if BUILDFLAG(IS_WIN)
     return input.vulkan_version;
+#else
+    return 0;
+#endif
   }
 
   static const gpu::OverlayInfo& overlay_info(const gpu::GPUInfo& input) {
+#if BUILDFLAG(IS_WIN)
     return input.overlay_info;
+#else
+    static const gpu::OverlayInfo kEmptyOverlayInfo;
+    return kEmptyOverlayInfo;
+#endif
   }
 
   static bool shared_image_d3d(const gpu::GPUInfo& input) {
+#if BUILDFLAG(IS_WIN)
     return input.shared_image_d3d;
+#else
+    return false;
+#endif
   }
 #endif
   static const gpu::VideoDecodeAcceleratorSupportedProfiles&

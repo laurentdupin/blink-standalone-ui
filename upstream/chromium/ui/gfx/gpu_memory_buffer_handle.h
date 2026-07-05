@@ -14,6 +14,7 @@
 #include "base/component_export.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/notreached.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_OZONE)
@@ -127,6 +128,39 @@ class COMPONENT_EXPORT(GFX) DXGIHandle {
   base::UnsafeSharedMemoryRegion region_;
 };
 #endif  // BUILDFLAG(IS_WIN)
+
+#if !BUILDFLAG(IS_WIN) && defined(HTML_CSS_RENDERER_STANDALONE)
+using DXGIHandleToken = base::UnguessableToken;
+
+class COMPONENT_EXPORT(GFX) DXGIHandle {
+ public:
+  DXGIHandle() = default;
+  ~DXGIHandle() = default;
+  DXGIHandle(DXGIHandle&&) = default;
+  DXGIHandle& operator=(DXGIHandle&&) = default;
+
+  DXGIHandle(const DXGIHandle&) = delete;
+  DXGIHandle& operator=(const DXGIHandle&) = delete;
+
+  bool IsValid() const { return false; }
+  DXGIHandle Clone() const { return DXGIHandle(); }
+  DXGIHandle CloneWithRegion(base::UnsafeSharedMemoryRegion region) const {
+    DXGIHandle handle;
+    handle.region_ = std::move(region);
+    return handle;
+  }
+
+  const DXGIHandleToken& token() const { return token_; }
+  const base::UnsafeSharedMemoryRegion& region() const { return region_; }
+  base::UnsafeSharedMemoryRegion TakeRegion() { return std::move(region_); }
+
+ private:
+  friend mojo::StructTraits<mojom::DXGIHandleDataView, DXGIHandle>;
+
+  DXGIHandleToken token_;
+  base::UnsafeSharedMemoryRegion region_;
+};
+#endif  // !BUILDFLAG(IS_WIN) && defined(HTML_CSS_RENDERER_STANDALONE)
 
 // TODO(crbug.com/40584691): Convert this to a proper class to ensure the state
 // is always consistent, particularly that the only one handle is set at the
@@ -247,9 +281,10 @@ struct COMPONENT_EXPORT(GFX) GpuMemoryBufferHandle {
   NativePixmapHandle native_pixmap_handle_;
 #endif  // BUILDFLAG(IS_OZONE)
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || \
+    (defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN))
   DXGIHandle dxgi_handle_;
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_WIN) || standalone generated snapshot compatibility
 
 #if BUILDFLAG(IS_APPLE)
   ScopedIOSurface io_surface_;

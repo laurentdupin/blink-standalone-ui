@@ -486,7 +486,6 @@ StandaloneResourceResult DecodeOrClassifyImageBytes(
       "valid WebP resource classified without platform WebP decoder");
 }
 
-bool IsSvgImageMime(std::string_view mime_type);
 bool IsDataUrl(const std::string& url);
 
 StandaloneResourceResult FinalizeProviderMemoryResult(
@@ -506,7 +505,7 @@ StandaloneResourceResult FinalizeProviderMemoryResult(
     return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
                        "resource provider returned image bytes without MIME");
   }
-  if (IsSvgImageMime(result.mime_type)) {
+  if (blink::IsSVGMimeType(result.mime_type)) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
     result.error = "SVG image rendering is unsupported in this standalone build";
     return result;
@@ -729,7 +728,7 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
     result.error = "local image file is empty";
     return result;
   }
-  if (IsSvgImageMime(result.mime_type)) {
+  if (blink::IsSVGMimeType(result.mime_type)) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
     result.error = "SVG image rendering is unsupported in this standalone build";
     return result;
