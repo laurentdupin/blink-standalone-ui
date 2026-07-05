@@ -5171,13 +5171,12 @@ class StandaloneRootVizDisplayController {
   void UpdateForFrame(const viz::CompositorFrame& frame,
                       viz::CompositorFrameSinkSupport* support,
                       const viz::LocalSurfaceId& local_surface_id,
-                      const gfx::Size& output_size,
-                      float device_scale_factor) {
+                      const gfx::Size& output_size) {
     if (!display_ || !*display_ || !support) {
       return;
     }
     const bool activated = ActivateRootSurfaceForFrameLikeChromium(
-        support, local_surface_id, device_scale_factor);
+        support, local_surface_id, frame.device_scale_factor());
     const gfx::Size display_size =
         DisplaySizeForRootFrame(frame, output_size, activated);
     ResizeForRootFrameLikeChromium(display_size, activated);
@@ -5380,7 +5379,6 @@ class StandaloneRootFrameSinkSupportController {
       StandaloneRootVizDisplayController* display_root,
       bool needs_display,
       const gfx::Size& output_size,
-      float device_scale_factor,
       uint64_t submit_time) {
     if (!support_) {
       return std::nullopt;
@@ -5392,7 +5390,7 @@ class StandaloneRootFrameSinkSupportController {
         return std::nullopt;
       }
       display_root->UpdateForFrame(frame, support_.get(), local_surface_id,
-                                   output_size, device_scale_factor);
+                                   output_size);
     }
     return support_->MaybeSubmitCompositorFrame(
         local_surface_id, std::move(frame), std::move(hit_test_region_list),
@@ -5952,8 +5950,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (client_) {
       hit_test_region_list = client_->BuildHitTestData();
     }
-    const float device_scale_factor = frame.device_scale_factor();
-    last_submitted_device_scale_factor_ = device_scale_factor;
+    const float frame_device_scale_factor = frame.device_scale_factor();
     gfx::Size output_size = frame.size_in_pixels();
     if (output_size.IsEmpty()) {
       output_size = viewport_;
@@ -5979,8 +5976,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     std::optional<viz::SubmitResult> submit_result =
         frame_sink_support_.SubmitRootCompositorFrame(
             local_surface_id_, std::move(frame), std::move(hit_test_region_list),
-            &display_root_, needs_display, output_size, device_scale_factor,
-            /*submit_time=*/0);
+            &display_root_, needs_display, output_size, /*submit_time=*/0);
     if (!submit_result) {
       return;
     }
@@ -5988,6 +5984,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (*submit_result == viz::SubmitResult::ACCEPTED) {
       last_submitted_size_in_pixels_ = output_size;
       last_submitted_local_surface_id_ = local_surface_id_;
+      last_submitted_device_scale_factor_ = frame_device_scale_factor;
       if (compositor_frame_submitted_) {
         *compositor_frame_submitted_ = true;
       }
