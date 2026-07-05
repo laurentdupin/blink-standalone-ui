@@ -5221,36 +5221,9 @@ class StandaloneRootVizDisplayController {
       return;
     }
     TraceLiveFrameProbeStage("direct frame sink before Display DrawAndSwap");
-    if ((*display_)->has_scheduler()) {
-      const uint64_t draw_count_before = display_client_->draw_and_swap_count();
-      (*display_)->ForceImmediateDrawAndSwapIfPossible();
-      if (display_client_->draw_and_swap_count() != draw_count_before) {
-        TraceLiveFrameProbeStage(
-            "direct frame sink after scheduled Display DrawAndSwap");
-        return;
-      }
-    }
-    const base::TimeTicks now = base::TimeTicks::Now();
-    const base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
-    viz::DrawAndSwapParams params;
-    params.begin_frame_args = viz::BeginFrameArgs::Create(
-        BEGINFRAME_FROM_HERE, viz::BeginFrameArgs::kManualSourceId,
-        ++display_begin_frame_sequence_, now, now + interval, interval,
-        viz::BeginFrameArgs::NORMAL);
-    params.expected_display_time = now + interval;
-    const bool drew = (*display_)->DrawAndSwap(params);
-    TraceLiveFrameProbeStage("direct frame sink after Display DrawAndSwap");
-    TraceLiveFrameProbeStage("direct frame sink before DrawAndSwap result");
-    if (!drew) {
-      SetFailure("Viz Display DrawAndSwap returned false");
-      return;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before gpu reached flag");
-    if ((!display_uses_software_output_ || !*display_uses_software_output_) &&
-        skia_gpu_reached_) {
-      *skia_gpu_reached_ = true;
-    }
-    TraceLiveFrameProbeStage("direct frame sink after gpu reached flag");
+    (*display_)->ForceImmediateDrawAndSwapIfPossible();
+    TraceLiveFrameProbeStage(
+        "direct frame sink after scheduled Display DrawAndSwap");
   }
 
  private:
@@ -5322,8 +5295,6 @@ class StandaloneRootVizDisplayController {
   raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
-  uint64_t display_begin_frame_sequence_ =
-      viz::BeginFrameArgs::kStartingFrameNumber;
 };
 
 class StandaloneRootFrameSinkSupportController {
