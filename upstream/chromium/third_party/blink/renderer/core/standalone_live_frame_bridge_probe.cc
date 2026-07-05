@@ -5507,6 +5507,7 @@ class StandaloneRootFrameSinkController {
 
   void BindToClient(cc::LayerTreeFrameSinkClient* client,
                     base::SingleThreadTaskRunner* compositor_task_runner) {
+    cc_client_ = client;
     support_.BindToClient(client, compositor_task_runner);
   }
 
@@ -5515,6 +5516,8 @@ class StandaloneRootFrameSinkController {
     // away before the BeginFrameSource owned by the support controller.
     display_root_.ResetDisplay();
     support_.DetachFromClient(client);
+    cc_client_ = nullptr;
+    last_hit_test_data_ = viz::HitTestRegionList();
   }
 
   viz::CompositorFrameSinkSupport* support() const {
@@ -5536,11 +5539,16 @@ class StandaloneRootFrameSinkController {
 
   std::optional<viz::SubmitResult> SubmitRootCompositorFrame(
       viz::CompositorFrame frame,
-      std::optional<viz::HitTestRegionList> hit_test_region_list,
+      bool hit_test_data_changed,
       bool needs_display,
       const gfx::Size& output_size,
       uint64_t submit_time) {
     const float frame_device_scale_factor = frame.device_scale_factor();
+    const bool local_surface_id_changed =
+        local_surface_id_ != last_submitted_local_surface_id_;
+    std::optional<viz::HitTestRegionList> hit_test_region_list =
+        BuildHitTestRegionList(hit_test_data_changed,
+                               local_surface_id_changed);
     std::optional<viz::SubmitResult> submit_result =
         support_.SubmitRootCompositorFrame(
             local_surface_id_, std::move(frame),
@@ -5624,12 +5632,41 @@ class StandaloneRootFrameSinkController {
   void DrawNow() { display_root_.DrawNow(); }
 
  private:
+  std::optional<viz::HitTestRegionList> BuildHitTestRegionList(
+      bool hit_test_data_changed,
+      bool local_surface_id_changed) {
+    if (!cc_client_) {
+      last_hit_test_data_ = viz::HitTestRegionList();
+      return std::nullopt;
+    }
+    std::optional<viz::HitTestRegionList> hit_test_region_list =
+        cc_client_->BuildHitTestData();
+    if (!hit_test_region_list) {
+      last_hit_test_data_ = viz::HitTestRegionList();
+      return std::nullopt;
+    }
+    // Match AsyncLayerTreeFrameSink: send hit-test data whenever cc says it
+    // changed or the root surface changes; otherwise suppress identical data.
+    if (!hit_test_data_changed && !local_surface_id_changed) {
+      if (viz::HitTestRegionList::IsEqual(*hit_test_region_list,
+                                          last_hit_test_data_)) {
+        DCHECK(!viz::HitTestRegionList::IsEqual(*hit_test_region_list,
+                                                viz::HitTestRegionList()));
+        return std::nullopt;
+      }
+    }
+    last_hit_test_data_ = *hit_test_region_list;
+    return hit_test_region_list;
+  }
+
   StandaloneRootFrameSinkSupportController support_;
   StandaloneRootVizDisplayController display_root_;
+  raw_ptr<cc::LayerTreeFrameSinkClient> cc_client_ = nullptr;
   viz::LocalSurfaceId local_surface_id_;
   float last_submitted_device_scale_factor_ = 1.0f;
   gfx::Size last_submitted_size_in_pixels_;
   viz::LocalSurfaceId last_submitted_local_surface_id_;
+  viz::HitTestRegionList last_hit_test_data_;
 };
 
 class StandaloneCopyOutputController {
@@ -6117,10 +6154,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       SetFailure("cc submitted a frame before setting a valid LocalSurfaceId");
       return;
     }
-    std::optional<viz::HitTestRegionList> hit_test_region_list;
-    if (client_) {
-      hit_test_region_list = client_->BuildHitTestData();
-    }
     gfx::Size output_size = frame.size_in_pixels();
     if (output_size.IsEmpty()) {
       output_size = viewport_;
@@ -6142,8 +6175,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         g_standalone_native_window_handle || should_copy_output;
     std::optional<viz::SubmitResult> submit_result =
         root_frame_sink_.SubmitRootCompositorFrame(
-            std::move(frame), std::move(hit_test_region_list), needs_display,
-            output_size, /*submit_time=*/0);
+            std::move(frame), hit_test_data_changed, needs_display, output_size,
+            /*submit_time=*/0);
     if (!submit_result) {
       return;
     }
