@@ -882,27 +882,35 @@ class DedicatedRendererSequence {
       command = it->second;
     }
 
-    base::AutoLock auto_lock(command->lock);
-    if (!command->done && !command->started) {
-      command->cancel_requested = true;
-      command->done = true;
-      command->result.command_id = command_id;
-      command->result.status = BLINK_STANDALONE_STATUS_OK;
-      command->result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
-      command->result.render_result.status = BLINK_STANDALONE_STATUS_OK;
-      command->result.render_result.state =
-          BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
-      command->cv.Broadcast();
-    } else if (!command->done) {
-      command->cancel_requested = true;
-      while (!command->done) {
-        command->cv.Wait();
+    uint64_t completed_sequence_order = 0;
+    {
+      base::AutoLock auto_lock(command->lock);
+      if (!command->done && !command->started) {
+        command->cancel_requested = true;
+        command->done = true;
+        command->result.command_id = command_id;
+        command->result.status = BLINK_STANDALONE_STATUS_OK;
+        command->result.state =
+            BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+        command->result.render_result.status = BLINK_STANDALONE_STATUS_OK;
+        command->result.render_result.state =
+            BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+        command->cv.Broadcast();
+        completed_sequence_order = command->sequence_order;
+      } else if (!command->done) {
+        command->cancel_requested = true;
+        while (!command->done) {
+          command->cv.Wait();
+        }
+      }
+      if (result) {
+        *result = command->result;
+        result->error_message =
+            command->error.empty() ? nullptr : command->error.c_str();
       }
     }
-    if (result) {
-      *result = command->result;
-      result->error_message =
-          command->error.empty() ? nullptr : command->error.c_str();
+    if (completed_sequence_order != 0) {
+      MarkSequenceCompleted(completed_sequence_order);
     }
     return true;
   }
@@ -919,10 +927,27 @@ class DedicatedRendererSequence {
 
   void RunPostedAsyncCommand(uint64_t sequence_order,
                              std::function<void()> task) {
+    if (!CanRunSequenceOrder(sequence_order)) {
+      const bool posted = task_runner_->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&DedicatedRendererSequence::RunPostedAsyncCommand,
+                         base::Unretained(this), sequence_order,
+                         std::move(task)),
+          base::Milliseconds(1));
+      if (!posted) {
+        MarkAsyncCommandComplete(sequence_order);
+      }
+      return;
+    }
     if (task) {
       task();
     }
     MarkAsyncCommandComplete(sequence_order);
+  }
+
+  bool CanRunSequenceOrder(uint64_t sequence_order) {
+    base::AutoLock auto_lock(lock_);
+    return sequence_order <= last_completed_sequence_order_ + 1;
   }
 
   void MarkAsyncCommandComplete(uint64_t sequence_order) {
@@ -943,6 +968,30 @@ class DedicatedRendererSequence {
   void RunPostedGpuFrameCommand(
       uint64_t command_id,
       const std::shared_ptr<DedicatedGpuFrameCommand>& command) {
+    if (!CanRunSequenceOrder(command->sequence_order)) {
+      const uint32_t poll_interval_ms =
+          command->request.poll_interval_ms ? command->request.poll_interval_ms
+                                            : 1;
+      const bool posted = task_runner_->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&DedicatedRendererSequence::RunPostedGpuFrameCommand,
+                         base::Unretained(this), command_id, command),
+          base::Milliseconds(poll_interval_ms));
+      if (!posted) {
+        blink_standalone_dedicated_thread_gpu_frame_result_t failed = {};
+        failed.command_id = command_id;
+        failed.status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+        failed.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+        failed.error_message =
+            "dedicated GPU frame failed: renderer thread ordering post failed";
+        FinishGpuFrameCommand(
+            command, failed,
+            command->started_at.is_null() ? base::TimeTicks::Now()
+                                          : command->started_at);
+        MarkSequenceCompleted(command->sequence_order);
+      }
+      return;
+    }
     bool should_run = false;
     {
       base::AutoLock auto_lock(command->lock);
