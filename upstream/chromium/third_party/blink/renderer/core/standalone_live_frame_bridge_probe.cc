@@ -6531,6 +6531,137 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     return result;
   }
 
+  struct PreparedExternalGpuTargetCopy {
+    html_css_renderer::ExternalGpuTargetCopyResult copy_result;
+    gfx::Size output_size;
+    scoped_refptr<gpu::ClientSharedImage> blit_target;
+    bool ready = false;
+  };
+
+  PreparedExternalGpuTargetCopy PrepareExternalVkImageCopyTarget(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image,
+      gfx::Size requested_output_size,
+      const char* label) {
+    PreparedExternalGpuTargetCopy prepared;
+    const std::string label_text = label ? label : "gpu_external_vkimage_copy";
+    auto display_ready =
+        PrepareDisplayForExternalTargetCopy(requested_output_size, label);
+    if (!display_ready.ready) {
+      prepared.copy_result = display_ready.copy_result;
+      prepared.output_size = display_ready.output_size;
+      return prepared;
+    }
+    prepared.output_size = display_ready.output_size;
+    if (!offscreen_skia_dependency_) {
+      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=offscreen Vulkan Skia dependency is "
+                       "not available",
+          prepared.output_size);
+      return prepared;
+    }
+    std::string prepare_result =
+        offscreen_skia_dependency_
+            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+                prepared.output_size, nullptr, vulkan_image,
+                &prepared.blit_target);
+    if (!prepare_result.empty()) {
+      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=" + prepare_result,
+          prepared.output_size);
+      return prepared;
+    }
+    if (!prepared.blit_target || prepared.blit_target->mailbox().IsZero()) {
+      DiscardPreparedExternalGpuTargetCopy(
+          AsyncExternalGpuTargetCopyBackend::kVulkan);
+      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=external Vulkan blit target "
+                       "SharedImage is unavailable",
+          prepared.output_size);
+      prepared.blit_target = nullptr;
+      return prepared;
+    }
+    prepared.ready = true;
+    return prepared;
+  }
+
+  gfx::Size ResolveExternalD3D12CopyOutputSize(ID3D12Resource* external_resource,
+                                               int width,
+                                               int height) const {
+    gfx::Size output_size(width, height);
+    if (output_size.IsEmpty() && external_resource) {
+      const D3D12_RESOURCE_DESC desc = external_resource->GetDesc();
+      output_size =
+          gfx::Size(static_cast<int>(desc.Width), static_cast<int>(desc.Height));
+    } else if (output_size.IsEmpty() && viz_display_output_size_ &&
+               !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    } else if (output_size.IsEmpty()) {
+      output_size = viewport_;
+    }
+    return output_size;
+  }
+
+  PreparedExternalGpuTargetCopy PrepareExternalD3D12CopyTarget(
+      ID3D12Resource* external_resource,
+      void* shared_handle,
+      gfx::Size requested_output_size,
+      const char* label,
+      bool map_shared_handle_open_failure_to_invalid_argument) {
+    PreparedExternalGpuTargetCopy prepared;
+    const std::string label_text = label ? label : "gpu_external_d3d12_copy";
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        requested_output_size, label, /*draw_after_display_create=*/true);
+    if (!display_ready.ready) {
+      prepared.copy_result = display_ready.copy_result;
+      prepared.output_size = display_ready.output_size;
+      return prepared;
+    }
+    prepared.output_size = display_ready.output_size;
+    if (!offscreen_skia_dependency_) {
+      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=offscreen D3D12 Skia dependency is "
+                       "not available",
+          prepared.output_size);
+      return prepared;
+    }
+    std::string prepare_result =
+        offscreen_skia_dependency_
+            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+                prepared.output_size, external_resource, shared_handle,
+                &prepared.blit_target);
+    if (!prepare_result.empty()) {
+      const bool shared_handle_open_failure =
+          prepare_result.find(
+              "borrowed external D3D12 shared handle open failed") !=
+          std::string::npos;
+      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          map_shared_handle_open_failure_to_invalid_argument &&
+                  shared_handle_open_failure
+              ? html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument
+              : html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=" + prepare_result,
+          prepared.output_size);
+      return prepared;
+    }
+    if (!prepared.blit_target || prepared.blit_target->mailbox().IsZero()) {
+      DiscardPreparedExternalGpuTargetCopy(
+          AsyncExternalGpuTargetCopyBackend::kD3D12);
+      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=external D3D12 target SharedImage is "
+                       "unavailable",
+          prepared.output_size);
+      prepared.blit_target = nullptr;
+      return prepared;
+    }
+    prepared.ready = true;
+    return prepared;
+  }
+
   html_css_renderer::ExternalGpuTargetCopyResult RenderExternalVkImageToTarget(
       const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
     if (!vulkan_image) {
@@ -6541,43 +6672,15 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
 
     gfx::Size output_size(vulkan_image->width, vulkan_image->height);
-    auto display_ready = PrepareDisplayForExternalTargetCopy(
-        output_size, "gpu_external_vkimage_render_copy");
-    if (!display_ready.ready) {
-      return display_ready.copy_result;
-    }
-    output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy: failed "
-          "failure=offscreen Vulkan Skia dependency is not available",
-          output_size);
-    }
-    scoped_refptr<gpu::ClientSharedImage> blit_target;
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
-                output_size, nullptr, vulkan_image, &blit_target);
-    if (!prepare_result.empty()) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy: failed failure=" + prepare_result,
-          output_size);
-    }
-    if (!blit_target || blit_target->mailbox().IsZero()) {
-      offscreen_skia_dependency_
-          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy: failed failure=external "
-          "Vulkan blit target SharedImage is unavailable",
-          output_size);
+    PreparedExternalGpuTargetCopy prepared = PrepareExternalVkImageCopyTarget(
+        vulkan_image, output_size, "gpu_external_vkimage_render_copy");
+    if (!prepared.ready) {
+      return prepared.copy_result;
     }
 
     return CopyPreparedExternalGpuTargetSynchronously(
-        AsyncExternalGpuTargetCopyBackend::kVulkan, output_size,
-        "gpu_external_vkimage_render_copy", std::move(blit_target));
+        AsyncExternalGpuTargetCopyBackend::kVulkan, prepared.output_size,
+        "gpu_external_vkimage_render_copy", std::move(prepared.blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6598,44 +6701,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
 
-    auto display_ready = PrepareDisplayForExternalTargetCopy(
-        output_size, "gpu_external_vkimage_render_copy_async");
-    if (!display_ready.ready) {
-      return display_ready.copy_result;
-    }
-    output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy_async: failed "
-          "failure=offscreen Vulkan Skia dependency is not available",
-          output_size);
-    }
-    scoped_refptr<gpu::ClientSharedImage> blit_target;
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
-                output_size, nullptr, vulkan_image, &blit_target);
-    if (!prepare_result.empty()) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy_async: failed failure=" +
-              prepare_result,
-          output_size);
-    }
-    if (!blit_target || blit_target->mailbox().IsZero()) {
-      offscreen_skia_dependency_
-          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy_async: failed failure=external "
-          "Vulkan blit target SharedImage is unavailable",
-          output_size);
+    PreparedExternalGpuTargetCopy prepared = PrepareExternalVkImageCopyTarget(
+        vulkan_image, output_size, "gpu_external_vkimage_render_copy_async");
+    if (!prepared.ready) {
+      return prepared.copy_result;
     }
 
     return BeginPreparedAsyncExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kVulkan, output_size,
-        "gpu_external_vkimage_render_copy_async", std::move(blit_target));
+        AsyncExternalGpuTargetCopyBackend::kVulkan, prepared.output_size,
+        "gpu_external_vkimage_render_copy_async",
+        std::move(prepared.blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6754,59 +6829,19 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "resource/shared handle is null");
     }
 
-    gfx::Size output_size(width, height);
-    if (output_size.IsEmpty() && external_resource) {
-      const D3D12_RESOURCE_DESC desc = external_resource->GetDesc();
-      output_size =
-          gfx::Size(static_cast<int>(desc.Width), static_cast<int>(desc.Height));
-    } else if (output_size.IsEmpty() && viz_display_output_size_ &&
-               !viz_display_output_size_->IsEmpty()) {
-      output_size = *viz_display_output_size_;
-    } else if (output_size.IsEmpty()) {
-      output_size = viewport_;
-    }
-    auto display_ready = PrepareDisplayForExternalTargetCopy(
-        output_size, "gpu_external_d3d12_render_copy",
-        /*draw_after_display_create=*/true);
-    if (!display_ready.ready) {
-      return display_ready.copy_result;
-    }
-    output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy: failed "
-          "failure=offscreen D3D12 Skia dependency is not available",
-          output_size);
-    }
-    scoped_refptr<gpu::ClientSharedImage> blit_target;
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
-                output_size, external_resource, shared_handle, &blit_target);
-    if (!prepare_result.empty()) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          prepare_result.find(
-              "borrowed external D3D12 shared handle open failed") !=
-                  std::string::npos
-              ? html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument
-              : html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy: failed failure=" + prepare_result,
-          output_size);
-    }
-    if (!blit_target || blit_target->mailbox().IsZero()) {
-      offscreen_skia_dependency_
-          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy: failed failure=external D3D12 "
-          "target SharedImage is unavailable",
-          output_size);
+    const gfx::Size output_size =
+        ResolveExternalD3D12CopyOutputSize(external_resource, width, height);
+    PreparedExternalGpuTargetCopy prepared = PrepareExternalD3D12CopyTarget(
+        external_resource, shared_handle, output_size,
+        "gpu_external_d3d12_render_copy",
+        /*map_shared_handle_open_failure_to_invalid_argument=*/true);
+    if (!prepared.ready) {
+      return prepared.copy_result;
     }
 
     return CopyPreparedExternalGpuTargetSynchronously(
-        AsyncExternalGpuTargetCopyBackend::kD3D12, output_size,
-        "gpu_external_d3d12_render_copy", std::move(blit_target));
+        AsyncExternalGpuTargetCopyBackend::kD3D12, prepared.output_size,
+        "gpu_external_d3d12_render_copy", std::move(prepared.blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6822,17 +6857,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "gpu_external_d3d12_render_copy_async: failed failure=external "
           "D3D12 resource/shared handle is null");
     }
-    gfx::Size output_size(width, height);
-    if (output_size.IsEmpty() && external_resource) {
-      const D3D12_RESOURCE_DESC desc = external_resource->GetDesc();
-      output_size =
-          gfx::Size(static_cast<int>(desc.Width), static_cast<int>(desc.Height));
-    } else if (output_size.IsEmpty() && viz_display_output_size_ &&
-               !viz_display_output_size_->IsEmpty()) {
-      output_size = *viz_display_output_size_;
-    } else if (output_size.IsEmpty()) {
-      output_size = viewport_;
-    }
+    const gfx::Size output_size =
+        ResolveExternalD3D12CopyOutputSize(external_resource, width, height);
     if (std::optional<html_css_renderer::ExternalGpuTargetCopyResult>
             begin_blocked = MaybeBlockAsyncExternalGpuTargetCopyBegin(
                 output_size, "gpu_external_d3d12_render_copy_async")) {
@@ -6840,45 +6866,18 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
 
-    auto display_ready = PrepareDisplayForExternalTargetCopy(
-        output_size, "gpu_external_d3d12_render_copy_async",
-        /*draw_after_display_create=*/true);
-    if (!display_ready.ready) {
-      return display_ready.copy_result;
-    }
-    output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy_async: failed "
-          "failure=offscreen D3D12 Skia dependency is not available",
-          output_size);
-    }
-    scoped_refptr<gpu::ClientSharedImage> blit_target;
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
-                output_size, external_resource, shared_handle, &blit_target);
-    if (!prepare_result.empty()) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy_async: failed failure=" +
-              prepare_result,
-          output_size);
-    }
-    if (!blit_target || blit_target->mailbox().IsZero()) {
-      offscreen_skia_dependency_
-          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy_async: failed failure=external "
-          "D3D12 target SharedImage is unavailable",
-          output_size);
+    PreparedExternalGpuTargetCopy prepared = PrepareExternalD3D12CopyTarget(
+        external_resource, shared_handle, output_size,
+        "gpu_external_d3d12_render_copy_async",
+        /*map_shared_handle_open_failure_to_invalid_argument=*/false);
+    if (!prepared.ready) {
+      return prepared.copy_result;
     }
 
     return BeginPreparedAsyncExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kD3D12, output_size,
-        "gpu_external_d3d12_render_copy_async", std::move(blit_target));
+        AsyncExternalGpuTargetCopyBackend::kD3D12, prepared.output_size,
+        "gpu_external_d3d12_render_copy_async",
+        std::move(prepared.blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
