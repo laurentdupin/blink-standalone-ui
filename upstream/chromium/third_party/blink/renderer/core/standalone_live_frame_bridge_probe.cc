@@ -6575,40 +6575,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           output_size);
     }
 
-    RequestCopyOutput(output_size,
-                      /*wants_png=*/false,
-                      /*wants_raw=*/false,
-                      /*wants_gpu=*/true, std::move(blit_target));
-    DrawVizDisplayNow();
-    copy_output_.WaitForCompletion(base::Seconds(5));
-    if (copy_output_.IsPending()) {
-      DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kVulkan);
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-          "gpu_external_vkimage_render_copy: pending reason=Viz "
-          "BlitRequest CopyOutput did not complete",
-          output_size);
-    }
-    if (copy_output_.Failed()) {
-      std::string failure =
-          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
-      DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kVulkan);
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy: failed failure=" + failure,
-          output_size);
-    }
-    ReleaseCompletedExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kVulkan);
-    std::ostringstream out;
-    out << "gpu_external_vkimage_render_copy: ok"
-        << " path=viz_blit_request"
-        << " target=" << output_size.width() << "x" << output_size.height();
-    return MakeAsyncExternalGpuTargetCopyResult(
-        html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted, out.str(),
-        output_size);
+    return CopyPreparedExternalGpuTargetSynchronously(
+        AsyncExternalGpuTargetCopyBackend::kVulkan, output_size,
+        "gpu_external_vkimage_render_copy", std::move(blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6664,17 +6633,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           output_size);
     }
 
-    BeginAsyncExternalGpuTargetCopyState(
+    return BeginPreparedAsyncExternalGpuTargetCopy(
         AsyncExternalGpuTargetCopyBackend::kVulkan, output_size,
-        "gpu_external_vkimage_render_copy_async");
-    RequestCopyOutput(output_size,
-                      /*wants_png=*/false,
-                      /*wants_raw=*/false,
-                      /*wants_gpu=*/true, std::move(blit_target),
-                      async_external_gpu_target_copy_.generation);
-    DrawVizDisplayNow();
-    FinalizeAsyncExternalGpuTargetCopyIfReady();
-    return CurrentAsyncExternalGpuTargetCopyResult();
+        "gpu_external_vkimage_render_copy_async", std::move(blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6843,40 +6804,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           output_size);
     }
 
-    RequestCopyOutput(output_size,
-                      /*wants_png=*/false,
-                      /*wants_raw=*/false,
-                      /*wants_gpu=*/true, std::move(blit_target));
-    DrawVizDisplayNow();
-    copy_output_.WaitForCompletion(base::Seconds(5));
-    if (copy_output_.IsPending()) {
-      DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kD3D12);
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-          "gpu_external_d3d12_render_copy: pending reason=Viz BlitRequest "
-          "CopyOutput did not complete",
-          output_size);
-    }
-    if (copy_output_.Failed()) {
-      std::string failure =
-          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
-      DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kD3D12);
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy: failed failure=" + failure,
-          output_size);
-    }
-    ReleaseCompletedExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kD3D12);
-    std::ostringstream out;
-    out << "gpu_external_d3d12_render_copy: ok"
-        << " path=viz_blit_request"
-        << " target=" << output_size.width() << "x" << output_size.height();
-    return MakeAsyncExternalGpuTargetCopyResult(
-        html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted, out.str(),
-        output_size);
+    return CopyPreparedExternalGpuTargetSynchronously(
+        AsyncExternalGpuTargetCopyBackend::kD3D12, output_size,
+        "gpu_external_d3d12_render_copy", std::move(blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6946,17 +6876,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           output_size);
     }
 
-    BeginAsyncExternalGpuTargetCopyState(
+    return BeginPreparedAsyncExternalGpuTargetCopy(
         AsyncExternalGpuTargetCopyBackend::kD3D12, output_size,
-        "gpu_external_d3d12_render_copy_async");
-    RequestCopyOutput(output_size,
-                      /*wants_png=*/false,
-                      /*wants_raw=*/false,
-                      /*wants_gpu=*/true, std::move(blit_target),
-                      async_external_gpu_target_copy_.generation);
-    DrawVizDisplayNow();
-    FinalizeAsyncExternalGpuTargetCopyIfReady();
-    return CurrentAsyncExternalGpuTargetCopyResult();
+        "gpu_external_d3d12_render_copy_async", std::move(blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -7281,6 +7203,61 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         AsyncExternalGpuTargetCopyBackend::kVulkan);
     DiscardPreparedExternalGpuTargetCopy(
         AsyncExternalGpuTargetCopyBackend::kD3D12);
+  }
+
+  html_css_renderer::ExternalGpuTargetCopyResult
+  CopyPreparedExternalGpuTargetSynchronously(
+      AsyncExternalGpuTargetCopyBackend backend,
+      const gfx::Size& output_size,
+      const char* label,
+      scoped_refptr<gpu::ClientSharedImage> blit_target) {
+    const std::string label_text = label ? label : "external_gpu_target_copy";
+    RequestCopyOutput(output_size,
+                      /*wants_png=*/false,
+                      /*wants_raw=*/false,
+                      /*wants_gpu=*/true, std::move(blit_target));
+    DrawVizDisplayNow();
+    copy_output_.WaitForCompletion(base::Seconds(5));
+    if (copy_output_.IsPending()) {
+      DiscardPreparedExternalGpuTargetCopy(backend);
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+          label_text +
+              ": pending reason=Viz BlitRequest CopyOutput did not complete",
+          output_size);
+    }
+    if (copy_output_.Failed()) {
+      std::string failure =
+          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
+      DiscardPreparedExternalGpuTargetCopy(backend);
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          label_text + ": failed failure=" + failure, output_size);
+    }
+    ReleaseCompletedExternalGpuTargetCopy(backend);
+    std::ostringstream out;
+    out << label_text << ": ok path=viz_blit_request"
+        << " target=" << output_size.width() << "x" << output_size.height();
+    return MakeAsyncExternalGpuTargetCopyResult(
+        html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted, out.str(),
+        output_size);
+  }
+
+  html_css_renderer::ExternalGpuTargetCopyResult
+  BeginPreparedAsyncExternalGpuTargetCopy(
+      AsyncExternalGpuTargetCopyBackend backend,
+      const gfx::Size& output_size,
+      const char* label,
+      scoped_refptr<gpu::ClientSharedImage> blit_target) {
+    BeginAsyncExternalGpuTargetCopyState(backend, output_size, label);
+    RequestCopyOutput(output_size,
+                      /*wants_png=*/false,
+                      /*wants_raw=*/false,
+                      /*wants_gpu=*/true, std::move(blit_target),
+                      async_external_gpu_target_copy_.generation);
+    DrawVizDisplayNow();
+    FinalizeAsyncExternalGpuTargetCopyIfReady();
+    return CurrentAsyncExternalGpuTargetCopyResult();
   }
 
   void BeginAsyncExternalGpuTargetCopyState(
