@@ -5321,11 +5321,26 @@ class StandaloneRootFrameSinkSupportController {
 
   viz::CompositorFrameSinkSupport* support() const { return support_.get(); }
 
-  viz::SubmitResult SubmitCompositorFrame(
+  std::optional<viz::SubmitResult> SubmitRootCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
       std::optional<viz::HitTestRegionList> hit_test_region_list,
+      StandaloneRootVizDisplayController* display_root,
+      bool needs_display,
+      const gfx::Size& output_size,
+      float device_scale_factor,
       uint64_t submit_time) {
+    if (!support_) {
+      return std::nullopt;
+    }
+    if (needs_display) {
+      if (!display_root ||
+          !display_root->EnsureDisplay(output_size, support_.get())) {
+        return std::nullopt;
+      }
+      display_root->UpdateForFrame(frame, support_.get(), local_surface_id,
+                                   output_size, device_scale_factor);
+    }
     return support_->MaybeSubmitCompositorFrame(
         local_surface_id, std::move(frame), std::move(hit_test_region_list),
         submit_time);
@@ -5553,15 +5568,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         copy_output_requested_ && *copy_output_requested_;
     const bool needs_display =
         g_standalone_native_window_handle || should_copy_output;
-    if (needs_display && EnsureVizDisplay(output_size)) {
-      UpdateVizDisplayForFrame(frame, output_size, device_scale_factor);
-    }
-    const viz::SubmitResult result =
-        frame_sink_support_.SubmitCompositorFrame(
+    std::optional<viz::SubmitResult> submit_result =
+        frame_sink_support_.SubmitRootCompositorFrame(
             local_surface_id_, std::move(frame), std::move(hit_test_region_list),
+            &display_root_, needs_display, output_size, device_scale_factor,
             /*submit_time=*/0);
+    if (!submit_result) {
+      return;
+    }
     TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
-    if (result == viz::SubmitResult::ACCEPTED) {
+    if (*submit_result == viz::SubmitResult::ACCEPTED) {
       last_submitted_size_in_pixels_ = output_size;
       last_submitted_local_surface_id_ = local_surface_id_;
       if (compositor_frame_submitted_) {
@@ -5604,15 +5620,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       }
       return;
     }
-    SetFailure(viz::CompositorFrameSinkSupport::GetSubmitResultAsString(result));
-  }
-
-  void UpdateVizDisplayForFrame(const viz::CompositorFrame& frame,
-                                const gfx::Size& output_size,
-                                float device_scale_factor) {
-    display_root_.UpdateForFrame(frame, frame_sink_support_.support(),
-                                 local_surface_id_, output_size,
-                                 device_scale_factor);
+    SetFailure(
+        viz::CompositorFrameSinkSupport::GetSubmitResultAsString(*submit_result));
   }
 
   void ReclaimDroppedCompositorFrameResources(
