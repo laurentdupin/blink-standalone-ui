@@ -5051,7 +5051,8 @@ class StandaloneRootVizDisplayController {
       const StandaloneRootVizDisplayController&) = delete;
 
   bool EnsureDisplay(const gfx::Size& output_size,
-                     viz::CompositorFrameSinkSupport* support) {
+                     viz::CompositorFrameSinkSupport* support,
+                     viz::BeginFrameSource* begin_frame_source) {
     if (display_ && *display_) {
       return true;
     }
@@ -5084,6 +5085,10 @@ class StandaloneRootVizDisplayController {
                      ? "Offscreen Viz Display GPU thread holder failed to "
                        "initialize"
                      : "Viz Display GPU thread holder failed to initialize");
+      return false;
+    }
+    if (!begin_frame_source) {
+      SetFailure("Viz Display cannot initialize without root BeginFrameSource");
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
@@ -5126,12 +5131,8 @@ class StandaloneRootVizDisplayController {
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink before Display create");
-    display_begin_frame_source_ =
-        std::make_unique<viz::BackToBackBeginFrameSource>(
-            std::make_unique<viz::DelayBasedTimeSource>(
-                base::SingleThreadTaskRunner::GetCurrentDefault().get()));
     auto display_scheduler = std::make_unique<viz::DisplayScheduler>(
-        display_begin_frame_source_.get(),
+        begin_frame_source,
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         output_surface->capabilities().pending_swap_params);
     *display_ = std::make_unique<viz::Display>(
@@ -5198,7 +5199,7 @@ class StandaloneRootVizDisplayController {
            *viz_display_output_size_ != output_size;
   }
 
-  void ResetOffscreenForExternalTargetResize() {
+  void ResetDisplay() {
     if (!display_ || !*display_) {
       return;
     }
@@ -5206,10 +5207,13 @@ class StandaloneRootVizDisplayController {
     if (offscreen_dependency_) {
       *offscreen_dependency_ = nullptr;
     }
-    display_begin_frame_source_.reset();
     if (viz_display_output_size_) {
       *viz_display_output_size_ = gfx::Size();
     }
+  }
+
+  void ResetOffscreenForExternalTargetResize() {
+    ResetDisplay();
   }
 
   void DrawNow() {
@@ -5318,7 +5322,6 @@ class StandaloneRootVizDisplayController {
   raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
-  std::unique_ptr<viz::BackToBackBeginFrameSource> display_begin_frame_source_;
   uint64_t display_begin_frame_sequence_ =
       viz::BeginFrameArgs::kStartingFrameNumber;
 };
@@ -5377,6 +5380,10 @@ class StandaloneRootFrameSinkSupportController {
 
   viz::CompositorFrameSinkSupport* support() const { return support_.get(); }
 
+  viz::BeginFrameSource* begin_frame_source() const {
+    return begin_frame_source_.get();
+  }
+
   std::optional<viz::SubmitResult> SubmitRootCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
@@ -5391,7 +5398,8 @@ class StandaloneRootFrameSinkSupportController {
     }
     if (needs_display) {
       if (!display_root ||
-          !display_root->EnsureDisplay(output_size, support_.get())) {
+          !display_root->EnsureDisplay(output_size, support_.get(),
+                                       begin_frame_source_.get())) {
         return std::nullopt;
       }
       display_root->UpdateForFrame(frame, support_.get(), local_surface_id,
@@ -5911,6 +5919,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   void DetachFromClient() override {
+    display_root_.ResetDisplay();
     frame_sink_support_.DetachFromClient(client_);
     cc::LayerTreeFrameSink::DetachFromClient();
   }
@@ -7093,7 +7102,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   bool EnsureVizDisplay(const gfx::Size& output_size) {
     return display_root_.EnsureDisplay(output_size,
-                                       frame_sink_support_.support());
+                                       frame_sink_support_.support(),
+                                       frame_sink_support_.begin_frame_source());
   }
 
   void ResetOffscreenVizDisplayForExternalTargetResize(
