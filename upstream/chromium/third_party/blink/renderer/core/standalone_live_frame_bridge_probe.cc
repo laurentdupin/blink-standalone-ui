@@ -83,6 +83,7 @@ struct ID3D12Resource {
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/common/viz_utils.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
@@ -5048,9 +5049,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     const float device_scale_factor = frame.device_scale_factor();
     last_submitted_device_scale_factor_ = device_scale_factor;
-    gfx::Size output_size = viewport_;
-    if (!frame.render_pass_list.empty()) {
-      output_size = frame.render_pass_list.back()->output_rect.size();
+    gfx::Size output_size = frame.size_in_pixels();
+    if (output_size.IsEmpty()) {
+      output_size = viewport_;
     }
     if (submitted_output_size_) {
       *submitted_output_size_ = output_size;
@@ -6400,9 +6401,11 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
                        weak_factory_.GetWeakPtr(), wants_png, wants_raw,
                        wants_gpu, async_generation));
-    request->set_area(gfx::Rect(output_size));
+    viz::SetCopyOutputRequestResultSize(request.get(), gfx::Rect(output_size),
+                                        output_size, output_size);
+    request->set_result_task_runner(
+        base::SequencedTaskRunner::GetCurrentDefault());
     if (blit_target) {
-      request->set_result_selection(gfx::Rect(output_size));
       const gpu::SyncToken sync_token = blit_target->creation_sync_token();
       request->set_blit_request(viz::BlitRequest(
           gfx::Point(), viz::LetterboxingBehavior::kDoNotLetterbox,
