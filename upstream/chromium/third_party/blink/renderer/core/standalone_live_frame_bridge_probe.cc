@@ -483,11 +483,15 @@ void TraceLiveFrameProbeStagef(const char* format,
                                wtf_size_t second);
 std::string JsonStringForStandaloneRenderer(const std::string& value);
 
+float StandaloneClampedDeviceScaleFactor(float device_scale_factor) {
+  return device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+}
+
 gfx::Size StandalonePhysicalViewportForDeviceScale(
     const gfx::Size& logical_viewport,
     float device_scale_factor) {
-  const float clamped_scale =
-      device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+  const float clamped_scale = StandaloneClampedDeviceScaleFactor(
+      device_scale_factor);
   return gfx::Size(
       std::max(1, static_cast<int>(
                       std::ceil(logical_viewport.width() * clamped_scale))),
@@ -7555,27 +7559,11 @@ class StandaloneCcLayerHost final
       root_layer_attached_ = false;
       return false;
     }
-    const gfx::Size physical_viewport =
-        StandalonePhysicalViewportForDeviceScale(viewport, device_scale_factor);
-    const bool viewport_changed = logical_viewport_ != viewport ||
-                                  physical_viewport_ != physical_viewport ||
-                                  device_scale_factor_ != device_scale_factor;
     const bool root_layer_changed = root_layer_ptr != attached_root_layer_;
-    if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
-      surface_id_allocator_.GenerateId();
-    }
-    logical_viewport_ = viewport;
-    physical_viewport_ = physical_viewport;
-    device_scale_factor_ = device_scale_factor;
-    TraceLiveFrameProbeStage("cc host AttachRootLayer before viewport surface");
-    layer_tree_host_->SetViewportRectAndScale(
-        gfx::Rect(physical_viewport_), device_scale_factor_,
-        surface_id_allocator_.GetCurrentLocalSurfaceId());
-    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
-        gfx::Rect(physical_viewport_));
-    layer_tree_host_->SetVisualDeviceViewportSize(physical_viewport_);
-    TraceLiveFrameProbeStage("cc host AttachRootLayer after viewport surface");
-    root_layer->SetBounds(viewport);
+    const bool viewport_changed = ApplyViewportSurfaceStateLikeChromium(
+        viewport, device_scale_factor, root_layer.get(),
+        "cc host AttachRootLayer before viewport surface",
+        "cc host AttachRootLayer after viewport surface");
     layer_tree_host_->SetRootLayer(std::move(root_layer));
     root_layer_attached_ = layer_tree_host_->has_root_layer();
     if (root_layer_attached_) {
@@ -8161,18 +8149,15 @@ class StandaloneCcLayerHost final
     commit_requested_ = true;
   }
 
-  void UpdateViewportForScheduler(const gfx::Size& viewport,
-                                  float device_scale_factor) {
-    if (!layer_tree_host_) {
-      logical_viewport_ = viewport;
-      device_scale_factor_ =
-          device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
-      physical_viewport_ = StandalonePhysicalViewportForDeviceScale(
-          logical_viewport_, device_scale_factor_);
-      return;
-    }
+  bool ApplyViewportSurfaceStateLikeChromium(
+      const gfx::Size& viewport,
+      float device_scale_factor,
+      cc::Layer* layer_to_resize,
+      const char* before_trace,
+      const char* after_trace) {
+    DCHECK(layer_tree_host_);
     const float clamped_device_scale_factor =
-        device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+        StandaloneClampedDeviceScaleFactor(device_scale_factor);
     const gfx::Size physical_viewport =
         StandalonePhysicalViewportForDeviceScale(
             viewport, clamped_device_scale_factor);
@@ -8181,21 +8166,41 @@ class StandaloneCcLayerHost final
                                   device_scale_factor_ !=
                                       clamped_device_scale_factor;
     if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
+      // Match Chromium's root surface contract: every root size/scale change
+      // gets a fresh parent LocalSurfaceId before cc sees the viewport update.
       surface_id_allocator_.GenerateId();
     }
     logical_viewport_ = viewport;
     physical_viewport_ = physical_viewport;
     device_scale_factor_ = clamped_device_scale_factor;
-    TraceLiveFrameProbeStage("cc host scheduler before viewport surface");
+    TraceLiveFrameProbeStage(before_trace);
     layer_tree_host_->SetViewportRectAndScale(
         gfx::Rect(physical_viewport_), device_scale_factor_,
         surface_id_allocator_.GetCurrentLocalSurfaceId());
     layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
         gfx::Rect(physical_viewport_));
     layer_tree_host_->SetVisualDeviceViewportSize(physical_viewport_);
-    if (attached_root_layer_) {
-      attached_root_layer_->SetBounds(logical_viewport_);
+    if (layer_to_resize) {
+      layer_to_resize->SetBounds(logical_viewport_);
     }
+    TraceLiveFrameProbeStage(after_trace);
+    return viewport_changed;
+  }
+
+  void UpdateViewportForScheduler(const gfx::Size& viewport,
+                                  float device_scale_factor) {
+    if (!layer_tree_host_) {
+      logical_viewport_ = viewport;
+      device_scale_factor_ =
+          StandaloneClampedDeviceScaleFactor(device_scale_factor);
+      physical_viewport_ = StandalonePhysicalViewportForDeviceScale(
+          logical_viewport_, device_scale_factor_);
+      return;
+    }
+    const bool viewport_changed = ApplyViewportSurfaceStateLikeChromium(
+        viewport, device_scale_factor, attached_root_layer_,
+        "cc host scheduler before viewport surface",
+        "cc host scheduler after viewport surface");
     if (viewport_changed) {
       next_composite_requires_forced_redraw_ = true;
       layer_tree_host_->SetNeedsUpdateLayers();
@@ -8205,7 +8210,6 @@ class StandaloneCcLayerHost final
       }
       commit_requested_ = true;
     }
-    TraceLiveFrameProbeStage("cc host scheduler after viewport surface");
   }
 
   bool CreateFrameSink() {
