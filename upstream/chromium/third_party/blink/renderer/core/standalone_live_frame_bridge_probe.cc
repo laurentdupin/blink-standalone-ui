@@ -88,6 +88,7 @@ struct ID3D12Resource {
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
+#include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/display_scheduler_base.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
@@ -1153,6 +1154,7 @@ class StandaloneDisplayClient final : public viz::DisplayClient {
     if (skia_gpu_reached_) {
       *skia_gpu_reached_ = true;
     }
+    ++draw_and_swap_count_;
   }
 
   void DisplayDidReceiveCALayerParams(gfx::CALayerParams ca_layer_params)
@@ -1165,9 +1167,12 @@ class StandaloneDisplayClient final : public viz::DisplayClient {
 
   void SetWideColorEnabled(bool enabled) override {}
 
+  uint64_t draw_and_swap_count() const { return draw_and_swap_count_; }
+
  private:
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
+  uint64_t draw_and_swap_count_ = 0;
 };
 
 const char* StandaloneCopyOutputErrorName(viz::CopyOutputResult::Error error) {
@@ -5121,12 +5126,21 @@ class StandaloneRootVizDisplayController {
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink before Display create");
+    display_begin_frame_source_ =
+        std::make_unique<viz::BackToBackBeginFrameSource>(
+            std::make_unique<viz::DelayBasedTimeSource>(
+                base::SingleThreadTaskRunner::GetCurrentDefault().get()));
+    auto display_scheduler = std::make_unique<viz::DisplayScheduler>(
+        display_begin_frame_source_.get(),
+        base::SingleThreadTaskRunner::GetCurrentDefault().get(),
+        output_surface->capabilities().pending_swap_params);
     *display_ = std::make_unique<viz::Display>(
         output_surface_provider.GetSharedImageManager(),
         output_surface_provider.GetGpuScheduler(), *renderer_settings_,
         debug_settings_, frame_sink_id_, std::move(display_controller),
         std::move(output_surface), std::move(overlay_processor),
-        /*scheduler=*/nullptr, base::SingleThreadTaskRunner::GetCurrentDefault());
+        std::move(display_scheduler),
+        base::SingleThreadTaskRunner::GetCurrentDefault());
     (*display_)->Initialize(display_client_,
                             frame_sink_manager_->surface_manager());
     if (support) {
@@ -5205,6 +5219,7 @@ class StandaloneRootVizDisplayController {
     if (offscreen_dependency_) {
       *offscreen_dependency_ = nullptr;
     }
+    display_begin_frame_source_.reset();
     if (viz_display_output_size_) {
       *viz_display_output_size_ = gfx::Size();
     }
@@ -5215,6 +5230,15 @@ class StandaloneRootVizDisplayController {
       return;
     }
     TraceLiveFrameProbeStage("direct frame sink before Display DrawAndSwap");
+    if ((*display_)->has_scheduler()) {
+      const uint64_t draw_count_before = display_client_->draw_and_swap_count();
+      (*display_)->ForceImmediateDrawAndSwapIfPossible();
+      if (display_client_->draw_and_swap_count() != draw_count_before) {
+        TraceLiveFrameProbeStage(
+            "direct frame sink after scheduled Display DrawAndSwap");
+        return;
+      }
+    }
     const base::TimeTicks now = base::TimeTicks::Now();
     const base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
     viz::DrawAndSwapParams params;
@@ -5263,6 +5287,7 @@ class StandaloneRootVizDisplayController {
   raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
+  std::unique_ptr<viz::BackToBackBeginFrameSource> display_begin_frame_source_;
   uint64_t display_begin_frame_sequence_ =
       viz::BeginFrameArgs::kStartingFrameNumber;
 };
