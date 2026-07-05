@@ -5316,8 +5316,9 @@ class StandaloneRootFrameSinkSupportController {
 
   void BindToClient(cc::LayerTreeFrameSinkClient* client,
                     base::SingleThreadTaskRunner* compositor_task_runner) {
-    begin_frame_source_ = std::make_unique<viz::BackToBackBeginFrameSource>(
-        std::make_unique<viz::DelayBasedTimeSource>(compositor_task_runner));
+    begin_frame_source_ = std::make_unique<viz::DelayBasedBeginFrameSource>(
+        std::make_unique<viz::DelayBasedTimeSource>(compositor_task_runner),
+        viz::BeginFrameSource::kNotRestartableId);
     client->SetBeginFrameSource(begin_frame_source_.get());
     if (begin_frame_source_set_) {
       *begin_frame_source_set_ = true;
@@ -5435,7 +5436,7 @@ class StandaloneRootFrameSinkSupportController {
   viz::FrameSinkId frame_sink_id_;
   raw_ptr<StandaloneVizFrameSinkClient> viz_client_ = nullptr;
   raw_ptr<bool> begin_frame_source_set_ = nullptr;
-  std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
+  std::unique_ptr<viz::SyntheticBeginFrameSource> begin_frame_source_;
   bool begin_frame_source_registered_ = false;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
 };
