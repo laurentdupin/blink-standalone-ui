@@ -96,7 +96,6 @@ struct ID3D12Resource {
 #include "components/viz/service/display_embedder/output_surface_provider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
-#include "components/viz/service/surfaces/pending_copy_output_request.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
@@ -6568,9 +6567,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           std::move(blit_target), sync_token,
           /*populates_mappable_shared_image=*/false));
     }
-    support_->RequestCopyOfOutput(
-        std::make_unique<viz::PendingCopyOutputRequest>(
-            local_surface_id_, viz::SubtreeCaptureId(), std::move(request)));
+    frame_sink_manager_->RequestCopyOfOutput(
+        viz::SurfaceId(frame_sink_id_, local_surface_id_), std::move(request),
+        /*capture_exact_surface_id=*/false, base::TimeDelta());
     if (async_generation != 0 &&
         async_generation == async_external_gpu_target_copy_generation_) {
       async_external_gpu_target_copy_request_enqueued_ = true;
