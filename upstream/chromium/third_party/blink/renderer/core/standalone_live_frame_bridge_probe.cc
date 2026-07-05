@@ -5402,6 +5402,349 @@ class StandaloneRootFrameSinkSupportController {
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
 };
 
+class StandaloneCopyOutputController {
+ public:
+  StandaloneCopyOutputController(bool* copy_output_completed,
+                                 bool* copy_output_succeeded,
+                                 std::vector<uint8_t>* copy_output_png,
+                                 LiveRawFrameOutput* copy_output_raw_frame,
+                                 LiveGpuFrameOutput* copy_output_gpu_frame,
+                                 std::string* copy_output_failure)
+      : copy_output_completed_(copy_output_completed),
+        copy_output_succeeded_(copy_output_succeeded),
+        copy_output_png_(copy_output_png),
+        copy_output_raw_frame_(copy_output_raw_frame),
+        copy_output_gpu_frame_(copy_output_gpu_frame),
+        copy_output_failure_(copy_output_failure) {}
+
+  StandaloneCopyOutputController(const StandaloneCopyOutputController&) =
+      delete;
+  StandaloneCopyOutputController& operator=(
+      const StandaloneCopyOutputController&) = delete;
+
+  ~StandaloneCopyOutputController() {
+    ReleaseHeldSharedImage(gpu::SyncToken());
+  }
+
+  bool Request(StandaloneRootFrameSinkSupportController* frame_sink_support,
+               const viz::LocalSurfaceId& local_surface_id,
+               const gfx::Size& output_size,
+               bool wants_png,
+               bool wants_raw,
+               bool wants_gpu,
+               scoped_refptr<gpu::ClientSharedImage> blit_target,
+               base::OnceCallback<void(std::unique_ptr<viz::CopyOutputResult>)>
+                   callback) {
+    if (wants_gpu) {
+      ReleaseHeldSharedImage(gpu::SyncToken());
+    }
+    if (!frame_sink_support || !frame_sink_support->support()) {
+      SetFailure("Viz CopyOutput cannot run without frame sink support");
+      return false;
+    }
+    if (!local_surface_id.is_valid()) {
+      SetFailure("Viz CopyOutput cannot run without LocalSurfaceId");
+      return false;
+    }
+    ResetForPendingRequest();
+
+    auto request = std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA,
+        wants_gpu ? viz::CopyOutputRequest::ResultDestination::kSharedImage
+                  : viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+        std::move(callback));
+    viz::SetCopyOutputRequestResultSize(request.get(), gfx::Rect(output_size),
+                                        output_size, output_size);
+    request->set_result_task_runner(
+        base::SequencedTaskRunner::GetCurrentDefault());
+    if (blit_target) {
+      const gpu::SyncToken sync_token = blit_target->creation_sync_token();
+      request->set_blit_request(viz::BlitRequest(
+          gfx::Point(), viz::LetterboxingBehavior::kDoNotLetterbox,
+          std::move(blit_target), sync_token,
+          /*populates_mappable_shared_image=*/false));
+    }
+    frame_sink_support->RequestCopyOfOutput(local_surface_id,
+                                            std::move(request));
+    return true;
+  }
+
+  void Complete(bool wants_png,
+                bool wants_raw,
+                bool wants_gpu,
+                bool vulkan_context_provider_available,
+                bool vulkan_shared_context_state_is_vulkan,
+                std::unique_ptr<viz::CopyOutputResult> output) {
+    if (!output) {
+      SetFailure("Viz CopyOutput returned no result");
+      return;
+    }
+    if (output->IsEmpty()) {
+      SetFailure(std::string("Viz CopyOutput returned empty result: ") +
+                 StandaloneCopyOutputErrorName(output->error()));
+      return;
+    }
+    if (wants_gpu) {
+      CompleteGpuOutput(vulkan_context_provider_available,
+                        vulkan_shared_context_state_is_vulkan,
+                        std::move(output));
+      return;
+    }
+    CompleteBitmapOutput(wants_png, wants_raw, std::move(output));
+  }
+
+  void MarkExternalGpuTargetInvalidated() {
+    if (copy_output_completed_) {
+      *copy_output_completed_ = true;
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = false;
+    }
+    if (copy_output_failure_) {
+      copy_output_failure_->clear();
+    }
+    if (copy_output_gpu_frame_) {
+      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
+    }
+  }
+
+  bool HoldSharedImageForRelease(viz::CopyOutputResult* output) {
+    if (!output || output->IsEmpty() ||
+        output->destination() !=
+            viz::CopyOutputResult::Destination::kSharedImage) {
+      return false;
+    }
+    scoped_refptr<gpu::ClientSharedImage> shared_image =
+        output->GetSharedImage();
+    if (!shared_image || shared_image->mailbox().IsZero()) {
+      return false;
+    }
+    held_shared_image_ = std::move(shared_image);
+    held_release_callback_ = output->TakeSharedImageOwnership();
+    return true;
+  }
+
+  void ReleaseHeldSharedImage(const gpu::SyncToken& sync_token) {
+    held_shared_image_.reset();
+    if (held_release_callback_) {
+      std::move(held_release_callback_)
+          .Run(sync_token, /*lost_resource=*/false);
+    }
+  }
+
+  bool IsPending() const {
+    return copy_output_completed_ && !*copy_output_completed_;
+  }
+
+  bool Succeeded() const {
+    return copy_output_succeeded_ && *copy_output_succeeded_;
+  }
+
+  bool Failed() const {
+    return copy_output_succeeded_ && !*copy_output_succeeded_;
+  }
+
+  std::string FailureOr(std::string fallback) const {
+    return copy_output_failure_ && !copy_output_failure_->empty()
+               ? *copy_output_failure_
+               : std::move(fallback);
+  }
+
+  void SetRunLoop(base::RunLoop* run_loop) {
+    copy_output_run_loop_ = run_loop;
+  }
+
+  scoped_refptr<gpu::ClientSharedImage> held_shared_image() const {
+    return held_shared_image_;
+  }
+
+  void SetFailure(std::string reason) {
+    if (copy_output_png_) {
+      copy_output_png_->clear();
+    }
+    if (copy_output_raw_frame_) {
+      *copy_output_raw_frame_ = LiveRawFrameOutput();
+    }
+    if (copy_output_gpu_frame_) {
+      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
+    }
+    if (copy_output_failure_) {
+      *copy_output_failure_ = std::move(reason);
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = false;
+    }
+    if (copy_output_completed_) {
+      *copy_output_completed_ = true;
+    }
+    QuitRunLoopIfWaiting();
+  }
+
+ private:
+  void ResetForPendingRequest() {
+    if (copy_output_completed_) {
+      *copy_output_completed_ = false;
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = false;
+    }
+    if (copy_output_png_) {
+      copy_output_png_->clear();
+    }
+    if (copy_output_raw_frame_) {
+      *copy_output_raw_frame_ = LiveRawFrameOutput();
+    }
+    if (copy_output_gpu_frame_) {
+      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
+    }
+    if (copy_output_failure_) {
+      copy_output_failure_->clear();
+    }
+  }
+
+  void CompleteGpuOutput(bool vulkan_context_provider_available,
+                         bool vulkan_shared_context_state_is_vulkan,
+                         std::unique_ptr<viz::CopyOutputResult> output) {
+    if (output->destination() !=
+        viz::CopyOutputResult::Destination::kSharedImage) {
+      SetFailure("Viz CopyOutput did not return a shared image");
+      return;
+    }
+    scoped_refptr<gpu::ClientSharedImage> shared_image =
+        output->GetSharedImage();
+    if (!shared_image || shared_image->mailbox().IsZero()) {
+      SetFailure("Viz CopyOutput shared image is missing");
+      return;
+    }
+    held_shared_image_ = shared_image;
+    held_release_callback_ = output->TakeSharedImageOwnership();
+    if (copy_output_gpu_frame_) {
+      LiveGpuFrameOutput gpu_frame;
+      gpu_frame.shared_image_available = true;
+      gpu_frame.is_software = shared_image->is_software();
+      gpu_frame.vk_context_provider_available =
+          vulkan_context_provider_available;
+      gpu_frame.shared_context_state_is_vulkan =
+          vulkan_shared_context_state_is_vulkan;
+      gpu_frame.width = shared_image->size().width();
+      gpu_frame.height = shared_image->size().height();
+      gpu_frame.format = shared_image->format().ToString();
+      gpu_frame.mailbox = shared_image->mailbox().ToDebugString();
+      gpu_frame.creation_sync_token =
+          shared_image->creation_sync_token().ToDebugString();
+      *copy_output_gpu_frame_ = std::move(gpu_frame);
+    }
+    MarkSucceeded();
+  }
+
+  void CompleteBitmapOutput(bool wants_png,
+                            bool wants_raw,
+                            std::unique_ptr<viz::CopyOutputResult> output) {
+    viz::CopyOutputResult::ScopedSkBitmap scoped_bitmap =
+        output->ScopedAccessSkBitmap();
+    SkBitmap bitmap = scoped_bitmap.GetOutScopedBitmap();
+    if (!bitmap.readyToDraw()) {
+      SetFailure("Viz CopyOutput bitmap is not drawable");
+      return;
+    }
+    SkPixmap pixmap;
+    if (!bitmap.peekPixels(&pixmap)) {
+      SetFailure("Viz CopyOutput bitmap has no readable pixels");
+      return;
+    }
+    SkBitmap top_left_bitmap;
+    if (!top_left_bitmap.tryAllocPixels(pixmap.info())) {
+      SetFailure("Viz CopyOutput PNG normalization allocation failed");
+      return;
+    }
+    SkPixmap top_left_pixmap;
+    if (!top_left_bitmap.peekPixels(&top_left_pixmap)) {
+      SetFailure("Viz CopyOutput normalized bitmap has no pixels");
+      return;
+    }
+    const size_t row_bytes =
+        pixmap.info().minRowBytes64() > 0
+            ? static_cast<size_t>(pixmap.info().minRowBytes64())
+            : static_cast<size_t>(pixmap.width()) *
+                  pixmap.info().bytesPerPixel();
+    for (int y = 0; y < pixmap.height(); ++y) {
+      std::memcpy(top_left_pixmap.writable_addr(0, y),
+                  pixmap.addr(0, pixmap.height() - 1 - y), row_bytes);
+    }
+    if (wants_raw && copy_output_raw_frame_) {
+      LiveRawFrameOutput raw_frame;
+      raw_frame.width = top_left_pixmap.width();
+      raw_frame.height = top_left_pixmap.height();
+      raw_frame.stride = static_cast<int>(top_left_pixmap.rowBytes());
+      raw_frame.premultiplied_alpha =
+          top_left_pixmap.info().alphaType() == kPremul_SkAlphaType;
+      if (top_left_pixmap.info().colorType() == kRGBA_8888_SkColorType) {
+        raw_frame.pixel_format = 1;
+      } else if (top_left_pixmap.info().colorType() ==
+                 kBGRA_8888_SkColorType) {
+        raw_frame.pixel_format = 2;
+      }
+      if (raw_frame.pixel_format != 0 && raw_frame.width > 0 &&
+          raw_frame.height > 0 && raw_frame.stride > 0) {
+        const size_t byte_count =
+            static_cast<size_t>(raw_frame.stride) *
+            static_cast<size_t>(raw_frame.height);
+        const auto* pixels =
+            static_cast<const uint8_t*>(top_left_pixmap.addr(0, 0));
+        raw_frame.pixels.assign(pixels, pixels + byte_count);
+      }
+      *copy_output_raw_frame_ = std::move(raw_frame);
+    }
+    if (wants_raw && copy_output_raw_frame_ &&
+        copy_output_raw_frame_->pixels.empty()) {
+      SetFailure("Viz CopyOutput raw frame has unsupported pixel format");
+      return;
+    }
+    if (wants_png) {
+      SkPngEncoder::Options options;
+      sk_sp<SkData> png = SkPngEncoder::Encode(top_left_pixmap, options);
+      if (!png || png->empty()) {
+        SetFailure("Viz CopyOutput PNG encoding failed");
+        return;
+      }
+      if (copy_output_png_) {
+        const auto* bytes = static_cast<const uint8_t*>(png->data());
+        copy_output_png_->assign(bytes, bytes + png->size());
+      }
+    }
+    MarkSucceeded();
+  }
+
+  void MarkSucceeded() {
+    if (copy_output_failure_) {
+      copy_output_failure_->clear();
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = true;
+    }
+    if (copy_output_completed_) {
+      *copy_output_completed_ = true;
+    }
+    QuitRunLoopIfWaiting();
+  }
+
+  void QuitRunLoopIfWaiting() {
+    if (copy_output_run_loop_) {
+      copy_output_run_loop_->Quit();
+    }
+  }
+
+  raw_ptr<bool> copy_output_completed_ = nullptr;
+  raw_ptr<bool> copy_output_succeeded_ = nullptr;
+  raw_ptr<std::vector<uint8_t>> copy_output_png_ = nullptr;
+  raw_ptr<LiveRawFrameOutput> copy_output_raw_frame_ = nullptr;
+  raw_ptr<LiveGpuFrameOutput> copy_output_gpu_frame_ = nullptr;
+  raw_ptr<std::string> copy_output_failure_ = nullptr;
+  raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
+  scoped_refptr<gpu::ClientSharedImage> held_shared_image_;
+  viz::ReleaseCallback held_release_callback_;
+};
+
 class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
  public:
   StandaloneDirectLayerTreeFrameSink(
@@ -5471,12 +5814,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         copy_output_png_requested_(copy_output_png_requested),
         copy_output_raw_requested_(copy_output_raw_requested),
         copy_output_gpu_requested_(copy_output_gpu_requested),
-        copy_output_completed_(copy_output_completed),
-        copy_output_succeeded_(copy_output_succeeded),
-        copy_output_png_(copy_output_png),
-        copy_output_raw_frame_(copy_output_raw_frame),
-        copy_output_gpu_frame_(copy_output_gpu_frame),
-        copy_output_failure_(copy_output_failure),
+        copy_output_(copy_output_completed,
+                     copy_output_succeeded,
+                     copy_output_png,
+                     copy_output_raw_frame,
+                     copy_output_gpu_frame,
+                     copy_output_failure),
         failure_reason_(failure_reason),
         did_not_produce_count_(did_not_produce_count),
         last_frame_skipped_reason_(last_frame_skipped_reason),
@@ -5495,9 +5838,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   StandaloneDirectLayerTreeFrameSink& operator=(
       const StandaloneDirectLayerTreeFrameSink&) = delete;
 
-  ~StandaloneDirectLayerTreeFrameSink() override {
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
-  }
+  ~StandaloneDirectLayerTreeFrameSink() override = default;
 
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override {
     TraceLiveFrameProbeStage("direct frame sink BindToClient begin");
@@ -5598,23 +5939,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         DrawVizDisplayNow();
       }
       if (should_copy_output) {
-        if (copy_output_completed_ && !*copy_output_completed_) {
+        if (copy_output_.IsPending()) {
           base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
           base::OneShotTimer timeout;
-          copy_output_run_loop_ = &run_loop;
+          copy_output_.SetRunLoop(&run_loop);
           timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
           frame_sink_support_.SetDeferCompositorFrameAck(true);
           run_loop.Run();
           frame_sink_support_.SetDeferCompositorFrameAck(false);
           frame_sink_support_.FlushDeferredCompositorFrameAck();
           timeout.Stop();
-          copy_output_run_loop_ = nullptr;
+          copy_output_.SetRunLoop(nullptr);
         }
         if (copy_output_requested_) {
           *copy_output_requested_ = false;
         }
-        if (copy_output_completed_ && !*copy_output_completed_) {
-          SetCopyOutputFailure(
+        if (copy_output_.IsPending()) {
+          copy_output_.SetFailure(
               "Viz CopyOutput did not complete during Display DrawAndSwap");
         }
       }
@@ -5816,16 +6157,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
       base::OneShotTimer timeout;
-      copy_output_run_loop_ = &run_loop;
+      copy_output_.SetRunLoop(&run_loop);
       timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
       run_loop.Run();
       timeout.Stop();
-      copy_output_run_loop_ = nullptr;
+      copy_output_.SetRunLoop(nullptr);
     }
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
       return MakeAsyncExternalGpuTargetCopyResult(
@@ -5834,11 +6175,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "BlitRequest CopyOutput did not complete",
           output_size);
     }
-    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+    if (copy_output_.Failed()) {
       std::string failure =
-          copy_output_failure_ && !copy_output_failure_->empty()
-              ? *copy_output_failure_
-              : "Viz BlitRequest CopyOutput failed";
+          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
       return MakeAsyncExternalGpuTargetCopyResult(
@@ -5846,7 +6185,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "gpu_external_vkimage_render_copy: failed failure=" + failure,
           output_size);
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     offscreen_skia_dependency_
         ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
     offscreen_skia_dependency_
@@ -6013,33 +6352,31 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
       base::OneShotTimer timeout;
-      copy_output_run_loop_ = &run_loop;
+      copy_output_.SetRunLoop(&run_loop);
       timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
       run_loop.Run();
       timeout.Stop();
-      copy_output_run_loop_ = nullptr;
+      copy_output_.SetRunLoop(nullptr);
     }
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
       return "gpu_borrowed_vkimage_render_copy_smoke: failed "
              "failure=Viz BlitRequest CopyOutput did not complete "
              "path=viz_blit_request viz_blit_request=1";
     }
-    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+    if (copy_output_.Failed()) {
       std::string failure =
-          copy_output_failure_ && !copy_output_failure_->empty()
-              ? *copy_output_failure_
-              : "Viz BlitRequest CopyOutput failed";
+          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
       return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=" +
              failure + " path=viz_blit_request viz_blit_request=1";
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     return offscreen_skia_dependency_
         ->VerifyBorrowedVkImageRenderCopyBlitTargetForTesting();
   }
@@ -6124,16 +6461,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
       base::OneShotTimer timeout;
-      copy_output_run_loop_ = &run_loop;
+      copy_output_.SetRunLoop(&run_loop);
       timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
       run_loop.Run();
       timeout.Stop();
-      copy_output_run_loop_ = nullptr;
+      copy_output_.SetRunLoop(nullptr);
     }
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
       return MakeAsyncExternalGpuTargetCopyResult(
@@ -6142,11 +6479,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "CopyOutput did not complete",
           output_size);
     }
-    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+    if (copy_output_.Failed()) {
       std::string failure =
-          copy_output_failure_ && !copy_output_failure_->empty()
-              ? *copy_output_failure_
-              : "Viz BlitRequest CopyOutput failed";
+          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
       offscreen_skia_dependency_
           ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
       return MakeAsyncExternalGpuTargetCopyResult(
@@ -6154,7 +6489,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "gpu_external_d3d12_render_copy: failed failure=" + failure,
           output_size);
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     offscreen_skia_dependency_
         ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
     std::ostringstream out;
@@ -6325,33 +6660,31 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
       base::OneShotTimer timeout;
-      copy_output_run_loop_ = &run_loop;
+      copy_output_.SetRunLoop(&run_loop);
       timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
       run_loop.Run();
       timeout.Stop();
-      copy_output_run_loop_ = nullptr;
+      copy_output_.SetRunLoop(nullptr);
     }
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
       return "gpu_borrowed_d3d12_render_copy_smoke: failed "
              "failure=Viz BlitRequest CopyOutput did not complete "
              "path=viz_blit_request viz_blit_request=1";
     }
-    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+    if (copy_output_.Failed()) {
       std::string failure =
-          copy_output_failure_ && !copy_output_failure_->empty()
-              ? *copy_output_failure_
-              : "Viz BlitRequest CopyOutput failed";
+          copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
       offscreen_skia_dependency_
           ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=" +
              failure + " path=viz_blit_request viz_blit_request=1";
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     return offscreen_skia_dependency_
         ->VerifyBorrowedD3D12RenderCopyBlitTargetForTesting();
   }
@@ -6365,12 +6698,14 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return "gpu_output_vulkan_pixel_smoke: failed failure=offscreen Vulkan "
              "Skia dependency is not available";
     }
-    if (!held_gpu_copy_output_shared_image_) {
+    scoped_refptr<gpu::ClientSharedImage> held_shared_image =
+        copy_output_.held_shared_image();
+    if (!held_shared_image) {
       return "gpu_output_vulkan_pixel_smoke: failed failure=held Vulkan "
              "CopyOutput SharedImage is not available";
     }
     return offscreen_skia_dependency_->RunGpuOutputVulkanPixelSmokeForTesting(
-        held_gpu_copy_output_shared_image_);
+        std::move(held_shared_image));
   }
 
   std::string RunVulkanBackdropMaskPrototypeForTesting(
@@ -6478,7 +6813,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           /*discard_prepared_target=*/false);
       return;
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     if (!offscreen_skia_dependency_) {
       return;
     }
@@ -6570,11 +6905,11 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
       return;
     }
-    if (copy_output_completed_ && !*copy_output_completed_) {
+    if (copy_output_.IsPending()) {
       return;
     }
-    if (copy_output_succeeded_ && *copy_output_succeeded_) {
-      ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    if (copy_output_.Succeeded()) {
+      copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
       if (offscreen_skia_dependency_) {
         if (async_external_gpu_target_copy_.backend ==
             AsyncExternalGpuTargetCopyBackend::kVulkan) {
@@ -6601,9 +6936,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
 
     std::string failure =
-        copy_output_failure_ && !copy_output_failure_->empty()
-            ? *copy_output_failure_
-            : "Viz BlitRequest CopyOutput failed";
+        copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
     if (offscreen_skia_dependency_) {
       if (async_external_gpu_target_copy_.backend ==
           AsyncExternalGpuTargetCopyBackend::kVulkan) {
@@ -6650,7 +6983,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     } else {
       async_external_gpu_target_copy_request_enqueued_ = false;
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     if ((discard_prepared_target || !wait_for_stale_callback) &&
         offscreen_skia_dependency_) {
       if (async_external_gpu_target_copy_.backend ==
@@ -6663,26 +6996,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
             ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
       }
     }
-    if (copy_output_completed_) {
-      *copy_output_completed_ = true;
-    }
-    if (copy_output_succeeded_) {
-      *copy_output_succeeded_ = false;
-    }
-    if (copy_output_failure_) {
-      copy_output_failure_->clear();
-    }
-    if (copy_output_gpu_frame_) {
-      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
-    }
-  }
-
-  void ReleaseHeldGpuCopyOutputSharedImage(const gpu::SyncToken& sync_token) {
-    held_gpu_copy_output_shared_image_.reset();
-    if (held_gpu_copy_output_release_callback_) {
-      std::move(held_gpu_copy_output_release_callback_)
-          .Run(sync_token, /*lost_resource=*/false);
-    }
+    copy_output_.MarkExternalGpuTargetInvalidated();
   }
 
   void ReleaseStaleAsyncExternalGpuTargetCopyIfNeeded(uint64_t generation) {
@@ -6690,7 +7004,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         generation != stale_async_external_gpu_target_copy_generation_) {
       return;
     }
-    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     if (offscreen_skia_dependency_) {
       if (stale_async_external_gpu_target_copy_backend_ ==
           AsyncExternalGpuTargetCopyBackend::kVulkan) {
@@ -6755,57 +7069,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                          scoped_refptr<gpu::ClientSharedImage> blit_target =
                              nullptr,
                          uint64_t async_generation = 0) {
-    if (wants_gpu) {
-      ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
-    }
-    if (!frame_sink_support_.support()) {
-      SetCopyOutputFailure("Viz CopyOutput cannot run without frame sink support");
-      return;
-    }
-    if (!local_surface_id_.is_valid()) {
-      SetCopyOutputFailure("Viz CopyOutput cannot run without LocalSurfaceId");
-      return;
-    }
-    if (copy_output_completed_) {
-      *copy_output_completed_ = false;
-    }
-    if (copy_output_succeeded_) {
-      *copy_output_succeeded_ = false;
-    }
-    if (copy_output_png_) {
-      copy_output_png_->clear();
-    }
-    if (copy_output_raw_frame_) {
-      *copy_output_raw_frame_ = LiveRawFrameOutput();
-    }
-    if (copy_output_gpu_frame_) {
-      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
-    }
-    if (copy_output_failure_) {
-      copy_output_failure_->clear();
-    }
-
-    auto request = std::make_unique<viz::CopyOutputRequest>(
-        viz::CopyOutputRequest::ResultFormat::RGBA,
-        wants_gpu ? viz::CopyOutputRequest::ResultDestination::kSharedImage
-                  : viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+    const bool enqueued = copy_output_.Request(
+        &frame_sink_support_, local_surface_id_, output_size, wants_png,
+        wants_raw, wants_gpu, std::move(blit_target),
         base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
                        weak_factory_.GetWeakPtr(), wants_png, wants_raw,
                        wants_gpu, async_generation));
-    viz::SetCopyOutputRequestResultSize(request.get(), gfx::Rect(output_size),
-                                        output_size, output_size);
-    request->set_result_task_runner(
-        base::SequencedTaskRunner::GetCurrentDefault());
-    if (blit_target) {
-      const gpu::SyncToken sync_token = blit_target->creation_sync_token();
-      request->set_blit_request(viz::BlitRequest(
-          gfx::Point(), viz::LetterboxingBehavior::kDoNotLetterbox,
-          std::move(blit_target), sync_token,
-          /*populates_mappable_shared_image=*/false));
-    }
-    frame_sink_support_.RequestCopyOfOutput(local_surface_id_,
-                                            std::move(request));
-    if (async_generation != 0 &&
+    if (enqueued && async_generation != 0 &&
         async_generation == async_external_gpu_target_copy_generation_) {
       async_external_gpu_target_copy_request_enqueued_ = true;
     }
@@ -6820,181 +7090,17 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         async_generation != async_external_gpu_target_copy_generation_) {
       if (stale_async_external_gpu_target_copy_waiting_for_callback_ &&
           async_generation == stale_async_external_gpu_target_copy_generation_) {
-        if (wants_gpu && output && !output->IsEmpty() &&
-            output->destination() ==
-                viz::CopyOutputResult::Destination::kSharedImage) {
-          held_gpu_copy_output_shared_image_ = output->GetSharedImage();
-          held_gpu_copy_output_release_callback_ =
-              output->TakeSharedImageOwnership();
+        if (wants_gpu) {
+          copy_output_.HoldSharedImageForRelease(output.get());
         }
         ReleaseStaleAsyncExternalGpuTargetCopyIfNeeded(async_generation);
       }
       return;
     }
-    if (!output) {
-      SetCopyOutputFailure("Viz CopyOutput returned no result");
-      return;
-    }
-    if (output->IsEmpty()) {
-      SetCopyOutputFailure(
-          std::string("Viz CopyOutput returned empty result: ") +
-          StandaloneCopyOutputErrorName(output->error()));
-      return;
-    }
-    if (wants_gpu) {
-      if (output->destination() !=
-          viz::CopyOutputResult::Destination::kSharedImage) {
-        SetCopyOutputFailure("Viz CopyOutput did not return a shared image");
-        return;
-      }
-      scoped_refptr<gpu::ClientSharedImage> shared_image =
-          output->GetSharedImage();
-      if (!shared_image || shared_image->mailbox().IsZero()) {
-        SetCopyOutputFailure("Viz CopyOutput shared image is missing");
-        return;
-      }
-      held_gpu_copy_output_shared_image_ = shared_image;
-      held_gpu_copy_output_release_callback_ =
-          output->TakeSharedImageOwnership();
-      if (copy_output_gpu_frame_) {
-        LiveGpuFrameOutput gpu_frame;
-        gpu_frame.shared_image_available = true;
-        gpu_frame.is_software = shared_image->is_software();
-        gpu_frame.vk_context_provider_available =
-            vulkan_context_provider_available_;
-        gpu_frame.shared_context_state_is_vulkan =
-            vulkan_shared_context_state_is_vulkan_;
-        gpu_frame.width = shared_image->size().width();
-        gpu_frame.height = shared_image->size().height();
-        gpu_frame.format = shared_image->format().ToString();
-        gpu_frame.mailbox = shared_image->mailbox().ToDebugString();
-        gpu_frame.creation_sync_token =
-            shared_image->creation_sync_token().ToDebugString();
-        *copy_output_gpu_frame_ = std::move(gpu_frame);
-      }
-      if (copy_output_failure_) {
-        copy_output_failure_->clear();
-      }
-      if (copy_output_succeeded_) {
-        *copy_output_succeeded_ = true;
-      }
-      if (copy_output_completed_) {
-        *copy_output_completed_ = true;
-      }
-      if (copy_output_run_loop_) {
-        copy_output_run_loop_->Quit();
-      }
-      return;
-    }
-    viz::CopyOutputResult::ScopedSkBitmap scoped_bitmap =
-        output->ScopedAccessSkBitmap();
-    SkBitmap bitmap = scoped_bitmap.GetOutScopedBitmap();
-    if (!bitmap.readyToDraw()) {
-      SetCopyOutputFailure("Viz CopyOutput bitmap is not drawable");
-      return;
-    }
-    SkPixmap pixmap;
-    if (!bitmap.peekPixels(&pixmap)) {
-      SetCopyOutputFailure("Viz CopyOutput bitmap has no readable pixels");
-      return;
-    }
-    SkBitmap top_left_bitmap;
-    if (!top_left_bitmap.tryAllocPixels(pixmap.info())) {
-      SetCopyOutputFailure("Viz CopyOutput PNG normalization allocation failed");
-      return;
-    }
-    SkPixmap top_left_pixmap;
-    if (!top_left_bitmap.peekPixels(&top_left_pixmap)) {
-      SetCopyOutputFailure("Viz CopyOutput normalized bitmap has no pixels");
-      return;
-    }
-    const size_t row_bytes =
-        pixmap.info().minRowBytes64() > 0
-            ? static_cast<size_t>(pixmap.info().minRowBytes64())
-            : static_cast<size_t>(pixmap.width()) *
-                  pixmap.info().bytesPerPixel();
-    for (int y = 0; y < pixmap.height(); ++y) {
-      std::memcpy(top_left_pixmap.writable_addr(0, y),
-                  pixmap.addr(0, pixmap.height() - 1 - y), row_bytes);
-    }
-    if (wants_raw && copy_output_raw_frame_) {
-      LiveRawFrameOutput raw_frame;
-      raw_frame.width = top_left_pixmap.width();
-      raw_frame.height = top_left_pixmap.height();
-      raw_frame.stride = static_cast<int>(top_left_pixmap.rowBytes());
-      raw_frame.premultiplied_alpha =
-          top_left_pixmap.info().alphaType() == kPremul_SkAlphaType;
-      if (top_left_pixmap.info().colorType() == kRGBA_8888_SkColorType) {
-        raw_frame.pixel_format = 1;
-      } else if (top_left_pixmap.info().colorType() ==
-                 kBGRA_8888_SkColorType) {
-        raw_frame.pixel_format = 2;
-      }
-      if (raw_frame.pixel_format != 0 && raw_frame.width > 0 &&
-          raw_frame.height > 0 && raw_frame.stride > 0) {
-        const size_t byte_count =
-            static_cast<size_t>(raw_frame.stride) *
-            static_cast<size_t>(raw_frame.height);
-        const auto* pixels =
-            static_cast<const uint8_t*>(top_left_pixmap.addr(0, 0));
-        raw_frame.pixels.assign(pixels, pixels + byte_count);
-      }
-      *copy_output_raw_frame_ = std::move(raw_frame);
-    }
-    if (wants_raw && copy_output_raw_frame_ &&
-        copy_output_raw_frame_->pixels.empty()) {
-      SetCopyOutputFailure(
-          "Viz CopyOutput raw frame has unsupported pixel format");
-      return;
-    }
-    if (wants_png) {
-      SkPngEncoder::Options options;
-      sk_sp<SkData> png = SkPngEncoder::Encode(top_left_pixmap, options);
-      if (!png || png->empty()) {
-        SetCopyOutputFailure("Viz CopyOutput PNG encoding failed");
-        return;
-      }
-      if (copy_output_png_) {
-        const auto* bytes = static_cast<const uint8_t*>(png->data());
-        copy_output_png_->assign(bytes, bytes + png->size());
-      }
-    }
-    if (copy_output_failure_) {
-      copy_output_failure_->clear();
-    }
-    if (copy_output_succeeded_) {
-      *copy_output_succeeded_ = true;
-    }
-    if (copy_output_completed_) {
-      *copy_output_completed_ = true;
-    }
-    if (copy_output_run_loop_) {
-      copy_output_run_loop_->Quit();
-    }
-  }
-
-  void SetCopyOutputFailure(std::string reason) {
-    if (copy_output_png_) {
-      copy_output_png_->clear();
-    }
-    if (copy_output_raw_frame_) {
-      *copy_output_raw_frame_ = LiveRawFrameOutput();
-    }
-    if (copy_output_gpu_frame_) {
-      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
-    }
-    if (copy_output_failure_) {
-      *copy_output_failure_ = std::move(reason);
-    }
-    if (copy_output_succeeded_) {
-      *copy_output_succeeded_ = false;
-    }
-    if (copy_output_completed_) {
-      *copy_output_completed_ = true;
-    }
-    if (copy_output_run_loop_) {
-      copy_output_run_loop_->Quit();
-    }
+    copy_output_.Complete(wants_png, wants_raw, wants_gpu,
+                          vulkan_context_provider_available_,
+                          vulkan_shared_context_state_is_vulkan_,
+                          std::move(output));
   }
 
   viz::LocalSurfaceId local_surface_id_;
@@ -7023,15 +7129,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<bool> copy_output_png_requested_ = nullptr;
   raw_ptr<bool> copy_output_raw_requested_ = nullptr;
   raw_ptr<bool> copy_output_gpu_requested_ = nullptr;
-  raw_ptr<bool> copy_output_completed_ = nullptr;
-  raw_ptr<bool> copy_output_succeeded_ = nullptr;
-  raw_ptr<std::vector<uint8_t>> copy_output_png_ = nullptr;
-  raw_ptr<LiveRawFrameOutput> copy_output_raw_frame_ = nullptr;
-  raw_ptr<LiveGpuFrameOutput> copy_output_gpu_frame_ = nullptr;
-  raw_ptr<std::string> copy_output_failure_ = nullptr;
-  raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
-  scoped_refptr<gpu::ClientSharedImage> held_gpu_copy_output_shared_image_;
-  viz::ReleaseCallback held_gpu_copy_output_release_callback_;
+  StandaloneCopyOutputController copy_output_;
   uint64_t next_async_external_gpu_target_copy_request_id_ = 0;
   uint64_t async_external_gpu_target_copy_generation_ = 0;
   AsyncExternalGpuTargetCopyState async_external_gpu_target_copy_;
