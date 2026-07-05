@@ -5196,84 +5196,9 @@ class StandaloneRootVizDisplayController {
       SetFailure("Viz Display cannot initialize without root BeginFrameSource");
       return false;
     }
-    TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
-    if (offscreen_dependency_) {
-      *offscreen_dependency_ = nullptr;
-    }
-    StandaloneOutputSurfaceProvider output_surface_provider(
-        gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
-        use_d3d12_offscreen_output_, vulkan_context_provider_available_,
-        shared_context_state_is_vulkan_, offscreen_dependency_);
-    std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
-        display_controller = output_surface_provider.CreateGpuDependency(
-            /*gpu_compositing=*/true, surface_handle);
-    if (!display_controller) {
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
-    std::unique_ptr<viz::OutputSurface> output_surface =
-        output_surface_provider.CreateOutputSurface(
-            surface_handle, /*gpu_compositing=*/true,
-            /*display_client=*/nullptr, display_controller.get(),
-            *renderer_settings_, debug_settings_);
-    if (!output_surface) {
-      return false;
-    }
-    // Keep the standalone root synthetic begin-frame source synchronized with
-    // OutputSurface VSync updates, as RootCompositorFrameSinkImpl does for its
-    // normal synthetic begin-frame-source path.
-    display_begin_frame_source_ = begin_frame_source;
-    output_surface->SetUpdateVSyncParametersCallback(base::BindRepeating(
-        &StandaloneRootVizDisplayController::SetDisplayVSyncParameters,
-        base::Unretained(this)));
-    TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
-    std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
-    if (offscreen) {
-      overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
-    } else {
-      overlay_processor =
-          viz::OverlayProcessorInterface::CreateOverlayProcessor(
-              output_surface.get(), surface_handle,
-              output_surface->capabilities(), display_controller.get(),
-              output_surface_provider.GetSharedImageManager(),
-              *renderer_settings_, debug_settings_);
-    }
-    if (!overlay_processor) {
-      SetFailure("Viz Display overlay processor creation failed");
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before Display create");
-    if (display_client_) {
-      display_client_->ResetForNewDisplay();
-    }
-    auto display_scheduler = std::make_unique<viz::DisplayScheduler>(
-        begin_frame_source,
-        base::SingleThreadTaskRunner::GetCurrentDefault().get(),
-        output_surface->capabilities().pending_swap_params);
-    *display_ = std::make_unique<viz::Display>(
-        output_surface_provider.GetSharedImageManager(),
-        output_surface_provider.GetGpuScheduler(), *renderer_settings_,
-        debug_settings_, frame_sink_id_, std::move(display_controller),
-        std::move(output_surface), std::move(overlay_processor),
-        std::move(display_scheduler),
-        base::SingleThreadTaskRunner::GetCurrentDefault());
-    (*display_)->Initialize(display_client_,
-                            frame_sink_manager_->surface_manager());
-    if (support) {
-      support->SetUpHitTest(display_->get());
-    }
-    SetDisplayVisible(true);
-    (*display_)->Resize(output_size);
-    if (display_uses_software_output_) {
-      *display_uses_software_output_ = false;
-    }
-    if (viz_display_created_) {
-      *viz_display_created_ = true;
-    }
-    TraceLiveFrameProbeStage(
-        offscreen ? "direct frame sink after offscreen Display initialize"
-                  : "direct frame sink after Display initialize");
-    return true;
+    return CreateRootDisplayLikeChromium(output_size, support,
+                                         begin_frame_source, surface_handle,
+                                         offscreen);
   }
 
   void UpdateForFrame(const viz::CompositorFrame& frame,
@@ -5367,6 +5292,91 @@ class StandaloneRootVizDisplayController {
   }
 
  private:
+  bool CreateRootDisplayLikeChromium(
+      const gfx::Size& output_size,
+      viz::CompositorFrameSinkSupport* support,
+      viz::SyntheticBeginFrameSource* begin_frame_source,
+      gpu::SurfaceHandle surface_handle,
+      bool offscreen) {
+    TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
+    if (offscreen_dependency_) {
+      *offscreen_dependency_ = nullptr;
+    }
+    StandaloneOutputSurfaceProvider output_surface_provider(
+        gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
+        use_d3d12_offscreen_output_, vulkan_context_provider_available_,
+        shared_context_state_is_vulkan_, offscreen_dependency_);
+    std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+        display_controller = output_surface_provider.CreateGpuDependency(
+            /*gpu_compositing=*/true, surface_handle);
+    if (!display_controller) {
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
+    std::unique_ptr<viz::OutputSurface> output_surface =
+        output_surface_provider.CreateOutputSurface(
+            surface_handle, /*gpu_compositing=*/true,
+            /*display_client=*/nullptr, display_controller.get(),
+            *renderer_settings_, debug_settings_);
+    if (!output_surface) {
+      return false;
+    }
+    // Keep the standalone root synthetic begin-frame source synchronized with
+    // OutputSurface VSync updates, as RootCompositorFrameSinkImpl does for its
+    // normal synthetic begin-frame-source path.
+    display_begin_frame_source_ = begin_frame_source;
+    output_surface->SetUpdateVSyncParametersCallback(base::BindRepeating(
+        &StandaloneRootVizDisplayController::SetDisplayVSyncParameters,
+        base::Unretained(this)));
+    TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
+    std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
+    if (offscreen) {
+      overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
+    } else {
+      overlay_processor =
+          viz::OverlayProcessorInterface::CreateOverlayProcessor(
+              output_surface.get(), output_surface->GetSurfaceHandle(),
+              output_surface->capabilities(), display_controller.get(),
+              output_surface_provider.GetSharedImageManager(),
+              *renderer_settings_, debug_settings_);
+    }
+    if (!overlay_processor) {
+      SetFailure("Viz Display overlay processor creation failed");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Display create");
+    if (display_client_) {
+      display_client_->ResetForNewDisplay();
+    }
+    auto task_runner = base::SingleThreadTaskRunner::GetCurrentDefault();
+    const auto& capabilities = output_surface->capabilities();
+    CHECK_GT(capabilities.pending_swap_params.max_pending_swaps, 0);
+    auto display_scheduler = std::make_unique<viz::DisplayScheduler>(
+        begin_frame_source, task_runner.get(), capabilities.pending_swap_params);
+    *display_ = std::make_unique<viz::Display>(
+        output_surface_provider.GetSharedImageManager(),
+        output_surface_provider.GetGpuScheduler(), *renderer_settings_,
+        debug_settings_, frame_sink_id_, std::move(display_controller),
+        std::move(output_surface), std::move(overlay_processor),
+        std::move(display_scheduler), std::move(task_runner));
+    (*display_)->Initialize(display_client_,
+                            frame_sink_manager_->surface_manager());
+    if (support) {
+      support->SetUpHitTest(display_->get());
+    }
+    SetDisplayVisible(true);
+    (*display_)->Resize(output_size);
+    if (display_uses_software_output_) {
+      *display_uses_software_output_ = false;
+    }
+    if (viz_display_created_) {
+      *viz_display_created_ = true;
+    }
+    TraceLiveFrameProbeStage(
+        offscreen ? "direct frame sink after offscreen Display initialize"
+                  : "direct frame sink after Display initialize");
+    return true;
+  }
   bool ActivateRootSurfaceForFrameLikeChromium(
       viz::CompositorFrameSinkSupport* support,
       const viz::LocalSurfaceId& local_surface_id,
