@@ -5168,22 +5168,11 @@ class StandaloneRootVizDisplayController {
     if (!display_ || !*display_ || !support) {
       return;
     }
-    const bool surface_id_changed =
-        support->last_activated_local_surface_id() != local_surface_id &&
-        !support->IsEvicted(local_surface_id);
-    gfx::Size display_size = output_size;
-    if (surface_id_changed) {
-      // Match RootCompositorFrameSinkImpl: a root Display observes a new
-      // LocalSurfaceId only when Viz is about to activate a fresh root surface.
-      (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
-      if ((*display_)->resize_based_on_root_surface() &&
-          !frame.render_pass_list.empty()) {
-        display_size = frame.render_pass_list.back()->output_rect.size();
-      }
-    }
-    if (!(*display_)->resize_based_on_root_surface() || surface_id_changed) {
-      (*display_)->Resize(display_size);
-    }
+    const bool activated = ActivateRootSurfaceForFrameLikeChromium(
+        support, local_surface_id, device_scale_factor);
+    const gfx::Size display_size =
+        DisplaySizeForRootFrame(frame, output_size, activated);
+    ResizeForRootFrameLikeChromium(display_size, activated);
     if (viz_display_output_size_) {
       *viz_display_output_size_ = display_size;
     }
@@ -5198,10 +5187,8 @@ class StandaloneRootVizDisplayController {
       return;
     }
     (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
-    if (!(*display_)->resize_based_on_root_surface() ||
-        output_size == last_submitted_size_in_pixels) {
-      (*display_)->Resize(output_size);
-    }
+    ResizeForExternalTargetCopyLikeChromium(output_size,
+                                            last_submitted_size_in_pixels);
   }
 
   bool ShouldResetOffscreenForExternalTargetResize(
@@ -5263,6 +5250,50 @@ class StandaloneRootVizDisplayController {
   }
 
  private:
+  bool ActivateRootSurfaceForFrameLikeChromium(
+      viz::CompositorFrameSinkSupport* support,
+      const viz::LocalSurfaceId& local_surface_id,
+      float device_scale_factor) {
+    if (support->last_activated_local_surface_id() == local_surface_id ||
+        support->IsEvicted(local_surface_id)) {
+      return false;
+    }
+    // This mirrors RootCompositorFrameSinkImpl::SubmitCompositorFrame: a root
+    // Display observes a new LocalSurfaceId only as Viz activates the matching
+    // root surface.
+    (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
+    return true;
+  }
+
+  gfx::Size DisplaySizeForRootFrame(const viz::CompositorFrame& frame,
+                                    const gfx::Size& fallback_size,
+                                    bool root_surface_activated) const {
+    if (!root_surface_activated ||
+        !(*display_)->resize_based_on_root_surface() ||
+        frame.render_pass_list.empty()) {
+      return fallback_size;
+    }
+    // RootCompositorFrameSinkImpl sizes gutter-free displays from the root
+    // compositor frame render pass when the output surface owns resize.
+    return frame.render_pass_list.back()->output_rect.size();
+  }
+
+  void ResizeForRootFrameLikeChromium(const gfx::Size& display_size,
+                                      bool root_surface_activated) {
+    if (!(*display_)->resize_based_on_root_surface() || root_surface_activated) {
+      (*display_)->Resize(display_size);
+    }
+  }
+
+  void ResizeForExternalTargetCopyLikeChromium(
+      const gfx::Size& output_size,
+      const gfx::Size& last_submitted_size_in_pixels) {
+    if (!(*display_)->resize_based_on_root_surface() ||
+        output_size == last_submitted_size_in_pixels) {
+      (*display_)->Resize(output_size);
+    }
+  }
+
   void SetFailure(const char* reason) {
     if (failure_reason_) {
       *failure_reason_ = reason ? reason : "";
