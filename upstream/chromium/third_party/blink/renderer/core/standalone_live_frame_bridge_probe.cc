@@ -5521,16 +5521,38 @@ class StandaloneRootFrameSinkController {
     return support_.support();
   }
 
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) {
+    local_surface_id_ = local_surface_id;
+  }
+
+  bool HasValidLocalSurfaceId() const { return local_surface_id_.is_valid(); }
+
+  bool ShouldDropFrameForLocalSurfaceIdMismatch(
+      const gfx::Size& output_size) const {
+    return cc::ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
+        output_size, local_surface_id_, last_submitted_size_in_pixels_,
+        last_submitted_local_surface_id_);
+  }
+
   std::optional<viz::SubmitResult> SubmitRootCompositorFrame(
-      const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
       std::optional<viz::HitTestRegionList> hit_test_region_list,
       bool needs_display,
       const gfx::Size& output_size,
       uint64_t submit_time) {
-    return support_.SubmitRootCompositorFrame(
-        local_surface_id, std::move(frame), std::move(hit_test_region_list),
+    const float frame_device_scale_factor = frame.device_scale_factor();
+    std::optional<viz::SubmitResult> submit_result =
+        support_.SubmitRootCompositorFrame(
+            local_surface_id_, std::move(frame),
+            std::move(hit_test_region_list),
         &display_root_, needs_display, output_size, submit_time);
+    if (submit_result &&
+        *submit_result == viz::SubmitResult::ACCEPTED) {
+      last_submitted_size_in_pixels_ = output_size;
+      last_submitted_local_surface_id_ = local_surface_id_;
+      last_submitted_device_scale_factor_ = frame_device_scale_factor;
+    }
+    return submit_result;
   }
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) {
@@ -5545,9 +5567,25 @@ class StandaloneRootFrameSinkController {
     support_.ReclaimResources(std::move(resources));
   }
 
-  bool NeedsActivatedRootSurface(
-      const viz::LocalSurfaceId& local_surface_id) const {
-    return support_.NeedsActivatedRootSurface(local_surface_id);
+  bool NeedsFreshActivatedSurfaceForExternalTarget(
+      const gfx::Size& output_size) const {
+    if (output_size.IsEmpty() || !local_surface_id_.is_valid()) {
+      return false;
+    }
+    if (last_submitted_size_in_pixels_.IsEmpty()) {
+      return false;
+    }
+    // Match the RootCompositorFrameSinkImpl/cc resize contract used for
+    // compositor frame submission: Viz should not be resized/copied for a new
+    // pixel size until cc has activated a root surface with a fresh
+    // LocalSurfaceId. Treating this as pending keeps external GPU targets from
+    // observing stale root-surface state during resize churn.
+    return output_size != last_submitted_size_in_pixels_ &&
+           local_surface_id_ == last_submitted_local_surface_id_;
+  }
+
+  bool NeedsActivatedRootSurfaceForExternalTarget() const {
+    return support_.NeedsActivatedRootSurface(local_surface_id_);
   }
 
   void SetDeferCompositorFrameAck(bool defer) {
@@ -5558,9 +5596,8 @@ class StandaloneRootFrameSinkController {
     support_.FlushDeferredCompositorFrameAck();
   }
 
-  void RequestCopyOfOutput(const viz::LocalSurfaceId& local_surface_id,
-                           std::unique_ptr<viz::CopyOutputRequest> request) {
-    support_.RequestCopyOfOutput(local_surface_id, std::move(request));
+  void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request) {
+    support_.RequestCopyOfOutput(local_surface_id_, std::move(request));
   }
 
   bool EnsureDisplay(const gfx::Size& output_size) {
@@ -5568,14 +5605,10 @@ class StandaloneRootFrameSinkController {
                                        support_.begin_frame_source());
   }
 
-  void UpdateForExternalTargetCopy(
-      const viz::LocalSurfaceId& local_surface_id,
-      float device_scale_factor,
-      const gfx::Size& last_submitted_size_in_pixels,
-      const gfx::Size& output_size) {
+  void UpdateForExternalTargetCopy(const gfx::Size& output_size) {
     display_root_.UpdateForExternalTargetCopy(
-        local_surface_id, device_scale_factor, last_submitted_size_in_pixels,
-        output_size);
+        local_surface_id_, last_submitted_device_scale_factor_,
+        last_submitted_size_in_pixels_, output_size);
   }
 
   bool ShouldResetOffscreenForExternalTargetResize(
@@ -5593,6 +5626,10 @@ class StandaloneRootFrameSinkController {
  private:
   StandaloneRootFrameSinkSupportController support_;
   StandaloneRootVizDisplayController display_root_;
+  viz::LocalSurfaceId local_surface_id_;
+  float last_submitted_device_scale_factor_ = 1.0f;
+  gfx::Size last_submitted_size_in_pixels_;
+  viz::LocalSurfaceId last_submitted_local_surface_id_;
 };
 
 class StandaloneCopyOutputController {
@@ -5620,7 +5657,6 @@ class StandaloneCopyOutputController {
   }
 
   bool Request(StandaloneRootFrameSinkController* frame_sink,
-               const viz::LocalSurfaceId& local_surface_id,
                const gfx::Size& output_size,
                bool wants_png,
                bool wants_raw,
@@ -5635,7 +5671,7 @@ class StandaloneCopyOutputController {
       SetFailure("Viz CopyOutput cannot run without frame sink support");
       return false;
     }
-    if (!local_surface_id.is_valid()) {
+    if (!frame_sink->HasValidLocalSurfaceId()) {
       SetFailure("Viz CopyOutput cannot run without LocalSurfaceId");
       return false;
     }
@@ -5657,7 +5693,7 @@ class StandaloneCopyOutputController {
           std::move(blit_target), sync_token,
           /*populates_mappable_shared_image=*/false));
     }
-    frame_sink->RequestCopyOfOutput(local_surface_id, std::move(request));
+    frame_sink->RequestCopyOfOutput(std::move(request));
     return true;
   }
 
@@ -6062,7 +6098,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   void SetLocalSurfaceId(
       const viz::LocalSurfaceId& local_surface_id) override {
     TraceLiveFrameProbeStage("direct frame sink SetLocalSurfaceId");
-    local_surface_id_ = local_surface_id;
+    root_frame_sink_.SetLocalSurfaceId(local_surface_id);
   }
 
   void SubmitCompositorFrame(viz::CompositorFrame frame,
@@ -6077,7 +6113,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       SetFailure("Viz CompositorFrameSinkSupport is not initialized");
       return;
     }
-    if (!local_surface_id_.is_valid()) {
+    if (!root_frame_sink_.HasValidLocalSurfaceId()) {
       SetFailure("cc submitted a frame before setting a valid LocalSurfaceId");
       return;
     }
@@ -6085,7 +6121,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (client_) {
       hit_test_region_list = client_->BuildHitTestData();
     }
-    const float frame_device_scale_factor = frame.device_scale_factor();
     gfx::Size output_size = frame.size_in_pixels();
     if (output_size.IsEmpty()) {
       output_size = viewport_;
@@ -6093,11 +6128,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (submitted_output_size_) {
       *submitted_output_size_ = output_size;
     }
-    const bool size_changed_without_new_local_surface_id =
-        cc::ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
-            output_size, local_surface_id_, last_submitted_size_in_pixels_,
-            last_submitted_local_surface_id_);
-    if (size_changed_without_new_local_surface_id) {
+    if (root_frame_sink_.ShouldDropFrameForLocalSurfaceIdMismatch(
+            output_size)) {
       TraceLiveFrameProbeStage(
           "direct frame sink dropped resized frame awaiting LocalSurfaceId");
       ReclaimDroppedCompositorFrameResources(frame);
@@ -6110,16 +6142,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         g_standalone_native_window_handle || should_copy_output;
     std::optional<viz::SubmitResult> submit_result =
         root_frame_sink_.SubmitRootCompositorFrame(
-            local_surface_id_, std::move(frame), std::move(hit_test_region_list),
-            needs_display, output_size, /*submit_time=*/0);
+            std::move(frame), std::move(hit_test_region_list), needs_display,
+            output_size, /*submit_time=*/0);
     if (!submit_result) {
       return;
     }
     TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
     if (*submit_result == viz::SubmitResult::ACCEPTED) {
-      last_submitted_size_in_pixels_ = output_size;
-      last_submitted_local_surface_id_ = local_surface_id_;
-      last_submitted_device_scale_factor_ = frame_device_scale_factor;
       if (compositor_frame_submitted_) {
         *compositor_frame_submitted_ = true;
       }
@@ -6239,7 +6268,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return result;
     }
 
-    if (NeedsFreshActivatedSurfaceForExternalTarget(result.output_size)) {
+    if (root_frame_sink_.NeedsFreshActivatedSurfaceForExternalTarget(
+            result.output_size)) {
       result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           std::string(diagnostic_label) +
@@ -6248,7 +6278,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           result.output_size);
       return result;
     }
-    if (NeedsActivatedRootSurfaceForExternalTarget()) {
+    if (root_frame_sink_.NeedsActivatedRootSurfaceForExternalTarget()) {
       result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           std::string(diagnostic_label) +
@@ -6259,7 +6289,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
     ResetOffscreenVizDisplayForExternalTargetResize(result.output_size);
     if (!display_) {
-      if (!local_surface_id_.is_valid()) {
+      if (!root_frame_sink_.HasValidLocalSurfaceId()) {
         result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
             html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
             std::string(diagnostic_label) +
@@ -6278,7 +6308,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       }
       result.display_created = true;
     }
-    if (!local_surface_id_.is_valid()) {
+    if (!root_frame_sink_.HasValidLocalSurfaceId()) {
       result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           std::string(diagnostic_label) +
@@ -6286,7 +6316,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           result.output_size);
       return result;
     }
-    UpdateVizDisplayForExternalTargetCopy(result.output_size);
+    root_frame_sink_.UpdateForExternalTargetCopy(result.output_size);
     if (viz_display_output_size_) {
       *viz_display_output_size_ = result.output_size;
     }
@@ -6905,33 +6935,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         regions, output_size, viewport_);
   }
 
-  bool NeedsFreshActivatedSurfaceForExternalTarget(
-      const gfx::Size& output_size) const {
-    if (output_size.IsEmpty() || !local_surface_id_.is_valid()) {
-      return false;
-    }
-    if (last_submitted_size_in_pixels_.IsEmpty()) {
-      return false;
-    }
-    // Match the RootCompositorFrameSinkImpl/cc resize contract used for
-    // compositor frame submission: Viz should not be resized/copied for a new
-    // pixel size until cc has activated a root surface with a fresh
-    // LocalSurfaceId. Treating this as pending keeps external GPU targets from
-    // observing stale root-surface state during resize churn.
-    return output_size != last_submitted_size_in_pixels_ &&
-           local_surface_id_ == last_submitted_local_surface_id_;
-  }
-
-  bool NeedsActivatedRootSurfaceForExternalTarget() const {
-    return root_frame_sink_.NeedsActivatedRootSurface(local_surface_id_);
-  }
-
-  void UpdateVizDisplayForExternalTargetCopy(const gfx::Size& output_size) {
-    root_frame_sink_.UpdateForExternalTargetCopy(
-        local_surface_id_, last_submitted_device_scale_factor_,
-        last_submitted_size_in_pixels_, output_size);
-  }
-
   html_css_renderer::ExternalGpuTargetCopyResult
   PollExternalGpuTargetAsyncCopy() {
     // Match Viz CopyOutput ownership semantics: the callback is the completion
@@ -7230,8 +7233,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                              nullptr,
                          uint64_t async_generation = 0) {
     const bool enqueued = copy_output_.Request(
-        &root_frame_sink_, local_surface_id_, output_size, wants_png,
-        wants_raw, wants_gpu, std::move(blit_target),
+        &root_frame_sink_, output_size, wants_png, wants_raw, wants_gpu,
+        std::move(blit_target),
         base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
                        weak_factory_.GetWeakPtr(), wants_png, wants_raw,
                        wants_gpu, async_generation));
@@ -7263,7 +7266,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                           std::move(output));
   }
 
-  viz::LocalSurfaceId local_surface_id_;
   gfx::Size viewport_;
   viz::RendererSettings renderer_settings_;
   viz::DebugRendererSettings debug_settings_;
@@ -7276,9 +7278,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   bool display_uses_software_output_ = false;
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
-  float last_submitted_device_scale_factor_ = 1.0f;
-  gfx::Size last_submitted_size_in_pixels_;
-  viz::LocalSurfaceId last_submitted_local_surface_id_;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
