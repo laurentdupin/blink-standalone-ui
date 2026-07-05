@@ -5030,6 +5030,88 @@ class StandaloneInProcessRasterContextProvider final
   SEQUENCE_CHECKER(sequence_checker_);
 };
 
+struct StandaloneRasterContextProviderPair {
+  scoped_refptr<StandaloneInProcessRasterContextProvider> compositor;
+  scoped_refptr<StandaloneInProcessRasterContextProvider> worker;
+};
+
+void TraceStandaloneFrameSinkStage(const char* trace_prefix,
+                                   const char* suffix) {
+  TraceLiveFrameProbeStage((std::string(trace_prefix) + suffix).c_str());
+}
+
+void EnsureStandaloneFrameSinkManagerAndRegistration(
+    const char* trace_prefix,
+    std::unique_ptr<viz::FrameSinkManagerImpl>* frame_sink_manager,
+    const viz::FrameSinkId& frame_sink_id,
+    const char* debug_label,
+    bool* frame_sink_id_registered) {
+  if (!*frame_sink_manager) {
+    TraceStandaloneFrameSinkStage(trace_prefix, " before manager");
+    viz::FrameSinkManagerImpl::InitParams manager_params;
+    *frame_sink_manager =
+        std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
+    TraceStandaloneFrameSinkStage(trace_prefix, " after manager");
+  }
+
+  if (!frame_sink_id_registered || *frame_sink_id_registered) {
+    return;
+  }
+  TraceStandaloneFrameSinkStage(trace_prefix, " before register id");
+  (*frame_sink_manager)
+      ->RegisterFrameSinkId(frame_sink_id, /*report_activation=*/true);
+  (*frame_sink_manager)->SetFrameSinkDebugLabel(frame_sink_id, debug_label);
+  *frame_sink_id_registered = true;
+  TraceStandaloneFrameSinkStage(trace_prefix, " after register id");
+}
+
+std::shared_ptr<gpu::InProcessGpuThreadHolder>
+EnsureStandaloneGpuThreadHolderForFrameSink(
+    const char* trace_prefix,
+    std::shared_ptr<gpu::InProcessGpuThreadHolder>* gpu_thread_holder,
+    gpu::GrContextType gr_context_type,
+    bool install_external_vulkan_for_testing,
+    bool install_external_d3d12_for_testing) {
+  TraceStandaloneFrameSinkStage(trace_prefix, " before gpu holder");
+  if (!*gpu_thread_holder) {
+    *gpu_thread_holder = std::make_shared<gpu::InProcessGpuThreadHolder>();
+    (*gpu_thread_holder)->GetGpuPreferences()->gr_context_type =
+        gr_context_type;
+    if (install_external_vulkan_for_testing) {
+      InstallPendingExternalVulkanForTesting(gpu_thread_holder->get());
+    }
+    if (install_external_d3d12_for_testing) {
+      InstallPendingExternalD3D12AdapterLuidForTesting(
+          gpu_thread_holder->get());
+    }
+  }
+  TraceStandaloneFrameSinkStage(trace_prefix, " after gpu holder");
+  return *gpu_thread_holder;
+}
+
+StandaloneRasterContextProviderPair CreateStandaloneRasterContextProviders(
+    const char* trace_prefix,
+    const std::shared_ptr<gpu::InProcessGpuThreadHolder>& gpu_thread_holder,
+    bool* gpu_context_created,
+    bool* raster_context_created,
+    bool* shared_image_interface_available,
+    std::string* failure_reason) {
+  TraceStandaloneFrameSinkStage(trace_prefix, " before context providers");
+  StandaloneRasterContextProviderPair providers;
+  providers.compositor =
+      base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
+          gpu_thread_holder, /*enforce_cache_controller_lock=*/false,
+          gpu_context_created, raster_context_created,
+          shared_image_interface_available, failure_reason);
+  providers.worker =
+      base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
+          gpu_thread_holder, /*enforce_cache_controller_lock=*/true,
+          gpu_context_created, raster_context_created,
+          shared_image_interface_available, failure_reason);
+  TraceStandaloneFrameSinkStage(trace_prefix, " after context providers");
+  return providers;
+}
+
 class StandaloneRootVizDisplayController {
  public:
   StandaloneRootVizDisplayController(
@@ -8127,59 +8209,28 @@ class StandaloneCcLayerHost final
       return false;
     }
 
-    viz::FrameSinkManagerImpl::InitParams manager_params;
-    if (!frame_sink_manager_) {
-      TraceLiveFrameProbeStage("cc host CreateFrameSink before manager");
-      frame_sink_manager_ =
-          std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
-      TraceLiveFrameProbeStage("cc host CreateFrameSink after manager");
-    }
-
     const viz::FrameSinkId frame_sink_id(777, 1);
-    if (!frame_sink_id_registered_) {
-      TraceLiveFrameProbeStage("cc host CreateFrameSink before register id");
-      frame_sink_manager_->RegisterFrameSinkId(frame_sink_id,
-                                               /*report_activation=*/true);
-      frame_sink_manager_->SetFrameSinkDebugLabel(
-          frame_sink_id, "standalone-renderer-cc-root");
-      frame_sink_id_registered_ = true;
-      TraceLiveFrameProbeStage("cc host CreateFrameSink after register id");
-    }
+    EnsureStandaloneFrameSinkManagerAndRegistration(
+        "cc host CreateFrameSink", &frame_sink_manager_, frame_sink_id,
+        "standalone-renderer-cc-root", &frame_sink_id_registered_);
 
-    TraceLiveFrameProbeStage("cc host CreateFrameSink before gpu holder");
-    if (!gpu_thread_holder_) {
-      gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
-      gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
-          use_d3d12_offscreen_output_
-              ? gpu::GrContextType::kGraphiteDawn
-              : (use_vulkan_offscreen_output_ ? gpu::GrContextType::kVulkan
-                                              : gpu::GrContextType::kGL);
-      if (use_vulkan_offscreen_output_) {
-        InstallPendingExternalVulkanForTesting(gpu_thread_holder_.get());
-      }
-      if (use_d3d12_offscreen_output_) {
-        InstallPendingExternalD3D12AdapterLuidForTesting(
-            gpu_thread_holder_.get());
-      }
-    }
-    TraceLiveFrameProbeStage("cc host CreateFrameSink after gpu holder");
-    TraceLiveFrameProbeStage("cc host CreateFrameSink before context providers");
-    auto compositor_context_provider =
-        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
-            gpu_thread_holder_, /*enforce_cache_controller_lock=*/false,
+    const gpu::GrContextType gr_context_type =
+        use_d3d12_offscreen_output_
+            ? gpu::GrContextType::kGraphiteDawn
+            : (use_vulkan_offscreen_output_ ? gpu::GrContextType::kVulkan
+                                            : gpu::GrContextType::kGL);
+    EnsureStandaloneGpuThreadHolderForFrameSink(
+        "cc host CreateFrameSink", &gpu_thread_holder_, gr_context_type,
+        use_vulkan_offscreen_output_, use_d3d12_offscreen_output_);
+    StandaloneRasterContextProviderPair context_providers =
+        CreateStandaloneRasterContextProviders(
+            "cc host CreateFrameSink", gpu_thread_holder_,
             &gpu_context_created_, &raster_context_created_,
             &shared_image_interface_available_, &frame_sink_failure_reason_);
-    auto worker_context_provider =
-        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
-            gpu_thread_holder_,
-            /*enforce_cache_controller_lock=*/true, &gpu_context_created_,
-            &raster_context_created_, &shared_image_interface_available_,
-            &frame_sink_failure_reason_);
-    TraceLiveFrameProbeStage("cc host CreateFrameSink after context providers");
 
     TraceLiveFrameProbeStage("cc host CreateFrameSink before worker bind");
     const gpu::ContextResult worker_bind_result =
-        worker_context_provider->BindToCurrentSequence();
+        context_providers.worker->BindToCurrentSequence();
     TraceLiveFrameProbeStage("cc host CreateFrameSink after worker bind");
     if (worker_bind_result != gpu::ContextResult::kSuccess) {
       RememberFrameSinkFailure(
@@ -8193,8 +8244,8 @@ class StandaloneCcLayerHost final
     auto layer_tree_frame_sink =
         std::make_unique<StandaloneDirectLayerTreeFrameSink>(
             frame_sink_manager_.get(), frame_sink_id, gpu_thread_holder_,
-            std::move(compositor_context_provider),
-            std::move(worker_context_provider), std::move(main_task_runner),
+            std::move(context_providers.compositor),
+            std::move(context_providers.worker), std::move(main_task_runner),
             g_standalone_native_window_size.IsEmpty()
                 ? physical_viewport_
                 : g_standalone_native_window_size,
@@ -8515,37 +8566,23 @@ class StandaloneCcSchedulerParityProbe final
       return false;
     }
 
-    if (!frame_sink_manager_) {
-      viz::FrameSinkManagerImpl::InitParams manager_params;
-      frame_sink_manager_ =
-          std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
-    }
     const viz::FrameSinkId frame_sink_id(778, 1);
-    if (!frame_sink_id_registered_) {
-      frame_sink_manager_->RegisterFrameSinkId(frame_sink_id,
-                                               /*report_activation=*/true);
-      frame_sink_manager_->SetFrameSinkDebugLabel(
-          frame_sink_id, "standalone-renderer-cc-scheduler-probe");
-      frame_sink_id_registered_ = true;
-    }
-
-    if (!gpu_thread_holder_) {
-      gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
-      gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
-          gpu::GrContextType::kGL;
-    }
-    auto compositor_context_provider =
-        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
-            gpu_thread_holder_, /*enforce_cache_controller_lock=*/false,
-            &gpu_context_created_, &raster_context_created_,
-            &shared_image_interface_available_, &failure_reason_);
-    auto worker_context_provider =
-        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
-            gpu_thread_holder_, /*enforce_cache_controller_lock=*/true,
+    EnsureStandaloneFrameSinkManagerAndRegistration(
+        "cc scheduler probe CreateFrameSink", &frame_sink_manager_,
+        frame_sink_id, "standalone-renderer-cc-scheduler-probe",
+        &frame_sink_id_registered_);
+    EnsureStandaloneGpuThreadHolderForFrameSink(
+        "cc scheduler probe CreateFrameSink", &gpu_thread_holder_,
+        gpu::GrContextType::kGL,
+        /*install_external_vulkan_for_testing=*/false,
+        /*install_external_d3d12_for_testing=*/false);
+    StandaloneRasterContextProviderPair context_providers =
+        CreateStandaloneRasterContextProviders(
+            "cc scheduler probe CreateFrameSink", gpu_thread_holder_,
             &gpu_context_created_, &raster_context_created_,
             &shared_image_interface_available_, &failure_reason_);
     const gpu::ContextResult worker_bind_result =
-        worker_context_provider->BindToCurrentSequence();
+        context_providers.worker->BindToCurrentSequence();
     if (worker_bind_result != gpu::ContextResult::kSuccess) {
       if (failure_reason_.empty()) {
         failure_reason_ =
@@ -8557,8 +8594,8 @@ class StandaloneCcSchedulerParityProbe final
     auto layer_tree_frame_sink =
         std::make_unique<StandaloneDirectLayerTreeFrameSink>(
             frame_sink_manager_.get(), frame_sink_id, gpu_thread_holder_,
-            std::move(compositor_context_provider),
-            std::move(worker_context_provider), std::move(main_task_runner),
+            std::move(context_providers.compositor),
+            std::move(context_providers.worker), std::move(main_task_runner),
             viewport_, &compositor_frame_submitted_, &viz_display_created_,
             &skia_gpu_reached_, /*submitted_output_size=*/nullptr,
             /*viz_display_output_size=*/nullptr, &copy_output_requested_,
