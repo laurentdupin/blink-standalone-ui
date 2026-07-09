@@ -2504,6 +2504,7 @@ set(BLINK_STANDALONE_PERFETTO_TRACING_CORE_SOURCES
 set(BLINK_STANDALONE_PERFETTO_TRACING_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/console_interceptor.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/data_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/debug_annotation.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/event_context.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/interceptor.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/in_process_tracing_backend.cc
@@ -3010,6 +3011,7 @@ set(BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/generic_pending_receiver.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/async_flusher.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/pending_flush.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/receiver_set.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/urgent_message_scope.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/connection_group.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/connection_group_ref.cc
@@ -3025,6 +3027,7 @@ set(BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/generated_code_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/handle_serialization.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/interface_ptr_state.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message_dispatcher.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message_header_validator.cc
@@ -3070,16 +3073,39 @@ set(BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_endpoint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle.cc
+)
+
+# These implementations are part of the Chromium Core/ipcz transport used by
+# the RootCompositorFrameSinkImpl/AsyncLayerTreeFrameSink proof. The product
+# C API keeps its established thunk-based Mojo contract until that whole
+# transport becomes a validated production feature.
+set(BLINK_STANDALONE_MOJO_BINDINGS_ROOT_FRAME_SINK_PROOF_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/direct_receiver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/service_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/native_handle_type_converters.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle_security_util_win.cc
+)
+
+set(BLINK_STANDALONE_MOJO_CORE_PROOF_INCLUDE_DIRS
+  ${BLINK_STANDALONE_MOJO_LEGACY_CORE_BUILDFLAGS_DIR}
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src
 )
 
 set_source_files_properties(${BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES}
   PROPERTIES
     COMPILE_DEFINITIONS "IS_MOJO_CPP_PLATFORM_IMPL=1")
 
+set_source_files_properties(
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle_security_util_win.cc
+  PROPERTIES
+    COMPILE_DEFINITIONS "IS_MOJO_CPP_PLATFORM_IMPL=1")
+
 set(BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/core_ipcz.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/embedder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/scoped_ipc_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/fuzzing_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_api.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/base_shared_memory_service.cc
@@ -3176,19 +3202,20 @@ set(BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src/util/ref_counted.cc
 )
 
-set_source_files_properties(${BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES}
-  PROPERTIES
-    COMPILE_DEFINITIONS "MOJO_SYSTEM_IMPL_IMPLEMENTATION=1;IS_MOJO_CORE_PORTS_IMPL=1")
+if(BLINK_STANDALONE_MOJO_CORE_PROOF)
+  set_source_files_properties(${BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES}
+    PROPERTIES
+      COMPILE_DEFINITIONS "MOJO_SYSTEM_IMPL_IMPLEMENTATION=1;IS_MOJO_CORE_PORTS_IMPL=1"
+      INCLUDE_DIRECTORIES "${BLINK_STANDALONE_MOJO_CORE_PROOF_INCLUDE_DIRS}")
 
-set_property(SOURCE
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/features.cc
-  APPEND PROPERTY COMPILE_DEFINITIONS IS_MOJO_CORE_EMBEDDER_FEATURES_IMPL)
+  set_source_files_properties(${BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES}
+    PROPERTIES
+      INCLUDE_DIRECTORIES "${BLINK_STANDALONE_MOJO_CORE_PROOF_INCLUDE_DIRS}")
 
-set_source_files_properties(
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_phase1_support.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/standalone_live_frame_bridge_probe.cc
-  PROPERTIES
-    COMPILE_DEFINITIONS "BLINK_STANDALONE_HAVE_MOJO_CORE_PROOF=1")
+  set_property(SOURCE
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/features.cc
+    APPEND PROPERTY COMPILE_DEFINITIONS IS_MOJO_CORE_EMBEDDER_FEATURES_IMPL)
+endif()
 
 set(BLINK_STANDALONE_VIZ_COMMON_VALUE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/client/shared_image_interface.cc
@@ -4271,13 +4298,6 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_BASE_RUNTIME_SOURCES}
   ${BLINK_STANDALONE_BLINK_RUNTIME_OWNER_SOURCES}
 )
-
-if(BLINK_STANDALONE_MOJO_CORE_PROOF)
-  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
-    ${BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES}
-    ${BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES}
-  )
-endif()
 
 set(BLINK_STANDALONE_LIBYUV_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/compare.cc

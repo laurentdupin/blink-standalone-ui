@@ -22,9 +22,6 @@
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#if defined(BLINK_STANDALONE_HAVE_MOJO_CORE_PROOF)
-#include "mojo/core/entrypoints.h"
-#endif
 
 namespace {
 
@@ -973,20 +970,8 @@ void InstallStandaloneMojoThunksForStandaloneRenderer() {
   installed = true;
 }
 
-#if defined(BLINK_STANDALONE_HAVE_MOJO_CORE_PROOF)
-void InstallStandaloneMojoCoreForStandaloneRenderer() {
-  EnsureStandaloneCurrentDefaultTaskRunner();
-  static bool installed = false;
-  if (installed)
-    return;
-  mojo::core::InitializeCore();
-  MojoEmbedderSetSystemThunks(&mojo::core::GetSystemThunks());
-  installed = true;
-}
-#else
 void InstallStandaloneMojoCoreForStandaloneRenderer() {
   InstallStandaloneMojoThunksForStandaloneRenderer();
 }
-#endif
 
 }  // namespace blink::standalone_renderer_probe

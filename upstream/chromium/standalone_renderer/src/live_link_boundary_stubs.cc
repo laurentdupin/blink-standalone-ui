@@ -14417,49 +14417,13 @@ PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::
     ~PropertyHandle() = default;
 }  // namespace skottie
 
-namespace mojo {
-ReceiverSetState::ReceiverSetState() = default;
-ReceiverSetState::~ReceiverSetState() = default;
-ReceiverSetState::Entry::Entry(ReceiverSetState& state,
-                               ReceiverId id,
-                               std::unique_ptr<ReceiverState> receiver,
-                               std::unique_ptr<MessageFilter>)
-    : state_(state), id_(id), receiver_(std::move(receiver)) {}
-ReceiverSetState::Entry::~Entry() = default;
-ReceiverId ReceiverSetState::Add(std::unique_ptr<ReceiverState>,
-                                 std::unique_ptr<MessageFilter>) {
-  return 0;
-}
-bool ReceiverSetState::Remove(ReceiverId) {
-  return false;
-}
-namespace internal {
+namespace mojo::internal {
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 size_t Buffer::Allocate(size_t) {
   return 0;
 }
 #endif
-InterfacePtrStateBase::InterfacePtrStateBase() = default;
-InterfacePtrStateBase::~InterfacePtrStateBase() = default;
-void InterfacePtrStateBase::Bind(
-    PendingRemoteState*,
-    scoped_refptr<base::SequencedTaskRunner>) {}
-bool InterfacePtrStateBase::InitializeEndpointClient(
-    bool,
-    bool,
-    bool,
-    std::unique_ptr<MessageReceiver>,
-    const char*,
-    MessageToMethodInfoCallback,
-    MessageToMethodNameCallback) {
-  return false;
-}
-PendingRemoteState InterfacePtrStateBase::Unbind() {
-  return PendingRemoteState();
-}
-void InterfacePtrStateBase::Swap(InterfacePtrStateBase*) {}
-}  // namespace internal
-}  // namespace mojo
+}  // namespace mojo::internal
 
 namespace ukm::mojom {
 UkmRecorderFactory::IPCStableHashFunction
@@ -20125,7 +20089,6 @@ template bool RawPtrBackupRefImpl<false>::CheckPointerWithinSameAlloc(uintptr_t,
 template bool RawPtrBackupRefImpl<true>::CheckPointerWithinSameAlloc(uintptr_t,
                                                                      uintptr_t,
                                                                      size_t);
-void CheckThatAddressIsntWithinFirstPartitionPage(uintptr_t) {}
 }  // namespace base::internal
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)

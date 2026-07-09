@@ -29,7 +29,7 @@ option(BLINK_STANDALONE_DAWN_D3D12_AUTO_DETECT
 option(BLINK_STANDALONE_USE_VCPKG_DEPS
   "Use vcpkg/system packages for libxml2/Iconv/ZLIB instead of only source-owned repository dependencies." ON)
 option(BLINK_STANDALONE_MOJO_CORE_PROOF
-  "Build the guarded standalone Mojo Core legacy proof used by the Chromium async frame-sink probe." ON)
+  "Build the guarded standalone Mojo Core legacy proof used by the Chromium async frame-sink probe." OFF)
 set(BLINK_STANDALONE_DAWN_D3D12_LIBS
   ""
   CACHE STRING
@@ -1354,6 +1354,7 @@ set(BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_root.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_stats.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_tls_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/pointers/raw_ptr_backup_ref_impl.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/random.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/reservation_offset_table.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/scheduler_loop_quarantine.cc
@@ -2016,11 +2017,6 @@ if(BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
     ${BLINK_STANDALONE_RELEASE_LEVEL_BUILDFLAGS_DIR}
   )
 endif()
-if(BLINK_STANDALONE_MOJO_CORE_PROOF)
-  target_include_directories(blink_standalone_live_renderer_objects BEFORE PRIVATE
-    ${BLINK_STANDALONE_MOJO_LEGACY_CORE_BUILDFLAGS_DIR}
-  )
-endif()
 set_property(TARGET blink_standalone_live_renderer_objects PROPERTY
   MSVC_RUNTIME_LIBRARY "MultiThreaded")
 
@@ -2041,12 +2037,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_RELEASE_LEVEL_BUILDFLAGS_DIR}
     )
   endif()
-  if(BLINK_STANDALONE_MOJO_CORE_PROOF)
-    target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
-      ${BLINK_STANDALONE_MOJO_LEGACY_CORE_BUILDFLAGS_DIR}
-    )
-  endif()
-
   target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
     ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
     ${BLINK_STANDALONE_V8_INCLUDE_DIR}
@@ -2063,7 +2053,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/third_party/xxhash
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/dawn/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/include
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/khronos
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan-headers/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan_memory_allocator/include
@@ -2198,6 +2187,277 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     LibXml2::LibXml2
   )
   blink_standalone_copy_icu_data(blink_standalone_render_benchmark_skia)
+
+  if(BLINK_STANDALONE_MOJO_CORE_PROOF)
+    set(BLINK_STANDALONE_VIZ_ROOT_FRAME_SINK_RUNTIME_SOURCES
+      ${BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES}
+    )
+    list(FILTER BLINK_STANDALONE_VIZ_ROOT_FRAME_SINK_RUNTIME_SOURCES INCLUDE REGEX
+      "/components/viz/(common|service/(display|frame_sinks|surfaces))/")
+    list(FILTER BLINK_STANDALONE_VIZ_ROOT_FRAME_SINK_RUNTIME_SOURCES EXCLUDE REGEX
+      "(gpu_service|gpu_channel|skia_output_device|skia_output_surface_impl|video|overlay_processor_(android|delegated|mac|ozone|surface_control|win)|test|mock|fake)")
+    set(BLINK_STANDALONE_VIZ_FAKE_OUTPUT_SURFACE_PROVIDER_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/tools/frame_sink_probe/chromium_frame_sink_probe.cc
+    )
+    set(BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES)
+    macro(blink_standalone_add_frame_sink_mojom _relative_mojom)
+      foreach(_blink_standalone_mojom_suffix IN ITEMS ".mojom.cc" ".mojom-shared.cc")
+        set(_blink_standalone_mojom_source
+          "${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/${_relative_mojom}${_blink_standalone_mojom_suffix}")
+        if(EXISTS "${_blink_standalone_mojom_source}")
+          list(APPEND BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES
+            "${_blink_standalone_mojom_source}")
+        endif()
+      endforeach()
+    endmacro()
+    foreach(_blink_standalone_frame_sink_mojom IN ITEMS
+        mojo/public/mojom/base/shared_memory
+        mojo/public/mojom/base/time
+        mojo/public/mojom/base/token
+        mojo/public/mojom/base/unguessable_token
+        services/viz/privileged/mojom/compositing/begin_frame_observer
+        services/viz/privileged/mojom/compositing/display_private
+        services/viz/privileged/mojom/compositing/external_begin_frame_controller
+        services/viz/privileged/mojom/compositing/features
+        services/viz/privileged/mojom/compositing/frame_sink_manager
+        services/viz/privileged/mojom/compositing/frame_sink_manager_test_api
+        services/viz/privileged/mojom/compositing/frame_sinks_metrics_recorder
+        services/viz/privileged/mojom/compositing/layered_window_updater
+        services/viz/privileged/mojom/compositing/overlay_strategy
+        services/viz/privileged/mojom/compositing/renderer_settings
+        services/viz/privileged/mojom/compositing/vsync_parameter_observer
+        gpu/ipc/common/context_result
+        gpu/ipc/common/mailbox
+        gpu/ipc/common/shared_image_pool_id
+        gpu/ipc/common/surface_handle
+        gpu/ipc/common/sync_token
+      )
+      blink_standalone_add_frame_sink_mojom(
+        "${_blink_standalone_frame_sink_mojom}")
+    endforeach()
+    file(GLOB_RECURSE _blink_standalone_frame_sink_globbed_mojoms
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/compositing/*.mojom.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/compositing/*.mojom-shared.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/hit_test/*.mojom.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/hit_test/*.mojom-shared.cc
+    )
+    list(APPEND BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES
+      ${_blink_standalone_frame_sink_globbed_mojoms})
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES EXCLUDE
+      REGEX "test-utils\\.cc$")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES EXCLUDE
+      REGEX "mojom-blink\\.cc$")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES EXCLUDE
+      REGEX "frame_sink_video_capture|video_capture|video_detector")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES EXCLUDE
+      REGEX "/services/viz/privileged/mojom/gl/")
+    list(REMOVE_DUPLICATES
+      BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES)
+    set(BLINK_STANDALONE_FRAME_SINK_BASE_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_LIVE_SOURCES})
+    set(_blink_standalone_frame_sink_base_sources)
+    foreach(_blink_standalone_frame_sink_base_source IN LISTS
+        BLINK_STANDALONE_FRAME_SINK_BASE_FOUNDATION_SOURCES)
+      if(_blink_standalone_frame_sink_base_source MATCHES
+          "/upstream/chromium/base/")
+        list(APPEND _blink_standalone_frame_sink_base_sources
+          "${_blink_standalone_frame_sink_base_source}")
+      endif()
+    endforeach()
+    set(BLINK_STANDALONE_FRAME_SINK_BASE_FOUNDATION_SOURCES
+      ${_blink_standalone_frame_sink_base_sources})
+    list(APPEND BLINK_STANDALONE_FRAME_SINK_BASE_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/lock_impl_win.cc)
+    set(BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_LIVE_SOURCES})
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES INCLUDE
+      REGEX "/ui/gfx/")
+    file(GLOB_RECURSE BLINK_STANDALONE_FRAME_SINK_GFX_GEOMETRY_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/*.cc)
+    list(APPEND BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_FRAME_SINK_GFX_GEOMETRY_SOURCES})
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/ui/gfx/geometry/test/")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES EXCLUDE
+      REGEX "mojom-blink\\.cc$")
+    list(REMOVE_DUPLICATES BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES)
+    file(GLOB_RECURSE BLINK_STANDALONE_FRAME_SINK_SKIA_MOJOM_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/skia/public/mojom/*.cc)
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_MOJOM_SOURCES EXCLUDE
+      REGEX "mojom-blink\\.cc$")
+    file(GLOB_RECURSE BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/*.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/*.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/base/*.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/*.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/effects/*.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/image/*.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/pathops/*.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/shaders/*.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/*.cpp)
+    list(APPEND BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkFontHost_win.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkFontMgr_win_dw.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkGlobalInitialization_default.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkImageGeneratorWIC.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkLog_win.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkMemory_malloc.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkOSFile_win.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkScalerContext_win_dw.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkTypeface_win_dw.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/ports/SkTypeface_proxy.cpp)
+    list(APPEND BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkHdrAgtm.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkHdrAgtmParse.cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkHdrMetadata.cpp)
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/third_party/skia/src/(gpu|sksl|text/gpu)/")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/third_party/skia/src/image/SkImage_AndroidFactories\\.cpp$")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/third_party/skia/src/utils/SkGetExecutablePath_(linux|mac)\\.cpp$")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/skia/ext/.*(_LSX|_neon|_mips|_dspr2|_msa)\\.cc$")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/skia/ext/.*_bench\\.cc$")
+    list(FILTER BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES EXCLUDE
+      REGEX "/skia/ext/test_.*\\.cc$")
+    list(APPEND BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/pdf/SkDocument_PDF_None.cpp)
+    set(BLINK_STANDALONE_FRAME_SINK_GPU_FOUNDATION_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/swap_buffers_complete_params.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence_handle.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/swap_result.cc
+    )
+    file(GLOB BLINK_STANDALONE_FRAME_SINK_LIBYUV_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/*.cc)
+    set_source_files_properties(${BLINK_STANDALONE_FRAME_SINK_LIBYUV_SOURCES}
+      PROPERTIES
+        INCLUDE_DIRECTORIES "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/include"
+        COMPILE_DEFINITIONS "CHROMIUM;LIBYUV_DISABLE_X86;LIBYUV_DISABLE_NEON;LIBYUV_DISABLE_SVE;LIBYUV_DISABLE_SME;LIBYUV_DISABLE_RVV;LIBYUV_DISABLE_LSX;LIBYUV_DISABLE_LASX")
+    file(GLOB BLINK_STANDALONE_FRAME_SINK_VIZ_COPY_MOJOM_TRAIT_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/*_mojom_traits.cc)
+    file(GLOB BLINK_STANDALONE_FRAME_SINK_SKIA_TRAIT_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/public/mojom/*_mojom_traits.cc)
+    set(BLINK_STANDALONE_FRAME_SINK_MOJO_BIG_BUFFER_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/big_buffer.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/big_buffer_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/mojo/public/mojom/base/big_buffer.mojom-shared.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/mojo/public/mojom/base/big_buffer.mojom.cc
+    )
+    set(BLINK_STANDALONE_FRAME_SINK_DISPLAY_BACKING_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/buffer_queue.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/vsync_parameter_listener.cc
+    )
+    set(BLINK_STANDALONE_FRAME_SINK_NATIVE_MOJOM_TRAIT_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/shared_memory_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/shared_memory_version.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/time_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/token_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/unguessable_token_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/mailbox_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/display/mojom/display_constants_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/ca_layer_params_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/color_space_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/delegated_ink_metadata_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/display_color_spaces_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/gpu_fence_handle_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/hdr_metadata_mojom_traits.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/latency/mojom/latency_info_mojom_traits.cc
+    )
+    set(BLINK_STANDALONE_FRAME_SINK_PROOF_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/tools/frame_sink_probe/frame_sink_probe_main.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/tools/frame_sink_probe/standalone_trace_bridge_stub.cc
+      ${BLINK_STANDALONE_VIZ_FAKE_OUTPUT_SURFACE_PROVIDER_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_LIBYUV_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_VIZ_COPY_MOJOM_TRAIT_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_SKIA_TRAIT_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_MOJO_BIG_BUFFER_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_DISPLAY_BACKING_SOURCES}
+      ${BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES}
+      ${BLINK_STANDALONE_MOJO_BINDINGS_ROOT_FRAME_SINK_PROOF_SOURCES}
+      ${BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES}
+      ${BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES}
+      ${BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_NATIVE_MOJOM_TRAIT_SOURCES}
+      ${BLINK_STANDALONE_VIZ_COMMON_VALUE_SOURCES}
+      ${BLINK_STANDALONE_VIZ_PUBLIC_CPP_MOJOM_TRAIT_SOURCES}
+      ${BLINK_STANDALONE_VIZ_ROOT_FRAME_SINK_RUNTIME_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_MOJOM_GENERATED_SOURCES}
+      ${BLINK_STANDALONE_BASE_RUNTIME_SOURCES}
+      ${BLINK_STANDALONE_BASE_TRACING_SOURCES}
+      ${BLINK_STANDALONE_PROTOZERO_RUNTIME_SOURCES}
+      ${BLINK_STANDALONE_PROTOZERO_FILTERING_SOURCES}
+      ${BLINK_STANDALONE_PERFETTO_BASE_SOURCES}
+      ${BLINK_STANDALONE_PERFETTO_PROTOVM_SOURCES}
+      ${BLINK_STANDALONE_PERFETTO_TRACING_CORE_SOURCES}
+      ${BLINK_STANDALONE_PERFETTO_TRACING_SOURCES}
+      ${BLINK_STANDALONE_PERFETTO_GENERATED_SOURCES}
+      ${BLINK_STANDALONE_GFX_RANGE_SOURCES}
+      ${BLINK_STANDALONE_UI_VALUE_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_BASE_FOUNDATION_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_GFX_FOUNDATION_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_SKIA_FOUNDATION_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_SKIA_MOJOM_SOURCES}
+      ${BLINK_STANDALONE_ICU_PREFIX_SOURCES}
+      ${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
+      ${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
+      ${BLINK_STANDALONE_FRAME_SINK_GPU_FOUNDATION_SOURCES}
+    )
+    list(REMOVE_DUPLICATES BLINK_STANDALONE_FRAME_SINK_PROOF_SOURCES)
+    set(_blink_standalone_frame_sink_existing_sources)
+    foreach(_blink_standalone_frame_sink_source IN LISTS
+        BLINK_STANDALONE_FRAME_SINK_PROOF_SOURCES)
+      if(EXISTS "${_blink_standalone_frame_sink_source}")
+        list(APPEND _blink_standalone_frame_sink_existing_sources
+          "${_blink_standalone_frame_sink_source}")
+      endif()
+    endforeach()
+    set(BLINK_STANDALONE_FRAME_SINK_PROOF_SOURCES
+      ${_blink_standalone_frame_sink_existing_sources})
+
+    add_executable(blink_standalone_frame_sink_probe
+      ${BLINK_STANDALONE_FRAME_SINK_PROOF_SOURCES})
+    set_property(TARGET blink_standalone_frame_sink_probe PROPERTY
+      MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    target_compile_definitions(blink_standalone_frame_sink_probe PRIVATE
+      BLINK_STANDALONE_FRAME_SINK_ASYNC_PROOF=0)
+
+    foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
+                                   COMPILE_OPTIONS)
+      get_target_property(property_value blink_standalone_render_benchmark_skia
+        ${property_name})
+      if(property_value AND NOT property_value STREQUAL "property_value-NOTFOUND")
+        if(property_name STREQUAL "INCLUDE_DIRECTORIES")
+          target_include_directories(blink_standalone_frame_sink_probe PRIVATE
+            ${property_value})
+        elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+          target_compile_definitions(blink_standalone_frame_sink_probe PRIVATE
+            ${property_value})
+        elseif(property_name STREQUAL "COMPILE_OPTIONS")
+          target_compile_options(blink_standalone_frame_sink_probe PRIVATE
+            ${property_value})
+        endif()
+      endif()
+    endforeach()
+    target_link_libraries(blink_standalone_frame_sink_probe PRIVATE
+      blink_standalone_abseil_static
+      blink_standalone_chromium_libcxx
+      ${BLINK_STANDALONE_PLATFORM_LINK_LIBS}
+    )
+    target_include_directories(blink_standalone_frame_sink_probe PRIVATE
+      ${BLINK_STANDALONE_MOJO_CORE_PROOF_INCLUDE_DIRS})
+    if(WIN32 AND BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+      target_link_libraries(blink_standalone_frame_sink_probe PRIVATE
+        libcpmt)
+    endif()
+    if(BLINK_STANDALONE_PLATFORM_LINK_OPTIONS)
+      target_link_options(blink_standalone_frame_sink_probe PRIVATE
+        ${BLINK_STANDALONE_PLATFORM_LINK_OPTIONS})
+    endif()
+    blink_standalone_copy_icu_data(blink_standalone_frame_sink_probe)
+  endif()
 
   foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
                                  COMPILE_OPTIONS)

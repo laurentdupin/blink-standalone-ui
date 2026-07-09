@@ -5742,6 +5742,26 @@ class StandaloneRootFrameSinkController {
     bool display_available = false;
   };
 
+  // Keep external target setup on the same root-surface lifecycle boundary as
+  // compositor-frame submission. The direct cc frame sink owns only the
+  // embedder's borrowed target and its release callback; Viz owns whether a
+  // root surface is activated, visible, and sized for a CopyOutput request.
+  enum class ExternalTargetDisplayPrepareStatus {
+    kReady,
+    kPendingSurfaceSize,
+    kPendingSurfaceActivation,
+    kPendingLocalSurfaceId,
+    kFailedOutputSurfaceLost,
+    kFailedDisplayInitialization,
+  };
+
+  struct ExternalTargetDisplayPrepareResult {
+    ExternalTargetDisplayPrepareStatus status =
+        ExternalTargetDisplayPrepareStatus::kPendingLocalSurfaceId;
+    gfx::Size output_size;
+    bool display_created = false;
+  };
+
   StandaloneRootFrameSinkController(
       viz::FrameSinkManagerImpl* frame_sink_manager,
       const viz::FrameSinkId& frame_sink_id,
@@ -5782,7 +5802,8 @@ class StandaloneRootFrameSinkController {
                       viz_display_created,
                       viz_display_output_size,
                       skia_gpu_reached,
-                      failure_reason) {}
+                      failure_reason),
+        viz_display_output_size_(viz_display_output_size) {}
 
   StandaloneRootFrameSinkController(
       const StandaloneRootFrameSinkController&) = delete;
@@ -5900,33 +5921,68 @@ class StandaloneRootFrameSinkController {
     support_.RequestCopyOfOutput(local_surface_id_, std::move(request));
   }
 
-  bool EnsureDisplay(const gfx::Size& output_size) {
-    return display_root_.EnsureDisplay(output_size, support_.support(),
-                                       support_.begin_frame_source());
-  }
+  ExternalTargetDisplayPrepareResult PrepareExternalTargetCopy(
+      const gfx::Size& output_size,
+      base::OnceClosure invalidate_superseded_copy) {
+    ExternalTargetDisplayPrepareResult result;
+    result.output_size = output_size;
+    if (output_size.IsEmpty()) {
+      result.status = ExternalTargetDisplayPrepareStatus::kPendingSurfaceSize;
+      return result;
+    }
+    if (NeedsFreshActivatedSurfaceForExternalTarget(output_size)) {
+      result.status = ExternalTargetDisplayPrepareStatus::kPendingSurfaceSize;
+      return result;
+    }
+    if (NeedsActivatedRootSurfaceForExternalTarget()) {
+      result.status =
+          ExternalTargetDisplayPrepareStatus::kPendingSurfaceActivation;
+      return result;
+    }
+    if (display_root_.DisplayOutputSurfaceLost()) {
+      display_root_.ResetDisplayAfterOutputSurfaceLoss();
+      result.status =
+          ExternalTargetDisplayPrepareStatus::kFailedOutputSurfaceLost;
+      return result;
+    }
 
-  void UpdateForExternalTargetCopy(const gfx::Size& output_size) {
+    // A resize supersedes the previous exact-surface CopyOutput request. Let
+    // the external-target adapter mark that request stale before Display sees
+    // the new size, while retaining the borrowed target until Viz completes
+    // its callback/release path.
+    if (display_root_.ShouldResetOffscreenForExternalTargetResize(
+            output_size)) {
+      if (invalidate_superseded_copy) {
+        std::move(invalidate_superseded_copy).Run();
+      }
+      display_root_.ResetOffscreenForExternalTargetResize();
+    }
+
+    if (!HasValidLocalSurfaceId()) {
+      result.status =
+          ExternalTargetDisplayPrepareStatus::kPendingLocalSurfaceId;
+      return result;
+    }
+    const bool had_display = display_root_.HasDisplay();
+    if (!display_root_.EnsureDisplay(output_size, support_.support(),
+                                     support_.begin_frame_source())) {
+      result.status =
+          ExternalTargetDisplayPrepareStatus::kFailedDisplayInitialization;
+      return result;
+    }
     display_root_.UpdateForExternalTargetCopy(
         local_surface_id_, last_submitted_device_scale_factor_,
         last_submitted_size_in_pixels_, output_size);
-  }
-
-  bool ShouldResetOffscreenForExternalTargetResize(
-      const gfx::Size& output_size) const {
-    return display_root_.ShouldResetOffscreenForExternalTargetResize(
-        output_size);
+    if (viz_display_output_size_) {
+      *viz_display_output_size_ = output_size;
+    }
+    result.display_created = !had_display && display_root_.HasDisplay();
+    result.status = ExternalTargetDisplayPrepareStatus::kReady;
+    return result;
   }
 
   void ResetOffscreenForExternalTargetResize() {
     display_root_.ResetOffscreenForExternalTargetResize();
-  }
-
-  bool DisplayOutputSurfaceLost() const {
-    return display_root_.DisplayOutputSurfaceLost();
-  }
-
-  void ResetDisplayAfterOutputSurfaceLoss() {
-    display_root_.ResetDisplayAfterOutputSurfaceLoss();
   }
 
   void ForceImmediateDrawAndSwapIfPossible() {
@@ -5969,6 +6025,7 @@ class StandaloneRootFrameSinkController {
   gfx::Size last_submitted_size_in_pixels_;
   viz::LocalSurfaceId last_submitted_local_surface_id_;
   viz::HitTestRegionList last_hit_test_data_;
+  raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
 };
 
 class StandaloneCopyOutputController {
@@ -6604,38 +6661,36 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return result;
     }
 
-    if (root_frame_sink_.NeedsFreshActivatedSurfaceForExternalTarget(
-            result.output_size)) {
-      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-          std::string(diagnostic_label) +
-              ": pending reason=waiting for root surface LocalSurfaceId "
-              "matching external target size",
-          result.output_size);
-      return result;
-    }
-    if (root_frame_sink_.NeedsActivatedRootSurfaceForExternalTarget()) {
-      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-          std::string(diagnostic_label) +
-              ": pending reason=waiting for root surface activation",
-          result.output_size);
-      return result;
-    }
-
-    if (root_frame_sink_.DisplayOutputSurfaceLost()) {
-      root_frame_sink_.ResetDisplayAfterOutputSurfaceLoss();
-      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          std::string(diagnostic_label) +
-              ": failed failure=Viz Display output surface was lost",
-          result.output_size);
-      return result;
-    }
-
-    ResetOffscreenVizDisplayForExternalTargetResize(result.output_size);
-    if (!display_) {
-      if (!root_frame_sink_.HasValidLocalSurfaceId()) {
+    const auto surface_result = root_frame_sink_.PrepareExternalTargetCopy(
+        result.output_size,
+        base::BindOnce(
+            &StandaloneDirectLayerTreeFrameSink::
+                InvalidateSupersededExternalTargetCopyForResize,
+            weak_factory_.GetWeakPtr()));
+    result.display_created = surface_result.display_created;
+    switch (surface_result.status) {
+      case StandaloneRootFrameSinkController::
+          ExternalTargetDisplayPrepareStatus::kReady:
+        break;
+      case StandaloneRootFrameSinkController::
+          ExternalTargetDisplayPrepareStatus::kPendingSurfaceSize:
+        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+            std::string(diagnostic_label) +
+                ": pending reason=waiting for root surface LocalSurfaceId "
+                "matching external target size",
+            result.output_size);
+        return result;
+      case StandaloneRootFrameSinkController::
+          ExternalTargetDisplayPrepareStatus::kPendingSurfaceActivation:
+        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+            std::string(diagnostic_label) +
+                ": pending reason=waiting for root surface activation",
+            result.output_size);
+        return result;
+      case StandaloneRootFrameSinkController::
+          ExternalTargetDisplayPrepareStatus::kPendingLocalSurfaceId:
         result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
             html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
             std::string(diagnostic_label) +
@@ -6643,28 +6698,22 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                 "LocalSurfaceId",
             result.output_size);
         return result;
-      }
-      if (!EnsureVizDisplay(result.output_size)) {
+      case StandaloneRootFrameSinkController::
+          ExternalTargetDisplayPrepareStatus::kFailedOutputSurfaceLost:
+        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+            std::string(diagnostic_label) +
+                ": failed failure=Viz Display output surface was lost",
+            result.output_size);
+        return result;
+      case StandaloneRootFrameSinkController::
+          ExternalTargetDisplayPrepareStatus::kFailedDisplayInitialization:
         result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
             html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
             std::string(diagnostic_label) +
                 ": failed failure=Viz Display could not initialize",
             result.output_size);
         return result;
-      }
-      result.display_created = true;
-    }
-    if (!root_frame_sink_.HasValidLocalSurfaceId()) {
-      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-          std::string(diagnostic_label) +
-              ": pending reason=Viz Display has no LocalSurfaceId",
-          result.output_size);
-      return result;
-    }
-    root_frame_sink_.UpdateForExternalTargetCopy(result.output_size);
-    if (viz_display_output_size_) {
-      *viz_display_output_size_ = result.output_size;
     }
     if (result.display_created && draw_after_display_create) {
       DrawVizDisplayNow();
@@ -7522,16 +7571,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
   }
 
-  bool EnsureVizDisplay(const gfx::Size& output_size) {
-    return root_frame_sink_.EnsureDisplay(output_size);
-  }
-
-  void ResetOffscreenVizDisplayForExternalTargetResize(
-      const gfx::Size& output_size) {
-    if (!root_frame_sink_.ShouldResetOffscreenForExternalTargetResize(
-            output_size)) {
-      return;
-    }
+  void InvalidateSupersededExternalTargetCopyForResize() {
     TraceLiveFrameProbeStage(
         "direct frame sink resize offscreen Display for external target");
     if (async_external_gpu_target_copy_.status ==
