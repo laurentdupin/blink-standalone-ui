@@ -11,6 +11,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -56,6 +57,22 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
   // Creates a new RootCompositorFrameSinkImpl.
   static std::unique_ptr<RootCompositorFrameSinkImpl> Create(
       mojom::RootCompositorFrameSinkParamsPtr params,
+      FrameSinkManagerImpl* frame_sink_manager,
+      OutputSurfaceProvider* output_surface_provider,
+      uint32_t restart_id,
+      bool run_all_compositor_stages_before_draw,
+      const DebugRendererSettings* debug_settings,
+      HintSessionFactory* hint_session_factory);
+
+  // Creates a root sink which calls |direct_client| on the current sequence
+  // instead of serializing callbacks through a Mojo endpoint. The caller owns
+  // |direct_client| and must destroy this root sink before the client.
+  //
+  // This is intended for in-process embedders which already own the cc/Viz
+  // execution sequence but cannot use a full Mojo Core transport.
+  static std::unique_ptr<RootCompositorFrameSinkImpl> CreateForDirectClient(
+      mojom::RootCompositorFrameSinkParamsPtr params,
+      mojom::CompositorFrameSinkClient* direct_client,
       FrameSinkManagerImpl* frame_sink_manager,
       OutputSurfaceProvider* output_surface_provider,
       uint32_t restart_id,
@@ -142,12 +159,23 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
  private:
   class StandaloneBeginFrameObserver;
 
+  static std::unique_ptr<RootCompositorFrameSinkImpl> CreateInternal(
+      mojom::RootCompositorFrameSinkParamsPtr params,
+      mojom::CompositorFrameSinkClient* direct_client,
+      FrameSinkManagerImpl* frame_sink_manager,
+      OutputSurfaceProvider* output_surface_provider,
+      uint32_t restart_id,
+      bool run_all_compositor_stages_before_draw,
+      const DebugRendererSettings* debug_settings,
+      HintSessionFactory* hint_session_factory);
+
   RootCompositorFrameSinkImpl(
       FrameSinkManagerImpl* frame_sink_manager,
       const FrameSinkId& frame_sink_id,
       mojo::PendingAssociatedReceiver<mojom::CompositorFrameSink>
           frame_sink_receiver,
       mojo::PendingRemote<mojom::CompositorFrameSinkClient> frame_sink_client,
+      mojom::CompositorFrameSinkClient* direct_client,
       mojo::PendingAssociatedReceiver<mojom::DisplayPrivate> display_receiver,
       mojo::Remote<mojom::DisplayClient> display_client,
       std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
@@ -180,6 +208,9 @@ class VIZ_SERVICE_EXPORT RootCompositorFrameSinkImpl
   base::flat_set<base::TimeDelta> GetSupportedFrameIntervals();
 
   mojo::Remote<mojom::CompositorFrameSinkClient> compositor_frame_sink_client_;
+  // Non-null only for the in-process direct-client factory. It is owned by the
+  // embedder and outlives |support_|.
+  raw_ptr<mojom::CompositorFrameSinkClient> direct_client_ = nullptr;
   mojo::AssociatedReceiver<mojom::CompositorFrameSink>
       compositor_frame_sink_receiver_;
   // |display_client_| may be NullRemote on platforms that do not use it.

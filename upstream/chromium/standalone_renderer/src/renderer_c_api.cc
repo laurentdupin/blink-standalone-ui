@@ -2933,8 +2933,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
        LatestPhysicalWidth(renderer) != expected_physical_width) ||
       (expected_physical_height && LatestPhysicalHeight(renderer) &&
        LatestPhysicalHeight(renderer) != expected_physical_height)) {
+    InvalidatePreparedGpuSourceFrame(renderer);
     renderer->gpu_prepare_required_after_update = true;
-    renderer->gpu_source_frame_pending = false;
+    // A prepared frame at the previous physical size cannot satisfy this
+    // request. Make the next dedicated continuation request a real backend
+    // source frame instead of repeating prepare-only work.
+    renderer->gpu_source_frame_pending = true;
     result->status = BLINK_STANDALONE_STATUS_PENDING;
     result->state = BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_PENDING;
     return SetLastError(
@@ -3083,8 +3087,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     }
     if (external_target &&
         !LatestGpuOutputSizeMatchesTarget(renderer, target)) {
+      InvalidatePreparedGpuSourceFrame(renderer);
       renderer->gpu_prepare_required_after_update = true;
-      renderer->gpu_source_frame_pending = false;
+      renderer->gpu_source_frame_pending = true;
       renderer->runtime->ReleaseExternalGpuTargetState();
       result->status = BLINK_STANDALONE_STATUS_PENDING;
       return SetLastError(
@@ -3537,8 +3542,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
           "submit_gpu_frame_async pending: GPU source frame is not ready");
     }
     if (!LatestGpuOutputSizeMatchesTarget(renderer, &main_target)) {
+      InvalidatePreparedGpuSourceFrame(renderer);
       renderer->gpu_prepare_required_after_update = true;
-      renderer->gpu_source_frame_pending = false;
+      renderer->gpu_source_frame_pending = true;
       renderer->runtime->ReleaseExternalGpuTargetState();
       result->status = BLINK_STANDALONE_STATUS_PENDING;
       result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING;

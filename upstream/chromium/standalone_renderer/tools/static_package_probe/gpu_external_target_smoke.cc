@@ -2300,6 +2300,344 @@ bool RunVulkanResizeReturnSmoke() {
   return true;
 }
 
+bool RunVulkanDedicatedThreadResizeReturnSmoke() {
+  constexpr uint32_t kLargeWidth = 2560;
+  constexpr uint32_t kLargeHeight = 1440;
+  constexpr uint32_t kSmallWidth = 1280;
+  constexpr uint32_t kSmallHeight = 720;
+
+  VulkanProbeContext context;
+  std::string failure;
+  if (!InitializeVulkanProbeContext(&context, kLargeWidth, kLargeHeight,
+                                    &failure)) {
+    std::printf("static_gpu_external_target_smoke: blocked "
+                "vulkan_dedicated_resize_return=0 failure=%s\n",
+                failure.c_str());
+    return true;
+  }
+
+  auto destroy_image = [&](VkImage* image, VkDeviceMemory* memory) {
+    if (context.device == VK_NULL_HANDLE) {
+      return;
+    }
+    if (context.vk.DeviceWaitIdle) {
+      context.vk.DeviceWaitIdle(context.device);
+    }
+    if (image && *image != VK_NULL_HANDLE) {
+      context.vk.DestroyImage(context.device, *image, nullptr);
+      *image = VK_NULL_HANDLE;
+    }
+    if (memory && *memory != VK_NULL_HANDLE) {
+      context.vk.FreeMemory(context.device, *memory, nullptr);
+      *memory = VK_NULL_HANDLE;
+    }
+  };
+
+  blink_standalone_renderer_config_t config = {};
+  config.width = static_cast<int>(kLargeWidth);
+  config.height = static_cast<int>(kLargeHeight);
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create_dedicated_thread(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    DestroyVulkanProbeContext(&context);
+    return Fail("vulkan dedicated resize_return create");
+  }
+
+  blink_standalone_vulkan_external_device_t external_device = {};
+  external_device.vk_instance = context.instance;
+  external_device.vk_physical_device = context.physical_device;
+  external_device.vk_device = context.device;
+  external_device.vk_queue = context.queue;
+  external_device.queue_family_index = context.queue_family_index;
+  external_device.api_version = VK_API_VERSION_1_1;
+  external_device.enabled_instance_extensions =
+      context.enabled_instance_extensions.data();
+  external_device.enabled_instance_extension_count =
+      context.enabled_instance_extensions.size();
+  external_device.enabled_device_extensions =
+      context.enabled_device_extensions.data();
+  external_device.enabled_device_extension_count =
+      context.enabled_device_extensions.size();
+  status = blink_standalone_renderer_configure_vulkan_external_device(
+      renderer, &external_device);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "configure_vulkan_dedicated_resize_return status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  const char* html =
+      "<!doctype html><style>html,body{margin:0;width:100%;height:100%;"
+      "background:#123456}#box{position:absolute;left:16px;top:12px;"
+      "width:80px;height:32px;background:#d06329}#glass{position:absolute;"
+      "left:120px;top:80px;width:360px;height:180px;border-radius:28px;"
+      "background:rgba(255,255,255,.25);backdrop-filter:blur(12px) "
+      "saturate(160%);-webkit-backdrop-filter:blur(12px) "
+      "saturate(160%)}</style><div id='box'></div><div id='glass'></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "set_document_vulkan_dedicated_resize_return status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  auto make_target = [&](uint32_t width, uint32_t height, uint64_t generation,
+                         VkImage image, VkDeviceMemory memory,
+                         VkDeviceSize allocation_size,
+                         uint32_t memory_type_index) {
+    blink_standalone_external_gpu_target_t target = {};
+    target.common.backend = BLINK_STANDALONE_GPU_BACKEND_VULKAN;
+    target.common.logical_width = width;
+    target.common.logical_height = height;
+    target.common.physical_width = width;
+    target.common.physical_height = height;
+    target.common.device_scale_factor = 1.0f;
+    target.common.pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
+    target.common.alpha_mode = BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
+    target.common.color_space = BLINK_STANDALONE_COLOR_SPACE_SRGB;
+    target.common.generation = generation;
+    target.vulkan.vk_image = image;
+    target.vulkan.vk_device = context.device;
+    target.vulkan.vk_physical_device = context.physical_device;
+    target.vulkan.vk_device_memory = memory;
+    target.vulkan.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
+    target.vulkan.width = width;
+    target.vulkan.height = height;
+    target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    target.vulkan.required_final_layout =
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    target.vulkan.queue_family_index = context.queue_family_index;
+    target.vulkan.allocation_size = allocation_size;
+    target.vulkan.memory_type_index = memory_type_index;
+    target.vulkan.image_tiling = VK_IMAGE_TILING_OPTIMAL;
+    target.vulkan.image_usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                      VK_IMAGE_USAGE_SAMPLED_BIT |
+                                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                      VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    target.vulkan.sample_count = VK_SAMPLE_COUNT_1_BIT;
+    target.vulkan.level_count = 1;
+    return target;
+  };
+
+  auto publish =
+      [&](const char* label, uint32_t width, uint32_t height,
+          uint64_t generation, VkImage main_image, VkDeviceMemory main_memory,
+          VkDeviceSize main_allocation_size, uint32_t main_memory_type_index,
+          VkImage mask_image, VkDeviceMemory mask_memory,
+          VkDeviceSize mask_allocation_size, uint32_t mask_memory_type_index,
+          blink_standalone_dedicated_thread_gpu_frame_result_t* result) {
+        status = blink_standalone_renderer_set_viewport(
+            renderer, static_cast<int>(width), static_cast<int>(height), 1.0f);
+        if (status != BLINK_STANDALONE_STATUS_OK) {
+          std::fprintf(stderr,
+                       "static_gpu_external_target_smoke: failed %s_viewport "
+                       "status=%d error=%s\n",
+                       label, status,
+                       blink_standalone_renderer_last_error(renderer));
+          return false;
+        }
+        blink_standalone_dedicated_thread_gpu_frame_request_t request = {};
+        request.timeline_time_seconds = 0.016 * generation;
+        request.poll_interval_ms = 1;
+        request.max_poll_iterations = 10000;
+        request.source_request.backend = BLINK_STANDALONE_GPU_BACKEND_VULKAN;
+        request.source_request.request_generation = generation;
+        request.source_request.timeline_time_seconds = request.timeline_time_seconds;
+        request.source_request.logical_width = width;
+        request.source_request.logical_height = height;
+        request.source_request.physical_width = width;
+        request.source_request.physical_height = height;
+        request.source_request.device_scale_factor = 1.0f;
+        request.source_request.max_work_budget_ms = 1000.0;
+        request.render_request.backend = BLINK_STANDALONE_GPU_BACKEND_VULKAN;
+        request.render_request.request_generation = generation;
+        request.render_request.flags =
+            BLINK_STANDALONE_GPU_ASYNC_BACKDROP_MASK_REQUIRED;
+        request.render_request.mask_encoding =
+            BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE;
+        request.render_request.main_target =
+            make_target(width, height, generation, main_image, main_memory,
+                        main_allocation_size, main_memory_type_index);
+        request.render_request.backdrop_mask_target =
+            make_target(width, height, generation, mask_image, mask_memory,
+                        mask_allocation_size, mask_memory_type_index);
+        *result = {};
+        status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+            renderer, &request, result);
+        if (status != BLINK_STANDALONE_STATUS_OK &&
+            status != BLINK_STANDALONE_STATUS_PENDING) {
+          std::fprintf(stderr,
+                       "static_gpu_external_target_smoke: failed %s_post "
+                       "status=%d error=%s\n",
+                       label, status,
+                       blink_standalone_renderer_last_error(renderer));
+          return false;
+        }
+        for (uint32_t poll = 0;
+             result->state ==
+                     BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+             poll < 10000;
+             ++poll) {
+          ::Sleep(1);
+          status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+              renderer, result->command_id, result);
+          if (status != BLINK_STANDALONE_STATUS_OK &&
+              status != BLINK_STANDALONE_STATUS_PENDING) {
+            break;
+          }
+        }
+        const bool complete =
+            status == BLINK_STANDALONE_STATUS_OK &&
+            result->state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED &&
+            result->render_result.main_target_written != 0 &&
+            result->render_result.backdrop_mask_written != 0 &&
+            result->render_result.effect_count != 0 &&
+            result->render_result.physical_width == width &&
+            result->render_result.physical_height == height;
+        if (!complete) {
+          std::fprintf(stderr,
+                       "static_gpu_external_target_smoke: failed %s "
+                       "status=%d result_status=%u state=%u render_state=%u "
+                       "main=%u mask=%u effects=%u size=%ux%u error=%s\n",
+                       label, status, result->status, result->state,
+                       result->render_result.state,
+                       result->render_result.main_target_written,
+                       result->render_result.backdrop_mask_written,
+                       result->render_result.effect_count,
+                       result->render_result.physical_width,
+                       result->render_result.physical_height,
+                       result->error_message
+                           ? result->error_message
+                           : blink_standalone_renderer_last_error(renderer));
+          if (result->state ==
+              BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING) {
+            blink_standalone_dedicated_thread_gpu_frame_result_t cancel = {};
+            blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+                renderer, result->command_id, &cancel);
+          }
+          return false;
+        }
+        return ValidatePublicGpuBackdropEffectTable(
+            renderer, result->render_result.effect_count, label);
+      };
+
+  VkImage initial_mask_image = VK_NULL_HANDLE;
+  VkDeviceMemory initial_mask_memory = VK_NULL_HANDLE;
+  VkDeviceSize initial_mask_allocation_size = 0;
+  uint32_t initial_mask_memory_type_index = 0;
+  VkImage small_main_image = VK_NULL_HANDLE;
+  VkDeviceMemory small_main_memory = VK_NULL_HANDLE;
+  VkDeviceSize small_main_allocation_size = 0;
+  uint32_t small_main_memory_type_index = 0;
+  VkImage small_mask_image = VK_NULL_HANDLE;
+  VkDeviceMemory small_mask_memory = VK_NULL_HANDLE;
+  VkDeviceSize small_mask_allocation_size = 0;
+  uint32_t small_mask_memory_type_index = 0;
+  VkImage final_main_image = VK_NULL_HANDLE;
+  VkDeviceMemory final_main_memory = VK_NULL_HANDLE;
+  VkDeviceSize final_main_allocation_size = 0;
+  uint32_t final_main_memory_type_index = 0;
+  VkImage final_mask_image = VK_NULL_HANDLE;
+  VkDeviceMemory final_mask_memory = VK_NULL_HANDLE;
+  VkDeviceSize final_mask_allocation_size = 0;
+  uint32_t final_mask_memory_type_index = 0;
+  const bool images_created =
+      CreateVulkanProbeImage(&context, kLargeWidth, kLargeHeight,
+                              &initial_mask_image, &initial_mask_memory,
+                              &initial_mask_allocation_size,
+                              &initial_mask_memory_type_index, &failure) &&
+      CreateVulkanProbeImage(&context, kSmallWidth, kSmallHeight,
+                              &small_main_image, &small_main_memory,
+                              &small_main_allocation_size,
+                              &small_main_memory_type_index, &failure) &&
+      CreateVulkanProbeImage(&context, kSmallWidth, kSmallHeight,
+                              &small_mask_image, &small_mask_memory,
+                              &small_mask_allocation_size,
+                              &small_mask_memory_type_index, &failure) &&
+      CreateVulkanProbeImage(&context, kLargeWidth, kLargeHeight,
+                              &final_main_image, &final_main_memory,
+                              &final_main_allocation_size,
+                              &final_main_memory_type_index, &failure) &&
+      CreateVulkanProbeImage(&context, kLargeWidth, kLargeHeight,
+                              &final_mask_image, &final_mask_memory,
+                              &final_mask_allocation_size,
+                              &final_mask_memory_type_index, &failure);
+  if (!images_created) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_resize_return_images failure=%s\n",
+                 failure.c_str());
+    destroy_image(&final_mask_image, &final_mask_memory);
+    destroy_image(&final_main_image, &final_main_memory);
+    destroy_image(&small_mask_image, &small_mask_memory);
+    destroy_image(&small_main_image, &small_main_memory);
+    destroy_image(&initial_mask_image, &initial_mask_memory);
+    DestroyRenderer(renderer);
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  blink_standalone_dedicated_thread_gpu_frame_result_t initial = {};
+  blink_standalone_dedicated_thread_gpu_frame_result_t small_command = {};
+  blink_standalone_dedicated_thread_gpu_frame_result_t final_command = {};
+  const bool published =
+      publish("vulkan_dedicated_resize_return_initial", kLargeWidth,
+              kLargeHeight, 1, context.image, context.image_memory,
+              context.image_allocation_size, context.image_memory_type_index,
+              initial_mask_image, initial_mask_memory,
+              initial_mask_allocation_size, initial_mask_memory_type_index,
+              &initial) &&
+      publish("vulkan_dedicated_resize_return_small", kSmallWidth,
+              kSmallHeight, 2, small_main_image, small_main_memory,
+              small_main_allocation_size, small_main_memory_type_index,
+              small_mask_image, small_mask_memory,
+              small_mask_allocation_size, small_mask_memory_type_index,
+              &small_command) &&
+      publish("vulkan_dedicated_resize_return_final", kLargeWidth,
+              kLargeHeight, 3, final_main_image, final_main_memory,
+              final_main_allocation_size, final_main_memory_type_index,
+              final_mask_image, final_mask_memory,
+              final_mask_allocation_size, final_mask_memory_type_index,
+              &final_command);
+
+  destroy_image(&final_mask_image, &final_mask_memory);
+  destroy_image(&final_main_image, &final_main_memory);
+  destroy_image(&small_mask_image, &small_mask_memory);
+  destroy_image(&small_main_image, &small_main_memory);
+  destroy_image(&initial_mask_image, &initial_mask_memory);
+  DestroyRenderer(renderer);
+  DestroyVulkanProbeContext(&context);
+  if (!published) {
+    return false;
+  }
+
+  std::printf(
+      "static_gpu_external_target_smoke: ok "
+      "vulkan_dedicated_resize_return=1 initial=%ux%u small=%ux%u "
+      "final=%ux%u effects=%u final_command_id=%llu\n",
+      initial.render_result.physical_width, initial.render_result.physical_height,
+      small_command.render_result.physical_width,
+      small_command.render_result.physical_height,
+      final_command.render_result.physical_width,
+      final_command.render_result.physical_height,
+      final_command.render_result.effect_count,
+      static_cast<unsigned long long>(final_command.command_id));
+  return true;
+}
+
 #endif  // BLINK_STATIC_PROBE_HAS_VULKAN_HEADERS
 
 bool ReadbackD3D12Texture(ID3D12Device* device,
@@ -3229,6 +3567,332 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
   return true;
 }
 
+bool RunD3D12DedicatedThreadResizeReturnSmoke() {
+  constexpr uint32_t kLargeWidth = 2560;
+  constexpr uint32_t kLargeHeight = 1440;
+  constexpr uint32_t kSmallWidth = 1280;
+  constexpr uint32_t kSmallHeight = 720;
+
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0,
+                                 IID_PPV_ARGS(&device));
+  if (FAILED(hr) || !device) {
+    std::printf(
+        "static_gpu_external_target_smoke: blocked "
+        "d3d12_dedicated_resize_return=0 device_hr=0x%08lx\n",
+        static_cast<unsigned long>(hr));
+    return true;
+  }
+
+  D3D12_COMMAND_QUEUE_DESC queue_desc = {};
+  queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue;
+  hr = device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&queue));
+  if (FAILED(hr) || !queue) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_resize_return_queue hr=0x%08lx\n",
+                 static_cast<unsigned long>(hr));
+    return false;
+  }
+
+  struct SharedTarget {
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+    HANDLE handle = nullptr;
+  };
+  auto close_target = [](SharedTarget* target) {
+    if (target->handle) {
+      ::CloseHandle(target->handle);
+      target->handle = nullptr;
+    }
+    target->resource.Reset();
+  };
+  auto create_target = [&](uint32_t width, uint32_t height,
+                           SharedTarget* target) {
+    D3D12_HEAP_PROPERTIES heap_properties = {};
+    heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    heap_properties.CreationNodeMask = 1;
+    heap_properties.VisibleNodeMask = 1;
+    D3D12_RESOURCE_DESC resource_desc = {};
+    resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    resource_desc.Width = width;
+    resource_desc.Height = height;
+    resource_desc.DepthOrArraySize = 1;
+    resource_desc.MipLevels = 1;
+    resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    resource_desc.SampleDesc.Count = 1;
+    resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+    HRESULT create_hr = device->CreateCommittedResource(
+        &heap_properties, D3D12_HEAP_FLAG_SHARED, &resource_desc,
+        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&target->resource));
+    if (FAILED(create_hr) || !target->resource) {
+      std::fprintf(stderr,
+                   "static_gpu_external_target_smoke: failed "
+                   "d3d12_dedicated_resize_return_target %ux%u hr=0x%08lx\n",
+                   width, height, static_cast<unsigned long>(create_hr));
+      return false;
+    }
+    create_hr = device->CreateSharedHandle(target->resource.Get(), nullptr,
+                                            GENERIC_ALL, nullptr,
+                                            &target->handle);
+    if (FAILED(create_hr) || !target->handle) {
+      std::fprintf(stderr,
+                   "static_gpu_external_target_smoke: failed "
+                   "d3d12_dedicated_resize_return_shared_handle %ux%u "
+                   "hr=0x%08lx\n",
+                   width, height, static_cast<unsigned long>(create_hr));
+      close_target(target);
+      return false;
+    }
+    return true;
+  };
+
+  SharedTarget initial_main;
+  SharedTarget initial_mask;
+  SharedTarget small_main;
+  SharedTarget small_mask;
+  SharedTarget final_main;
+  SharedTarget final_mask;
+  if (!create_target(kLargeWidth, kLargeHeight, &initial_main) ||
+      !create_target(kLargeWidth, kLargeHeight, &initial_mask) ||
+      !create_target(kSmallWidth, kSmallHeight, &small_main) ||
+      !create_target(kSmallWidth, kSmallHeight, &small_mask) ||
+      !create_target(kLargeWidth, kLargeHeight, &final_main) ||
+      !create_target(kLargeWidth, kLargeHeight, &final_mask)) {
+    close_target(&final_mask);
+    close_target(&final_main);
+    close_target(&small_mask);
+    close_target(&small_main);
+    close_target(&initial_mask);
+    close_target(&initial_main);
+    return false;
+  }
+
+  blink_standalone_renderer_config_t config = {};
+  config.width = static_cast<int>(kLargeWidth);
+  config.height = static_cast<int>(kLargeHeight);
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create_dedicated_thread(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    close_target(&final_mask);
+    close_target(&final_main);
+    close_target(&small_mask);
+    close_target(&small_main);
+    close_target(&initial_mask);
+    close_target(&initial_main);
+    return Fail("d3d12 dedicated resize_return create");
+  }
+
+  auto cleanup = [&] {
+    DestroyRenderer(renderer);
+    close_target(&final_mask);
+    close_target(&final_main);
+    close_target(&small_mask);
+    close_target(&small_main);
+    close_target(&initial_mask);
+    close_target(&initial_main);
+  };
+
+  blink_standalone_d3d12_external_device_t external_device = {};
+  external_device.d3d12_device = device.Get();
+  external_device.d3d12_command_queue = queue.Get();
+  status = blink_standalone_renderer_configure_d3d12_external_device(
+      renderer, &external_device);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "configure_d3d12_dedicated_resize_return status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    cleanup();
+    return false;
+  }
+
+  const char* html =
+      "<!doctype html><style>html,body{margin:0;width:100%;height:100%;"
+      "background:#123456}#box{position:absolute;left:16px;top:12px;"
+      "width:80px;height:32px;background:#d06329}#glass{position:absolute;"
+      "left:120px;top:80px;width:360px;height:180px;border-radius:28px;"
+      "background:rgba(255,255,255,.25);backdrop-filter:blur(12px) "
+      "saturate(160%);-webkit-backdrop-filter:blur(12px) "
+      "saturate(160%)}</style><div id='box'></div><div id='glass'></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "set_document_d3d12_dedicated_resize_return status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    cleanup();
+    return false;
+  }
+
+  const uint32_t capabilities =
+      blink_standalone_renderer_gpu_backend_capabilities(
+          renderer, BLINK_STANDALONE_GPU_BACKEND_D3D12);
+  if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0 ||
+      (capabilities & BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET) == 0) {
+    std::printf(
+        "static_gpu_external_target_smoke: blocked "
+        "d3d12_dedicated_resize_return=0 capabilities=%u\n",
+        capabilities);
+    cleanup();
+    return true;
+  }
+
+  auto make_target = [&](uint32_t width, uint32_t height, uint64_t generation,
+                         const SharedTarget& source) {
+    blink_standalone_external_gpu_target_t target = {};
+    target.common.backend = BLINK_STANDALONE_GPU_BACKEND_D3D12;
+    target.common.logical_width = width;
+    target.common.logical_height = height;
+    target.common.physical_width = width;
+    target.common.physical_height = height;
+    target.common.device_scale_factor = 1.0f;
+    target.common.pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
+    target.common.alpha_mode = BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
+    target.common.color_space = BLINK_STANDALONE_COLOR_SPACE_SRGB;
+    target.common.generation = generation;
+    target.d3d12.d3d12_device = device.Get();
+    target.d3d12.d3d12_command_queue = queue.Get();
+    target.d3d12.d3d12_resource = source.resource.Get();
+    target.d3d12.shared_handle = source.handle;
+    target.d3d12.dxgi_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    target.d3d12.width = width;
+    target.d3d12.height = height;
+    target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+    target.d3d12.required_final_state =
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    return target;
+  };
+
+  auto publish = [&](const char* label, uint32_t width, uint32_t height,
+                     uint64_t generation, const SharedTarget& main,
+                     const SharedTarget& mask,
+                     blink_standalone_dedicated_thread_gpu_frame_result_t*
+                         result) {
+    status = blink_standalone_renderer_set_viewport(
+        renderer, static_cast<int>(width), static_cast<int>(height), 1.0f);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "static_gpu_external_target_smoke: failed %s_viewport "
+                   "status=%d error=%s\n",
+                   label, status, blink_standalone_renderer_last_error(renderer));
+      return false;
+    }
+    blink_standalone_dedicated_thread_gpu_frame_request_t request = {};
+    request.timeline_time_seconds = 0.016 * generation;
+    request.poll_interval_ms = 1;
+    request.max_poll_iterations = 10000;
+    request.source_request.backend = BLINK_STANDALONE_GPU_BACKEND_D3D12;
+    request.source_request.request_generation = generation;
+    request.source_request.timeline_time_seconds = request.timeline_time_seconds;
+    request.source_request.logical_width = width;
+    request.source_request.logical_height = height;
+    request.source_request.physical_width = width;
+    request.source_request.physical_height = height;
+    request.source_request.device_scale_factor = 1.0f;
+    request.source_request.max_work_budget_ms = 1000.0;
+    request.render_request.backend = BLINK_STANDALONE_GPU_BACKEND_D3D12;
+    request.render_request.request_generation = generation;
+    request.render_request.flags =
+        BLINK_STANDALONE_GPU_ASYNC_BACKDROP_MASK_REQUIRED;
+    request.render_request.mask_encoding =
+        BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE;
+    request.render_request.main_target =
+        make_target(width, height, generation, main);
+    request.render_request.backdrop_mask_target =
+        make_target(width, height, generation, mask);
+    *result = {};
+    status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+        renderer, &request, result);
+    if (status != BLINK_STANDALONE_STATUS_OK &&
+        status != BLINK_STANDALONE_STATUS_PENDING) {
+      std::fprintf(stderr,
+                   "static_gpu_external_target_smoke: failed %s_post "
+                   "status=%d error=%s\n",
+                   label, status, blink_standalone_renderer_last_error(renderer));
+      return false;
+    }
+    for (uint32_t poll = 0;
+         result->state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+         poll < 10000;
+         ++poll) {
+      ::Sleep(1);
+      status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+          renderer, result->command_id, result);
+      if (status != BLINK_STANDALONE_STATUS_OK &&
+          status != BLINK_STANDALONE_STATUS_PENDING) {
+        break;
+      }
+    }
+    const bool complete =
+        status == BLINK_STANDALONE_STATUS_OK &&
+        result->state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED &&
+        result->render_result.main_target_written != 0 &&
+        result->render_result.backdrop_mask_written != 0 &&
+        result->render_result.effect_count != 0 &&
+        result->render_result.physical_width == width &&
+        result->render_result.physical_height == height;
+    if (!complete) {
+      std::fprintf(stderr,
+                   "static_gpu_external_target_smoke: failed %s status=%d "
+                   "result_status=%u state=%u render_state=%u main=%u "
+                   "mask=%u effects=%u size=%ux%u error=%s\n",
+                   label, status, result->status, result->state,
+                   result->render_result.state,
+                   result->render_result.main_target_written,
+                   result->render_result.backdrop_mask_written,
+                   result->render_result.effect_count,
+                   result->render_result.physical_width,
+                   result->render_result.physical_height,
+                   result->error_message
+                       ? result->error_message
+                       : blink_standalone_renderer_last_error(renderer));
+      if (result->state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING) {
+        blink_standalone_dedicated_thread_gpu_frame_result_t cancel = {};
+        blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+            renderer, result->command_id, &cancel);
+      }
+      return false;
+    }
+    return ValidatePublicGpuBackdropEffectTable(
+        renderer, result->render_result.effect_count, label);
+  };
+
+  blink_standalone_dedicated_thread_gpu_frame_result_t initial = {};
+  blink_standalone_dedicated_thread_gpu_frame_result_t small_command = {};
+  blink_standalone_dedicated_thread_gpu_frame_result_t final_command = {};
+  const bool published =
+      publish("d3d12_dedicated_resize_return_initial", kLargeWidth,
+              kLargeHeight, 1, initial_main, initial_mask, &initial) &&
+      publish("d3d12_dedicated_resize_return_small", kSmallWidth,
+              kSmallHeight, 2, small_main, small_mask, &small_command) &&
+      publish("d3d12_dedicated_resize_return_final", kLargeWidth,
+              kLargeHeight, 3, final_main, final_mask, &final_command);
+  cleanup();
+  if (!published) {
+    return false;
+  }
+
+  std::printf(
+      "static_gpu_external_target_smoke: ok "
+      "d3d12_dedicated_resize_return=1 initial=%ux%u small=%ux%u "
+      "final=%ux%u effects=%u final_command_id=%llu\n",
+      initial.render_result.physical_width, initial.render_result.physical_height,
+      small_command.render_result.physical_width,
+      small_command.render_result.physical_height,
+      final_command.render_result.physical_width,
+      final_command.render_result.physical_height,
+      final_command.render_result.effect_count,
+      static_cast<unsigned long long>(final_command.command_id));
+  return true;
+}
+
 #endif  // defined(_WIN32)
 
 }  // namespace
@@ -3236,18 +3900,26 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
 int main(int argc, char** argv) {
 #if defined(_WIN32)
   bool d3d12_dedicated_only = false;
+  bool d3d12_dedicated_resize_return_only = false;
   bool vulkan_dedicated_only = false;
   bool vulkan_dedicated_resize_cancel_only = false;
+  bool vulkan_dedicated_resize_return_only = false;
   bool vulkan_resize_return_only = false;
   bool skip_dedicated = false;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--d3d12-dedicated-only") == 0) {
       d3d12_dedicated_only = true;
+    } else if (std::strcmp(argv[i],
+                           "--d3d12-dedicated-resize-return-only") == 0) {
+      d3d12_dedicated_resize_return_only = true;
     } else if (std::strcmp(argv[i], "--vulkan-dedicated-only") == 0) {
       vulkan_dedicated_only = true;
     } else if (std::strcmp(argv[i],
                            "--vulkan-dedicated-resize-cancel-only") == 0) {
       vulkan_dedicated_resize_cancel_only = true;
+    } else if (std::strcmp(argv[i],
+                           "--vulkan-dedicated-resize-return-only") == 0) {
+      vulkan_dedicated_resize_return_only = true;
     } else if (std::strcmp(argv[i], "--vulkan-resize-return-only") == 0) {
       vulkan_resize_return_only = true;
     } else if (std::strcmp(argv[i], "--skip-dedicated") == 0) {
@@ -3256,6 +3928,9 @@ int main(int argc, char** argv) {
   }
   if (d3d12_dedicated_only) {
     return RunD3D12DedicatedThreadFirstPublishSmoke() ? 0 : 1;
+  }
+  if (d3d12_dedicated_resize_return_only) {
+    return RunD3D12DedicatedThreadResizeReturnSmoke() ? 0 : 1;
   }
   if (vulkan_dedicated_only) {
 #if BLINK_STATIC_PROBE_HAS_VULKAN_HEADERS
@@ -3274,6 +3949,17 @@ int main(int argc, char** argv) {
     std::printf(
         "static_gpu_external_target_smoke: blocked "
         "vulkan_dedicated_resize_cancel=0 "
+        "failure=static package lacks Vulkan headers\n");
+    return 0;
+#endif
+  }
+  if (vulkan_dedicated_resize_return_only) {
+#if BLINK_STATIC_PROBE_HAS_VULKAN_HEADERS
+    return RunVulkanDedicatedThreadResizeReturnSmoke() ? 0 : 1;
+#else
+    std::printf(
+        "static_gpu_external_target_smoke: blocked "
+        "vulkan_dedicated_resize_return=0 "
         "failure=static package lacks Vulkan headers\n");
     return 0;
 #endif

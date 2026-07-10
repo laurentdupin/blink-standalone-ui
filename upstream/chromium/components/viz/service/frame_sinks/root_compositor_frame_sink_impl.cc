@@ -124,13 +124,52 @@ RootCompositorFrameSinkImpl::Create(
     bool run_all_compositor_stages_before_draw,
     const DebugRendererSettings* debug_settings,
     HintSessionFactory* hint_session_factory) {
+  return CreateInternal(std::move(params), /*direct_client=*/nullptr,
+                        frame_sink_manager, output_surface_provider,
+                        restart_id, run_all_compositor_stages_before_draw,
+                        debug_settings, hint_session_factory);
+}
+
+// static
+std::unique_ptr<RootCompositorFrameSinkImpl>
+RootCompositorFrameSinkImpl::CreateForDirectClient(
+    mojom::RootCompositorFrameSinkParamsPtr params,
+    mojom::CompositorFrameSinkClient* direct_client,
+    FrameSinkManagerImpl* frame_sink_manager,
+    OutputSurfaceProvider* output_surface_provider,
+    uint32_t restart_id,
+    bool run_all_compositor_stages_before_draw,
+    const DebugRendererSettings* debug_settings,
+    HintSessionFactory* hint_session_factory) {
+  CHECK(direct_client);
+  return CreateInternal(std::move(params), direct_client, frame_sink_manager,
+                        output_surface_provider, restart_id,
+                        run_all_compositor_stages_before_draw, debug_settings,
+                        hint_session_factory);
+}
+
+// static
+std::unique_ptr<RootCompositorFrameSinkImpl>
+RootCompositorFrameSinkImpl::CreateInternal(
+    mojom::RootCompositorFrameSinkParamsPtr params,
+    mojom::CompositorFrameSinkClient* direct_client,
+    FrameSinkManagerImpl* frame_sink_manager,
+    OutputSurfaceProvider* output_surface_provider,
+    uint32_t restart_id,
+    bool run_all_compositor_stages_before_draw,
+    const DebugRendererSettings* debug_settings,
+    HintSessionFactory* hint_session_factory) {
   // First create an output surface.
   mojo::Remote<mojom::DisplayClient> display_client(
       std::move(params->display_client));
+  // The direct-client factory intentionally has no DisplayClient Mojo endpoint.
+  // Preserve ordinary Create() behavior, including its bound Remote contract.
+  mojom::DisplayClient* display_client_ptr =
+      direct_client ? nullptr : display_client.get();
   auto display_controller = output_surface_provider->CreateGpuDependency(
       params->gpu_compositing, params->widget);
   auto output_surface = output_surface_provider->CreateOutputSurface(
-      params->widget, params->gpu_compositing, display_client.get(),
+      params->widget, params->gpu_compositing, display_client_ptr,
       display_controller.get(), params->renderer_settings, debug_settings);
 
   // Creating output surface failed. The host can send a new request, possibly
@@ -278,6 +317,7 @@ RootCompositorFrameSinkImpl::Create(
       frame_sink_manager, params->frame_sink_id,
       std::move(params->compositor_frame_sink),
       std::move(params->compositor_frame_sink_client),
+      direct_client,
       std::move(params->display_private), std::move(display_client),
       std::move(synthetic_begin_frame_source),
       std::move(external_begin_frame_source), std::move(display),
@@ -592,8 +632,10 @@ void RootCompositorFrameSinkImpl::SubmitCompositorFrame(
       CompositorFrameSinkSupport::GetSubmitResultAsString(result);
   DLOG(ERROR) << "SubmitCompositorFrame failed for " << local_surface_id
               << " because " << reason;
-  compositor_frame_sink_receiver_.ResetWithReason(static_cast<uint32_t>(result),
-                                                  reason);
+  if (compositor_frame_sink_receiver_.is_bound()) {
+    compositor_frame_sink_receiver_.ResetWithReason(
+        static_cast<uint32_t>(result), reason);
+  }
 }
 
 void RootCompositorFrameSinkImpl::NotifyNewLocalSurfaceIdExpectedWhilePaused() {
@@ -624,6 +666,7 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
     mojo::PendingAssociatedReceiver<mojom::CompositorFrameSink>
         frame_sink_receiver,
     mojo::PendingRemote<mojom::CompositorFrameSinkClient> frame_sink_client,
+    mojom::CompositorFrameSinkClient* direct_client,
     mojo::PendingAssociatedReceiver<mojom::DisplayPrivate> display_receiver,
     mojo::Remote<mojom::DisplayClient> display_client,
     std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
@@ -632,11 +675,12 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
     bool hw_support_for_multiple_refresh_rates,
     bool enable_video_conference_matcher)
     : compositor_frame_sink_client_(std::move(frame_sink_client)),
+      direct_client_(direct_client),
       compositor_frame_sink_receiver_(this, std::move(frame_sink_receiver)),
       display_client_(std::move(display_client)),
       display_private_receiver_(this, std::move(display_receiver)),
       support_(std::make_unique<CompositorFrameSinkSupport>(
-          compositor_frame_sink_client_.get(),
+          direct_client_ ? direct_client_ : compositor_frame_sink_client_.get(),
           frame_sink_manager,
           frame_sink_id,
           /*is_root=*/true)),
@@ -830,8 +874,12 @@ void RootCompositorFrameSinkImpl::DisplayOutputSurfaceLost() {
   // |display_| has encountered an error and needs to be recreated. Reset
   // message pipes from the client, the client will see the connection error and
   // recreate the CompositorFrameSink+Display.
-  compositor_frame_sink_receiver_.reset();
-  display_private_receiver_.reset();
+  if (compositor_frame_sink_receiver_.is_bound()) {
+    compositor_frame_sink_receiver_.reset();
+  }
+  if (display_private_receiver_.is_bound()) {
+    display_private_receiver_.reset();
+  }
 }
 
 void RootCompositorFrameSinkImpl::DisplayWillDrawAndSwap(
