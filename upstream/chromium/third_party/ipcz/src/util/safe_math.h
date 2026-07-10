@@ -13,6 +13,44 @@
 
 namespace ipcz {
 
+namespace internal {
+
+template <typename T>
+constexpr bool AddOverflow(T a, T b, T* result) {
+  static_assert(std::is_integral_v<T>, "AddOverflow requires an integral type");
+  if constexpr (std::is_unsigned_v<T>) {
+    if (a > std::numeric_limits<T>::max() - b) {
+      return true;
+    }
+  } else if ((b > 0 && a > std::numeric_limits<T>::max() - b) ||
+             (b < 0 && a < std::numeric_limits<T>::min() - b)) {
+    return true;
+  }
+  *result = static_cast<T>(a + b);
+  return false;
+}
+
+template <typename T>
+constexpr bool MulOverflow(T a, T b, T* result) {
+  static_assert(std::is_integral_v<T>, "MulOverflow requires an integral type");
+  if constexpr (std::is_unsigned_v<T>) {
+    if (b != 0 && a > std::numeric_limits<T>::max() / b) {
+      return true;
+    }
+  } else if (a != 0 && b != 0) {
+    if ((a > 0 && b > 0 && a > std::numeric_limits<T>::max() / b) ||
+        (a > 0 && b < 0 && b < std::numeric_limits<T>::min() / a) ||
+        (a < 0 && b > 0 && a < std::numeric_limits<T>::min() / b) ||
+        (a < 0 && b < 0 && b < std::numeric_limits<T>::max() / a)) {
+      return true;
+    }
+  }
+  *result = static_cast<T>(a * b);
+  return false;
+}
+
+}  // namespace internal
+
 template <typename Dst, typename Src>
 constexpr Dst checked_cast(Src value) {
   // This throws a compile-time error on evaluating the constexpr if it can be
@@ -38,8 +76,8 @@ constexpr Dst saturated_cast(Src value) {
 template <typename T>
 constexpr T CheckAdd(T a, T b) {
   T result;
-  const bool did_overflow =
-      ABSL_PREDICT_FALSE(__builtin_add_overflow(a, b, &result));
+  const bool did_overflow = ABSL_PREDICT_FALSE(
+      internal::AddOverflow(a, b, &result));
   ABSL_HARDENING_ASSERT(!did_overflow);
   return result;
 }
@@ -47,8 +85,8 @@ constexpr T CheckAdd(T a, T b) {
 template <typename T>
 constexpr T CheckMul(T a, T b) {
   T result;
-  const bool did_overflow =
-      ABSL_PREDICT_FALSE(__builtin_mul_overflow(a, b, &result));
+  const bool did_overflow = ABSL_PREDICT_FALSE(
+      internal::MulOverflow(a, b, &result));
   ABSL_HARDENING_ASSERT(!did_overflow);
   return result;
 }
@@ -56,7 +94,7 @@ constexpr T CheckMul(T a, T b) {
 template <typename T>
 T SaturatedAdd(T a, T b) {
   T result;
-  if (!__builtin_add_overflow(a, b, &result)) {
+  if (!internal::AddOverflow(a, b, &result)) {
     return result;
   }
   return std::numeric_limits<T>::max();

@@ -62,7 +62,9 @@ struct IPCZ_ALIGN(8) RouterLinkState : public RefCountedFragment {
   static constexpr Status kLockedBySideA = 1 << 4;
   static constexpr Status kLockedBySideB = 1 << 5;
 
-  std::atomic<Status> status{kUnstable};
+  // See RefCountedFragment. This is shared-memory storage, not an atomic
+  // object with process-local lifetime state. Operations use atomic_ref.
+  Status status{kUnstable};
 
   // In a situation with three routers A-B-C and a central link between A and
   // B, B will eventually ask C to connect directly to A and bypass B along the
@@ -75,7 +77,8 @@ struct IPCZ_ALIGN(8) RouterLinkState : public RefCountedFragment {
   uint32_t reserved1[10] = {0};
 
   bool is_locked_by(LinkSide side) const {
-    Status s = status.load(std::memory_order_relaxed);
+    Status s = std::atomic_ref<Status>(const_cast<Status&>(status))
+                   .load(std::memory_order_relaxed);
     if (side == LinkSide::kA) {
       return (s & kLockedBySideA) != 0;
     }
@@ -114,6 +117,7 @@ struct IPCZ_ALIGN(8) RouterLinkState : public RefCountedFragment {
 // smallest block allocation size supported by NodeLinkMemory.
 static_assert(sizeof(RouterLinkState) == 64,
               "RouterLinkState size must be 64 bytes");
+static_assert(alignof(RouterLinkState) >= alignof(RouterLinkState::Status));
 
 // RouterLinkState instances may live in shared memory. Trivial copyability is
 // asserted here as a sort of proxy condition to catch changes which might break

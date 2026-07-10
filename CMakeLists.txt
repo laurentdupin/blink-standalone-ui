@@ -2543,6 +2543,29 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   set_target_properties(blink_standalone_renderer_c_api PROPERTIES
     OUTPUT_NAME blink_standalone_renderer_c_api_static)
 
+  add_library(blink_standalone_mojo_core_ipcz_static STATIC
+    ${BLINK_STANDALONE_MOJO_CORE_IPCZ_STATIC_SOURCES}
+    ${BLINK_STANDALONE_IPCZ_CHROMIUM_PROOF_SOURCES})
+  foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS COMPILE_OPTIONS)
+    get_target_property(property_value blink_standalone_render_benchmark_skia ${property_name})
+    if(property_value AND NOT property_value STREQUAL "property_value-NOTFOUND")
+      if(property_name STREQUAL "INCLUDE_DIRECTORIES")
+        target_include_directories(blink_standalone_mojo_core_ipcz_static PRIVATE ${property_value})
+      elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+        target_compile_definitions(blink_standalone_mojo_core_ipcz_static PRIVATE ${property_value})
+      else()
+        target_compile_options(blink_standalone_mojo_core_ipcz_static PRIVATE ${property_value})
+      endif()
+    endif()
+  endforeach()
+  target_include_directories(blink_standalone_mojo_core_ipcz_static PRIVATE
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/src)
+  target_compile_definitions(blink_standalone_mojo_core_ipcz_static PRIVATE
+    MOJO_SYSTEM_IMPL_IMPLEMENTATION=1 IS_MOJO_CORE_EMBEDDER_IMPL=1
+    IS_MOJO_CORE_EMBEDDER_FEATURES_IMPL=1)
+  set_property(TARGET blink_standalone_mojo_core_ipcz_static PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+  set_target_properties(blink_standalone_mojo_core_ipcz_static PROPERTIES OUTPUT_NAME blink_standalone_mojo_core_ipcz)
+
   add_library(blink_standalone_renderer_c_api_dll SHARED
     ${BLINK_STANDALONE_C_API_SOURCES}
     ${BLINK_STANDALONE_C_API_EXPORTS_DEF}
@@ -3256,6 +3279,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   ],
   "required_static_archives": [
     "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>",
+    "lib/$<TARGET_FILE_NAME:blink_standalone_mojo_core_ipcz_static>",
     "lib/@_blink_standalone_packaged_v8_monolith_name@"
   ],
   "required_import_libraries": [],
@@ -3292,6 +3316,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "include/vk_video",
     "include/vulkan",
     "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>",
+    "lib/$<TARGET_FILE_NAME:blink_standalone_mojo_core_ipcz_static>",
     "lib/@_blink_standalone_packaged_v8_monolith_name@",
     "lib/$<TARGET_FILE_NAME:blink_angle_libEGL_static>",
     "lib/$<TARGET_FILE_NAME:blink_angle_libGLESv2_static>",
@@ -3322,6 +3347,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   add_custom_target(blink_standalone_renderer_c_api_static_package
     DEPENDS
       blink_standalone_renderer_c_api
+      blink_standalone_mojo_core_ipcz_static
       blink_standalone_renderer_c_api_static_link_manifest
       blink_angle_libEGL_static
       blink_angle_libGLESv2_static
@@ -3358,6 +3384,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "$<TARGET_FILE:blink_standalone_renderer_c_api>"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_standalone_mojo_core_ipcz_static>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_mojo_core_ipcz_static>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/${_blink_standalone_packaged_v8_monolith_name}"

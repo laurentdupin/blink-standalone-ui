@@ -133,3 +133,58 @@ _blink_static_configure_probe(blink_static_gpu_external_target_smoke)
 add_executable(blink_static_host_collision_smoke
   host_collision_smoke.cc)
 _blink_static_configure_probe(blink_static_host_collision_smoke)
+
+get_filename_component(_blink_static_mojo_default_chromium_root
+  "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT
+  "${_blink_static_mojo_default_chromium_root}" CACHE PATH
+  "Chromium source root used only by blink_static_mojo_core_smoke")
+option(BLINK_STANDALONE_ENABLE_MOJO_CORE_SMOKE
+  "Build the internal Chromium Mojo Core/ipcz static-link smoke" OFF)
+set(BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT "" CACHE PATH
+  "Configured Blink build root with generated and V8 compatibility headers")
+
+if(BLINK_STANDALONE_ENABLE_MOJO_CORE_SMOKE)
+  if(NOT EXISTS "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/mojo/core/BUILD.gn")
+    message(FATAL_ERROR
+      "BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT must name a Chromium source "
+      "root containing mojo/core/BUILD.gn.")
+  endif()
+  if(NOT EXISTS "${BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT}/generated" OR
+     NOT EXISTS "${BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT}/v8_compat/src/v8/include")
+    message(FATAL_ERROR
+      "BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT must name the configured Blink "
+      "build root containing generated/ and v8_compat/src/v8/include/.")
+  endif()
+
+  add_executable(blink_static_mojo_core_smoke mojo_core_smoke.cc)
+  _blink_static_configure_probe(blink_static_mojo_core_smoke)
+  set(_blink_static_mojo_core_include_dirs
+    "${BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT}/generated"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/base/allocator/partition_allocator/src"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/generated/blink_live/gen/base/allocator/partition_allocator/src"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/abseil-cpp"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/ipcz/include"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/ipcz/src"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/generated/blink_live/gen"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/build_config"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/perfetto"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/perfetto/include"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/skia"
+    "${BLINK_STANDALONE_STATIC_MOJO_CHROMIUM_ROOT}/third_party/skia/include/third_party/vulkan"
+    "${BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT}/v8_compat/src/v8/include"
+    "${BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT}/v8_compat/src"
+    "${BLINK_STANDALONE_STATIC_MOJO_BUILD_ROOT}/v8_compat/src/v8/out/chromium_static/gen")
+  target_include_directories(blink_static_mojo_core_smoke PRIVATE
+    ${_blink_static_mojo_core_include_dirs})
+  target_compile_definitions(blink_static_mojo_core_smoke PRIVATE
+    USE_AURA=1)
+  if(MSVC)
+    target_compile_options(blink_static_mojo_core_smoke PRIVATE
+      /std:c++latest
+      /Zc:preprocessor
+      /utf-8)
+  endif()
+endif()

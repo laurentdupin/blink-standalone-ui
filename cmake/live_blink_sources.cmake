@@ -3065,15 +3065,40 @@ set(BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES
 )
 
 set(BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_endpoint.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_endpoint.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle.cc
 )
+if(WIN32)
+  list(APPEND BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel_win.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_win.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle_security_util_win.cc
+  )
+elseif(UNIX AND NOT APPLE)
+  set(BLINK_STANDALONE_MOJO_PLATFORM_POSIX_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/named_platform_channel_posix.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_channel_server_posix.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/socket_utils_posix.cc
+  )
+  foreach(_blink_standalone_mojo_platform_source IN LISTS
+      BLINK_STANDALONE_MOJO_PLATFORM_POSIX_SOURCES)
+    if(NOT EXISTS "${_blink_standalone_mojo_platform_source}")
+      message(FATAL_ERROR
+        "The normal Mojo C++ platform archive requires the Chromium POSIX "
+        "platform channel source group. Missing: "
+        "${_blink_standalone_mojo_platform_source}")
+    endif()
+  endforeach()
+  list(APPEND BLINK_STANDALONE_MOJO_PLATFORM_RUNTIME_SOURCES
+    ${BLINK_STANDALONE_MOJO_PLATFORM_POSIX_SOURCES}
+  )
+endif()
 
 # These implementations are part of the Chromium Core/ipcz transport used by
 # the RootCompositorFrameSinkImpl/AsyncLayerTreeFrameSink proof. The product
@@ -3084,7 +3109,6 @@ set(BLINK_STANDALONE_MOJO_BINDINGS_ROOT_FRAME_SINK_PROOF_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/service_factory.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/buffer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/native_handle_type_converters.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle_security_util_win.cc
 )
 
 set(BLINK_STANDALONE_MOJO_CORE_PROOF_INCLUDE_DIRS
@@ -3100,6 +3124,79 @@ set_source_files_properties(
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle_security_util_win.cc
   PROPERTIES
     COMPILE_DEFINITIONS "IS_MOJO_CPP_PLATFORM_IMPL=1")
+
+set(BLINK_STANDALONE_MOJO_CORE_IPCZ_COMMON_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/core_ipcz.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/embedder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/embedder/scoped_ipc_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/fuzzing_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_api.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/base_shared_memory_service.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/data_pipe.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/driver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/envelope.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/invitation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/mojo_message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/mojo_trap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/object.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/ring_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/shared_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/shared_buffer_mapping.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/transmissible_platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/transport.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/ipcz_driver/wrapped_platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/scoped_ipcz_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/broker_host.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/configuration.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/connection_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/platform_handle_in_transit.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/platform_handle_utils.cc
+)
+
+# Core's normal C++ bindings are needed only to prove a real Remote/Receiver
+# round trip from the static package. They are separate from impl_for_embedder.
+set(BLINK_STANDALONE_MOJO_CORE_IPCZ_BINDINGS_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/direct_receiver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/service_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/native_handle_type_converters.cc
+)
+
+set(BLINK_STANDALONE_MOJO_CORE_IPCZ_STATIC_SOURCES
+  ${BLINK_STANDALONE_MOJO_CORE_IPCZ_COMMON_SOURCES}
+  ${BLINK_STANDALONE_MOJO_CORE_IPCZ_BINDINGS_SOURCES}
+)
+
+if(WIN32)
+  list(APPEND BLINK_STANDALONE_MOJO_CORE_IPCZ_STATIC_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/broker_win.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/channel_win.cc
+  )
+elseif(UNIX AND NOT APPLE)
+  set(BLINK_STANDALONE_MOJO_CORE_IPCZ_POSIX_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/broker_posix.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/channel_posix.cc
+  )
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND BLINK_STANDALONE_MOJO_CORE_IPCZ_POSIX_SOURCES
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/channel_linux.cc
+    )
+  endif()
+  foreach(_blink_standalone_mojo_core_source IN LISTS
+      BLINK_STANDALONE_MOJO_CORE_IPCZ_POSIX_SOURCES)
+    if(NOT EXISTS "${_blink_standalone_mojo_core_source}")
+      message(FATAL_ERROR
+        "The normal Mojo Core/ipcz static archive requires the Chromium "
+        "mojo/core POSIX channel source group. Missing: "
+        "${_blink_standalone_mojo_core_source}")
+    endif()
+  endforeach()
+  list(APPEND BLINK_STANDALONE_MOJO_CORE_IPCZ_STATIC_SOURCES
+    ${BLINK_STANDALONE_MOJO_CORE_IPCZ_POSIX_SOURCES}
+  )
+endif()
 
 set(BLINK_STANDALONE_MOJO_CORE_LEGACY_PROOF_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/core/core_ipcz.cc

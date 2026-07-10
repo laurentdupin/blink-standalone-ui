@@ -46,9 +46,10 @@ void RouterLinkState::SetSideStable(LinkSide side) {
   const Status kThisSideStable =
       side == LinkSide::kA ? kSideAStable : kSideBStable;
 
+  std::atomic_ref<Status> atomic_status(status);
   Status expected = kUnstable;
-  while (!status.compare_exchange_weak(expected, expected | kThisSideStable,
-                                       std::memory_order_relaxed) &&
+  while (!atomic_status.compare_exchange_weak(
+             expected, expected | kThisSideStable, std::memory_order_relaxed) &&
          (expected & kThisSideStable) == 0) {
   }
 }
@@ -64,10 +65,11 @@ bool RouterLinkState::TryLock(LinkSide from_side) {
   const Status kThisSideWaiting =
       from_side == LinkSide::kA ? kSideAWaiting : kSideBWaiting;
 
+  std::atomic_ref<Status> atomic_status(status);
   Status expected = kStable;
   Status desired_bit = kLockedByThisSide;
-  while (!status.compare_exchange_weak(expected, expected | desired_bit,
-                                       std::memory_order_relaxed)) {
+  while (!atomic_status.compare_exchange_weak(
+      expected, expected | desired_bit, std::memory_order_relaxed)) {
     if ((expected & kLockedByEitherSide) != 0 ||
         (expected & kThisSideStable) == 0) {
       return false;
@@ -92,10 +94,11 @@ bool RouterLinkState::TryLock(LinkSide from_side) {
 void RouterLinkState::Unlock(LinkSide from_side) {
   const Status kLockedByThisSide =
       from_side == LinkSide::kA ? kLockedBySideA : kLockedBySideB;
+  std::atomic_ref<Status> atomic_status(status);
   Status expected = kStable | kLockedByThisSide;
   Status desired = kStable;
-  while (!status.compare_exchange_weak(expected, desired,
-                                       std::memory_order_relaxed) &&
+  while (!atomic_status.compare_exchange_weak(
+             expected, desired, std::memory_order_relaxed) &&
          (expected & kLockedByThisSide) != 0) {
     desired = expected & ~kLockedByThisSide;
   }
@@ -105,10 +108,11 @@ bool RouterLinkState::ResetWaitingBit(LinkSide side) {
   const Status kThisSideWaiting =
       side == LinkSide::kA ? kSideAWaiting : kSideBWaiting;
   const Status kLockedByEitherSide = kLockedBySideA | kLockedBySideB;
+  std::atomic_ref<Status> atomic_status(status);
   Status expected = kStable | kThisSideWaiting;
   Status desired = kStable;
-  while (!status.compare_exchange_weak(expected, desired,
-                                       std::memory_order_relaxed)) {
+  while (!atomic_status.compare_exchange_weak(
+      expected, desired, std::memory_order_relaxed)) {
     if ((expected & kStable) != kStable || (expected & kThisSideWaiting) == 0 ||
         (expected & kLockedByEitherSide) != 0) {
       // If the link isn't stable yet, or `side` wasn't waiting on it, or the

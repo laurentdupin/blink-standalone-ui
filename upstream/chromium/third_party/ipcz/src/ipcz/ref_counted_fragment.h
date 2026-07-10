@@ -21,7 +21,10 @@ struct IPCZ_ALIGN(4) RefCountedFragment {
 
   RefCountedFragment();
 
-  int32_t ref_count_for_testing() const { return ref_count_; }
+  int32_t ref_count_for_testing() const {
+    return std::atomic_ref<int32_t>(const_cast<int32_t&>(ref_count_))
+        .load(std::memory_order_relaxed);
+  }
 
   // Increments the reference count for this object.
   void AddRef();
@@ -31,8 +34,14 @@ struct IPCZ_ALIGN(4) RefCountedFragment {
   int32_t ReleaseRef();
 
  private:
-  std::atomic<int32_t> ref_count_{1};
+  // This may live in shared memory. MSVC's std::atomic is not trivially
+  // copyable, so keep its storage trivial and construct an atomic_ref only for
+  // the individual interprocess operations.
+  int32_t ref_count_{1};
 };
+
+static_assert(std::is_trivially_copyable_v<RefCountedFragment>);
+static_assert(alignof(RefCountedFragment) >= alignof(int32_t));
 
 }  // namespace ipcz
 
