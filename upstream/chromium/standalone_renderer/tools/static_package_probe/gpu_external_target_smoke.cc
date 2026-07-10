@@ -1101,6 +1101,28 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
   }
 
   const uint64_t command_id = command_result.command_id;
+  blink_standalone_dedicated_thread_gpu_frame_result_t duplicate_result = {};
+  status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+      renderer, &request, &duplicate_result);
+  if (status != BLINK_STANDALONE_STATUS_OK &&
+      status != BLINK_STANDALONE_STATUS_PENDING) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "post_vulkan_dedicated_duplicate status=%d result_status=%u "
+                 "state=%u error=%s\n",
+                 status, duplicate_result.status, duplicate_result.state,
+                 duplicate_result.error_message
+                     ? duplicate_result.error_message
+                     : blink_standalone_renderer_last_error(renderer));
+    blink_standalone_dedicated_thread_gpu_frame_result_t cancel_result = {};
+    blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+        renderer, command_id, &cancel_result);
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+  const uint64_t duplicate_command_id = duplicate_result.command_id;
   const auto mutation_start = std::chrono::steady_clock::now();
   status = blink_standalone_renderer_set_element_text(
       renderer, "live_style", "#dynamic{background:#ff00ff}");
@@ -1135,7 +1157,85 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
     }
   }
 
+  const blink_standalone_status_code_t first_status = status;
+  if (first_status != BLINK_STANDALONE_STATUS_OK ||
+      command_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED ||
+      command_result.render_result.main_target_written == 0 ||
+      command_result.render_result.backdrop_mask_written == 0 ||
+      command_result.render_result.effect_count == 0 ||
+      command_result.render_result.physical_width != kPhysicalWidth ||
+      command_result.render_result.physical_height != kPhysicalHeight) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_first_command_before_duplicate "
+                 "status=%d state=%u main_written=%u mask_written=%u "
+                 "effects=%u size=%ux%u error=%s\n",
+                 first_status, command_result.state,
+                 command_result.render_result.main_target_written,
+                 command_result.render_result.backdrop_mask_written,
+                 command_result.render_result.effect_count,
+                 command_result.render_result.physical_width,
+                 command_result.render_result.physical_height,
+                 command_result.error_message
+                     ? command_result.error_message
+                     : blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  for (uint32_t poll = 0;
+       duplicate_result.state ==
+               BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+       poll < 10000;
+       ++poll) {
+    ::Sleep(1);
+    status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+        renderer, duplicate_command_id, &duplicate_result);
+    if (status != BLINK_STANDALONE_STATUS_OK &&
+        status != BLINK_STANDALONE_STATUS_PENDING) {
+      break;
+    }
+  }
+
   if (status != BLINK_STANDALONE_STATUS_OK ||
+      duplicate_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED ||
+      duplicate_result.render_result.main_target_written == 0 ||
+      duplicate_result.render_result.backdrop_mask_written == 0 ||
+      duplicate_result.render_result.effect_count == 0 ||
+      duplicate_result.render_result.physical_width != kPhysicalWidth ||
+      duplicate_result.render_result.physical_height != kPhysicalHeight) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_duplicate_post status=%d result_status=%u "
+                 "state=%u render_state=%u main_written=%u mask_written=%u "
+                 "effects=%u size=%ux%u error=%s\n",
+                 status, duplicate_result.status, duplicate_result.state,
+                 duplicate_result.render_result.state,
+                 duplicate_result.render_result.main_target_written,
+                 duplicate_result.render_result.backdrop_mask_written,
+                 duplicate_result.render_result.effect_count,
+                 duplicate_result.render_result.physical_width,
+                 duplicate_result.render_result.physical_height,
+                 duplicate_result.error_message
+                     ? duplicate_result.error_message
+                     : blink_standalone_renderer_last_error(renderer));
+    if (duplicate_result.state ==
+        BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING) {
+      blink_standalone_dedicated_thread_gpu_frame_result_t cancel_result = {};
+      blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+          renderer, duplicate_command_id, &cancel_result);
+    }
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  if (first_status != BLINK_STANDALONE_STATUS_OK ||
       command_result.state !=
           BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED ||
       command_result.render_result.main_target_written == 0 ||
@@ -1150,7 +1250,7 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
                  "effects=%u size=%ux%u source_state=%u source_status=%u "
                  "poll_iterations=%u elapsed_ms=%.3f source_ms=%.3f "
                  "submit_ms=%.3f poll_ms=%.3f error=%s\n",
-                 status, command_result.status, command_result.state,
+                 first_status, command_result.status, command_result.state,
                  command_result.render_result.state,
                  command_result.render_result.main_target_written,
                  command_result.render_result.backdrop_mask_written,
@@ -3027,7 +3127,7 @@ bool RunD3D12ExternalTargetSmoke() {
   return true;
 }
 
-bool RunD3D12DedicatedThreadFirstPublishSmoke() {
+bool RunD3D12DedicatedThreadFirstPublishSmoke(bool cancel_replace = false) {
   constexpr uint32_t kLogicalWidth = 1280;
   constexpr uint32_t kLogicalHeight = 720;
   constexpr uint32_t kPhysicalWidth = 2560;
@@ -3258,6 +3358,96 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
       BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE;
   request.render_request.main_target = target;
   request.render_request.backdrop_mask_target = mask_target;
+
+  if (cancel_replace) {
+    Microsoft::WRL::ComPtr<ID3D12Resource> cancelled_main;
+    Microsoft::WRL::ComPtr<ID3D12Resource> cancelled_mask;
+    HANDLE cancelled_main_handle = nullptr;
+    HANDLE cancelled_mask_handle = nullptr;
+    auto create_cancelled_target = [&](Microsoft::WRL::ComPtr<ID3D12Resource>*
+                                           resource,
+                                       HANDLE* handle) {
+      HRESULT create_hr = device->CreateCommittedResource(
+          &heap_properties, D3D12_HEAP_FLAG_SHARED, &resource_desc,
+          D3D12_RESOURCE_STATE_COMMON, nullptr,
+          IID_PPV_ARGS(resource->GetAddressOf()));
+      if (FAILED(create_hr) || !*resource) {
+        return false;
+      }
+      create_hr = device->CreateSharedHandle(resource->Get(), nullptr,
+                                              GENERIC_ALL, nullptr, handle);
+      return SUCCEEDED(create_hr) && *handle;
+    };
+    if (!create_cancelled_target(&cancelled_main, &cancelled_main_handle) ||
+        !create_cancelled_target(&cancelled_mask, &cancelled_mask_handle)) {
+      if (cancelled_mask_handle) ::CloseHandle(cancelled_mask_handle);
+      if (cancelled_main_handle) ::CloseHandle(cancelled_main_handle);
+      DestroyRenderer(renderer);
+      ::CloseHandle(mask_shared_handle);
+      ::CloseHandle(shared_handle);
+      return Fail("d3d12 dedicated cancel replacement target creation");
+    }
+    blink_standalone_dedicated_thread_gpu_frame_request_t cancel_request =
+        request;
+    cancel_request.timeline_time_seconds = 0.008;
+    cancel_request.source_request.request_generation = 99;
+    cancel_request.render_request.request_generation = 99;
+    cancel_request.render_request.main_target.d3d12.d3d12_resource =
+        cancelled_main.Get();
+    cancel_request.render_request.main_target.d3d12.shared_handle =
+        cancelled_main_handle;
+    cancel_request.render_request.backdrop_mask_target.d3d12.d3d12_resource =
+        cancelled_mask.Get();
+    cancel_request.render_request.backdrop_mask_target.d3d12.shared_handle =
+        cancelled_mask_handle;
+    blink_standalone_dedicated_thread_gpu_frame_result_t cancel_post = {};
+    status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+        renderer, &cancel_request, &cancel_post);
+    blink_standalone_dedicated_thread_gpu_frame_result_t cancel_result = {};
+    if ((status != BLINK_STANDALONE_STATUS_OK &&
+         status != BLINK_STANDALONE_STATUS_PENDING) ||
+        blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+            renderer, cancel_post.command_id, &cancel_result) !=
+            BLINK_STANDALONE_STATUS_OK ||
+        cancel_result.state != BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED ||
+        cancel_result.render_result.main_target_written != 0 ||
+        cancel_result.render_result.backdrop_mask_written != 0) {
+      if (cancelled_mask_handle) ::CloseHandle(cancelled_mask_handle);
+      if (cancelled_main_handle) ::CloseHandle(cancelled_main_handle);
+      DestroyRenderer(renderer);
+      ::CloseHandle(mask_shared_handle);
+      ::CloseHandle(shared_handle);
+      return Fail("d3d12 dedicated cancel terminal state");
+    }
+    ::CloseHandle(cancelled_mask_handle);
+    ::CloseHandle(cancelled_main_handle);
+    cancelled_mask.Reset();
+    cancelled_main.Reset();
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    mask_shared_handle = nullptr;
+    shared_handle = nullptr;
+    mask_resource.Reset();
+    target_resource.Reset();
+    if (!create_cancelled_target(&target_resource, &shared_handle) ||
+        !create_cancelled_target(&mask_resource, &mask_shared_handle)) {
+      if (mask_shared_handle) ::CloseHandle(mask_shared_handle);
+      if (shared_handle) ::CloseHandle(shared_handle);
+      DestroyRenderer(renderer);
+      return Fail("d3d12 dedicated replacement target creation");
+    }
+    target.d3d12.d3d12_resource = target_resource.Get();
+    target.d3d12.shared_handle = shared_handle;
+    mask_target.d3d12.d3d12_resource = mask_resource.Get();
+    mask_target.d3d12.shared_handle = mask_shared_handle;
+    request.timeline_time_seconds = 0.016;
+    request.source_request.request_generation = 2;
+    request.render_request.request_generation = 2;
+    target.common.generation = 2;
+    mask_target.common.generation = 2;
+    request.render_request.main_target = target;
+    request.render_request.backdrop_mask_target = mask_target;
+  }
 
   blink_standalone_dedicated_thread_gpu_frame_result_t command_result = {};
   status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
@@ -3913,6 +4103,7 @@ bool RunD3D12DedicatedThreadResizeReturnSmoke() {
 int main(int argc, char** argv) {
 #if defined(_WIN32)
   bool d3d12_dedicated_only = false;
+  bool d3d12_dedicated_cancel_replace_only = false;
   bool d3d12_dedicated_resize_return_only = false;
   bool vulkan_dedicated_only = false;
   bool vulkan_dedicated_resize_cancel_only = false;
@@ -3923,6 +4114,9 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--d3d12-dedicated-only") == 0) {
       d3d12_dedicated_only = true;
+    } else if (std::strcmp(argv[i],
+                           "--d3d12-dedicated-cancel-replace-only") == 0) {
+      d3d12_dedicated_cancel_replace_only = true;
     } else if (std::strcmp(argv[i],
                            "--d3d12-dedicated-resize-return-only") == 0) {
       d3d12_dedicated_resize_return_only = true;
@@ -3946,6 +4140,11 @@ int main(int argc, char** argv) {
   }
   if (d3d12_dedicated_only) {
     return RunD3D12DedicatedThreadFirstPublishSmoke() ? 0 : 1;
+  }
+  if (d3d12_dedicated_cancel_replace_only) {
+    return RunD3D12DedicatedThreadFirstPublishSmoke(/*cancel_replace=*/true)
+               ? 0
+               : 1;
   }
   if (d3d12_dedicated_resize_return_only) {
     return RunD3D12DedicatedThreadResizeReturnSmoke() ? 0 : 1;

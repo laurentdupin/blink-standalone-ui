@@ -161,9 +161,11 @@ void FrameSinkManagerImpl::BindAndSetClient(
     mojo::PendingReceiver<mojom::FrameSinkManager> interface_receiver,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     mojo::PendingRemote<mojom::FrameSinkManagerClient> client,
-    SharedImageInterfaceProvider* shared_image_interface_provider) {
+  SharedImageInterfaceProvider* shared_image_interface_provider) {
   CHECK(!client_);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   CHECK(shared_image_interface_provider);
+#endif
   shared_image_interface_provider_ = shared_image_interface_provider;
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)

@@ -24,15 +24,6 @@
 
 #include "services/viz/public/mojom/compositing/copy_output_result.mojom-import-headers.h"
 #include "services/viz/public/mojom/compositing/copy_output_result.mojom-test-utils.h"
-#include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
-#include "mojo/public/cpp/base/token_mojom_traits.h"
-#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
-#include "services/viz/public/cpp/compositing/tracked_element_rects_mojom_traits.h"
-#include "skia/public/mojom/image_info_mojom_traits.h"
-#include "third_party/blink/public/common/tokens/token_mojom_traits_helper.h"
-#include "third_party/blink/public/common/tokens/tokens_mojom_traits.h"
-#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
-#include "ui/gfx/mojom/color_space_mojom_traits.h"
 
 
 namespace viz::mojom {
@@ -52,7 +43,7 @@ CopyOutputResult::CopyOutputResult(
     CopyOutputResultDestination destination_in,
     const ::gfx::Rect& rect_in,
     ::viz::mojom::BitmapInSharedMemoryPtr bitmap_in,
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const std::optional<::gpu::Mailbox>& mailbox_in,
     const std::optional<::gfx::ColorSpace>& color_space_in,
     ::mojo::PendingRemote<::viz::mojom::TextureReleaser> releaser_in,
     const ::viz::TrackedElementRects& tracked_element_rects_in,
@@ -112,7 +103,7 @@ void CopyOutputResult::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const std::optional<::gpu::Mailbox>&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)

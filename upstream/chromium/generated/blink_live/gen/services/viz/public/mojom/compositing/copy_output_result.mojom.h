@@ -83,7 +83,7 @@ class  CopyOutputResult {
       CopyOutputResultDestination destination,
       const ::gfx::Rect& rect,
       ::viz::mojom::BitmapInSharedMemoryPtr bitmap,
-      ::gpu::mojom::MailboxPtr mailbox,
+      const std::optional<::gpu::Mailbox>& mailbox,
       const std::optional<::gfx::ColorSpace>& color_space,
       ::mojo::PendingRemote<::viz::mojom::TextureReleaser> releaser,
       const ::viz::TrackedElementRects& tracked_element_rects,
@@ -170,7 +170,7 @@ CopyOutputResult& operator=(const CopyOutputResult&) = delete;
   
   ::viz::mojom::BitmapInSharedMemoryPtr bitmap;
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  std::optional<::gpu::Mailbox> mailbox;
   
   std::optional<::gfx::ColorSpace> color_space;
   

@@ -33,6 +33,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/no_destructor.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -105,6 +106,7 @@ struct ID3D12Resource {
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/frame_sinks/root_compositor_frame_sink_impl.h"
+#include "components/viz/service/main/viz_compositor_thread_runner_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
@@ -125,6 +127,8 @@ struct ID3D12Resource {
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/core/embedder/embedder.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "gpu/ipc/common/surface_handle.h"
@@ -139,6 +143,8 @@ struct ID3D12Resource {
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
+#include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
+#include "services/viz/privileged/mojom/viz_main.mojom.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
@@ -480,8 +486,6 @@ extern "C" int StandaloneRendererMediaQueryDiagnosticFieldAt(int,
 
 void ResetStandaloneStackingPaintProvenanceForProbe();
 std::string StandaloneStackingPaintProvenanceJsonForProbe();
-void InstallStandaloneMojoThunksForStandaloneRenderer();
-void InstallStandaloneMojoCoreForStandaloneRenderer();
 
 namespace {
 
@@ -492,6 +496,19 @@ void TraceLiveFrameProbeStagef(const char* format,
                                wtf_size_t first,
                                wtf_size_t second);
 std::string JsonStringForStandaloneRenderer(const std::string& value);
+
+void EnsureChromiumMojoCoreForStandaloneRenderer() {
+  static base::NoDestructor<base::Lock> lock;
+  static bool initialized = false;
+  base::AutoLock auto_lock(*lock);
+  if (initialized) {
+    return;
+  }
+
+  CHECK(base::SingleThreadTaskRunner::HasCurrentDefault());
+  mojo::core::Init();
+  initialized = true;
+}
 
 float StandaloneClampedDeviceScaleFactor(float device_scale_factor) {
   return device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
@@ -4703,6 +4720,19 @@ class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider 
         shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
         offscreen_dependency_(offscreen_dependency) {}
 
+  StandaloneOutputSurfaceProvider(
+      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
+      std::string* failure_reason,
+      bool use_vulkan_offscreen,
+      bool use_d3d12_offscreen)
+      : gpu_thread_holder_(std::move(gpu_thread_holder)),
+        failure_reason_(failure_reason),
+        use_vulkan_offscreen_(use_vulkan_offscreen),
+        use_d3d12_offscreen_(use_d3d12_offscreen),
+        vulkan_context_provider_available_(&owned_vulkan_context_provider_available_),
+        shared_context_state_is_vulkan_(&owned_shared_context_state_is_vulkan_),
+        offscreen_dependency_(&owned_offscreen_dependency_) {}
+
   StandaloneOutputSurfaceProvider(const StandaloneOutputSurfaceProvider&) =
       delete;
   StandaloneOutputSurfaceProvider& operator=(
@@ -4763,6 +4793,19 @@ class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider 
     return GetGpuSchedulerLikeChromium();
   }
 
+  StandaloneSkiaOutputSurfaceDependency* offscreen_dependency() const {
+    return offscreen_dependency_ ? *offscreen_dependency_ : nullptr;
+  }
+
+  bool vulkan_context_provider_available() const {
+    return vulkan_context_provider_available_ &&
+           *vulkan_context_provider_available_;
+  }
+
+  bool shared_context_state_is_vulkan() const {
+    return shared_context_state_is_vulkan_ && *shared_context_state_is_vulkan_;
+  }
+
  private:
   static bool IsOffscreenSurface(gpu::SurfaceHandle surface_handle) {
     return surface_handle == gpu::kNullSurfaceHandle;
@@ -4819,6 +4862,10 @@ class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider 
   raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
   raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
   raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency_ =
+      nullptr;
+  bool owned_vulkan_context_provider_available_ = false;
+  bool owned_shared_context_state_is_vulkan_ = false;
+  raw_ptr<StandaloneSkiaOutputSurfaceDependency> owned_offscreen_dependency_ =
       nullptr;
 };
 
@@ -5057,6 +5104,29 @@ StandaloneRasterContextProviderPair CreateStandaloneRasterContextProviders(
   return providers;
 }
 
+class StandaloneChromiumRootDisplayClient final
+    : public viz::mojom::DisplayClient {
+ public:
+  mojo::PendingRemote<viz::mojom::DisplayClient> BindRemote(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    return receiver_.BindNewPipeAndPassRemote(std::move(task_runner));
+  }
+
+#if BUILDFLAG(IS_WIN)
+  void CreateLayeredWindowUpdater(
+      mojo::PendingReceiver<viz::mojom::LayeredWindowUpdater> receiver) override {
+    // The standalone Root always uses a null widget. A layered HWND output
+    // path is therefore invalid and the dropped receiver reports that fact
+    // through Chromium's normal Mojo disconnect semantics.
+  }
+
+  void AddChildWindowToBrowser(gpu::SurfaceHandle child_window) override {}
+#endif
+
+ private:
+  mojo::Receiver<viz::mojom::DisplayClient> receiver_{this};
+};
+
 class StandaloneChromiumRootFrameSinkController
     : public viz::mojom::FrameSinkManagerClient {
  public:
@@ -5065,8 +5135,6 @@ class StandaloneChromiumRootFrameSinkController
       std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
       bool use_vulkan_offscreen_output,
       bool use_d3d12_offscreen_output,
-      bool* vulkan_context_provider_available,
-      bool* shared_context_state_is_vulkan,
       bool* viz_display_created,
       bool* skia_gpu_reached,
       gfx::Size* viz_display_output_size,
@@ -5075,8 +5143,6 @@ class StandaloneChromiumRootFrameSinkController
         gpu_thread_holder_(std::move(gpu_thread_holder)),
         use_vulkan_offscreen_output_(use_vulkan_offscreen_output),
         use_d3d12_offscreen_output_(use_d3d12_offscreen_output),
-        vulkan_context_provider_available_(vulkan_context_provider_available),
-        shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
         viz_display_created_(viz_display_created),
         skia_gpu_reached_(skia_gpu_reached),
         viz_display_output_size_(viz_display_output_size),
@@ -5091,37 +5157,49 @@ class StandaloneChromiumRootFrameSinkController
       const StandaloneChromiumRootFrameSinkController&) = delete;
 
   ~StandaloneChromiumRootFrameSinkController() {
-    root_frame_sink_.reset();
-    frame_sink_manager_.reset();
+    async_client_receiver_.reset();
+    async_root_associated_remote_.reset();
+    display_private_remote_.reset();
+    if (frame_sink_manager_remote_.is_bound()) {
+      frame_sink_manager_remote_->DestroyCompositorFrameSink(frame_sink_id_);
+    }
+    frame_sink_manager_client_receiver_.reset();
+    frame_sink_manager_remote_.reset();
+    viz_compositor_thread_runner_.reset();
   }
 
-  bool Initialize(const gfx::Size& initial_output_size,
-                  viz::mojom::CompositorFrameSinkClient* direct_client) {
+  bool Initialize(const gfx::Size& initial_output_size) {
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
         base::SingleThreadTaskRunner::GetCurrentDefault();
     if (!task_runner || !gpu_thread_holder_ ||
-        !gpu_thread_holder_->GetTaskExecutor() || !direct_client) {
+        !gpu_thread_holder_->GetTaskExecutor()) {
       SetFailure("Chromium root frame sink requires a GPU task runner");
       return false;
     }
     task_runner_ = task_runner;
+    EnsureChromiumMojoCoreForStandaloneRenderer();
 
-    output_surface_provider_ = std::make_unique<StandaloneOutputSurfaceProvider>(
+    auto output_surface_provider = std::make_unique<StandaloneOutputSurfaceProvider>(
         gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
-        use_d3d12_offscreen_output_, vulkan_context_provider_available_,
-        shared_context_state_is_vulkan_, &offscreen_skia_dependency_);
-    viz::FrameSinkManagerImpl::InitParams manager_params(
-        output_surface_provider_.get());
-    frame_sink_manager_ =
-        std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
-    // Match Chromium's display-compositor host path without introducing a
-    // Mojo endpoint: the manager reports root surface activation directly to
-    // this controller. External copies are gated on that activation instead
-    // of driving the sequence with standalone RunUntilIdle pumps.
-    frame_sink_manager_->SetLocalClient(this, task_runner);
-    frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_,
-                                             /*report_activation=*/true);
-    frame_sink_manager_->SetFrameSinkDebugLabel(
+        use_d3d12_offscreen_output_);
+
+    viz_compositor_thread_runner_ =
+        std::make_unique<viz::VizCompositorThreadRunnerImpl>();
+    auto frame_sink_manager_params = viz::mojom::FrameSinkManagerParams::New();
+    frame_sink_manager_params->restart_id = 1;
+    frame_sink_manager_params->use_activation_deadline = false;
+    frame_sink_manager_params->frame_sink_manager =
+        frame_sink_manager_remote_.BindNewPipeAndPassReceiver();
+    frame_sink_manager_params->frame_sink_manager_client =
+        frame_sink_manager_client_receiver_.BindNewPipeAndPassRemote(
+            task_runner_);
+    viz_compositor_thread_runner_
+        ->CreateFrameSinkManagerWithStandaloneOutputSurfaceProvider(
+            std::move(frame_sink_manager_params),
+            std::move(output_surface_provider));
+    frame_sink_manager_remote_->RegisterFrameSinkId(
+        frame_sink_id_, /*report_activation=*/true);
+    frame_sink_manager_remote_->SetFrameSinkDebugLabel(
         frame_sink_id_, "standalone-renderer-chromium-root");
 
     auto params = viz::mojom::RootCompositorFrameSinkParams::New();
@@ -5129,22 +5207,18 @@ class StandaloneChromiumRootFrameSinkController
     params->widget = gpu::kNullSurfaceHandle;
     params->gpu_compositing = true;
     params->renderer_settings = renderer_settings_;
+    params->compositor_frame_sink =
+        async_root_associated_remote_.InitWithNewEndpointAndPassReceiver();
+    params->compositor_frame_sink_client =
+        async_client_receiver_.InitWithNewPipeAndPassRemote();
+    params->display_private =
+        display_private_remote_.BindNewEndpointAndPassReceiver();
+    params->display_client = display_client_.BindRemote(task_runner_);
 
-    root_frame_sink_ = viz::RootCompositorFrameSinkImpl::CreateForDirectClient(
-        std::move(params), direct_client, frame_sink_manager_.get(),
-        output_surface_provider_.get(),
-        viz::BeginFrameSource::kNotRestartableId,
-        /*run_all_compositor_stages_before_draw=*/true, &debug_settings_,
-        /*hint_session_factory=*/nullptr);
-    if (!root_frame_sink_) {
-      if (!failure_reason_ || failure_reason_->empty()) {
-        SetFailure("RootCompositorFrameSinkImpl::Create returned null");
-      }
-      return false;
-    }
-    root_frame_sink_->SetDisplayVisible(true);
+    frame_sink_manager_remote_->CreateRootCompositorFrameSink(std::move(params));
+    display_private_remote_->SetDisplayVisible(true);
     if (!initial_output_size.IsEmpty()) {
-      root_frame_sink_->Resize(initial_output_size);
+      display_private_remote_->Resize(initial_output_size);
     }
     if (skia_gpu_reached_) {
       *skia_gpu_reached_ = true;
@@ -5154,6 +5228,28 @@ class StandaloneChromiumRootFrameSinkController
     }
     SetFailure("");
     return true;
+  }
+
+  std::unique_ptr<cc::LayerTreeFrameSink> CreateAsyncLayerTreeFrameSink(
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider,
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner) {
+    if (!viz_compositor_thread_runner_ ||
+        !async_root_associated_remote_.is_valid() ||
+        !async_client_receiver_.is_valid()) {
+      SetFailure("Chromium async frame sink pipes are unavailable");
+      return nullptr;
+    }
+    cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams async_params;
+    async_params.compositor_task_runner = std::move(compositor_task_runner);
+    async_params.pipes.compositor_frame_sink_associated_remote =
+        std::move(async_root_associated_remote_);
+    async_params.pipes.client_receiver = std::move(async_client_receiver_);
+    async_params.no_compositor_frame_acks = false;
+    return std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
+        std::move(compositor_context_provider),
+        std::move(worker_context_provider),
+        /*shared_image_interface=*/nullptr, &async_params);
   }
 
   void NotifyDirectSubmission(const viz::LocalSurfaceId& local_surface_id,
@@ -5232,7 +5328,8 @@ class StandaloneChromiumRootFrameSinkController
                         "external GPU target pending: output size is empty",
                         output_size);
     }
-    if (!root_frame_sink_ || !frame_sink_manager_) {
+    if (!viz_compositor_thread_runner_ ||
+        !frame_sink_manager_remote_.is_bound()) {
       return MakeResult(html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
                         "external GPU target failed: Chromium root frame sink is unavailable",
                         output_size);
@@ -5266,42 +5363,39 @@ class StandaloneChromiumRootFrameSinkController
   }
 
   bool RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request) {
-    if (!request || !root_frame_sink_ || !frame_sink_manager_) {
+    if (!request || !frame_sink_manager_remote_.is_bound()) {
       return false;
     }
     if (!HasMatchingSurfaceActivation() ||
         activated_surface_generation_ != expected_surface_generation_) {
       return false;
     }
-    frame_sink_manager_->RequestCopyOfOutput(
+    frame_sink_manager_remote_->RequestCopyOfOutput(
         activated_surface_id_, std::move(request), /*capture_exact_surface_id=*/true,
         base::Seconds(5));
     return true;
   }
 
   void ForceImmediateDrawAndSwapIfPossible() {
-    if (root_frame_sink_) {
-      root_frame_sink_->ForceImmediateDrawAndSwapIfPossible();
+    if (display_private_remote_.is_bound()) {
+      display_private_remote_->ForceImmediateDrawAndSwapIfPossible();
     }
   }
 
   void Resize(const gfx::Size& output_size) {
-    if (root_frame_sink_) {
-      root_frame_sink_->Resize(output_size);
+    if (display_private_remote_.is_bound()) {
+      display_private_remote_->Resize(output_size);
     }
   }
 
   void SetNeedsBeginFrame(bool needs_begin_frame) {
-    if (root_frame_sink_) {
-      root_frame_sink_->SetNeedsBeginFrame(needs_begin_frame);
-    }
+    // The product path owns this endpoint through AsyncLayerTreeFrameSink.
+    // The retained direct diagnostic adapter must not bypass that transport.
   }
 
   void SetCompositorFrameSinkParams(
       viz::mojom::CompositorFrameSinkParamsPtr params) {
-    if (root_frame_sink_) {
-      root_frame_sink_->SetParams(std::move(params));
-    }
+    // See SetNeedsBeginFrame().
   }
 
   void SubmitCompositorFrame(
@@ -5309,44 +5403,546 @@ class StandaloneChromiumRootFrameSinkController
       viz::CompositorFrame frame,
       std::optional<viz::HitTestRegionList> hit_test_data,
       uint64_t submit_time) {
-    if (root_frame_sink_) {
-      root_frame_sink_->SubmitCompositorFrame(
-          local_surface_id, std::move(frame), std::move(hit_test_data),
-          submit_time);
-    }
+    // See SetNeedsBeginFrame().
   }
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) {
-    if (root_frame_sink_) {
-      root_frame_sink_->DidNotProduceFrame(ack);
-    }
+    // See SetNeedsBeginFrame().
   }
 
   void NotifyNewLocalSurfaceIdExpectedWhilePaused() {
-    if (root_frame_sink_) {
-      root_frame_sink_->NotifyNewLocalSurfaceIdExpectedWhilePaused();
-    }
+    // See SetNeedsBeginFrame().
   }
 
   bool HasActiveRootSurface() const {
-    return root_frame_sink_ && root_frame_sink_->CurrentSurfaceId().is_valid();
+    return activated_surface_id_.is_valid();
   }
 
-  StandaloneSkiaOutputSurfaceDependency* offscreen_skia_dependency() const {
-    return offscreen_skia_dependency_;
+  bool HasExpectedActiveRootSurface() const {
+    return HasMatchingSurfaceActivation();
   }
 
   bool vulkan_context_provider_available() const {
-    return vulkan_context_provider_available_ &&
-           *vulkan_context_provider_available_;
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+          return provider->vulkan_context_provider_available();
+        }),
+        false);
   }
 
   bool shared_context_state_is_vulkan() const {
-    return shared_context_state_is_vulkan_ &&
-           *shared_context_state_is_vulkan_;
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+          return provider->shared_context_state_is_vulkan();
+        }),
+        false);
+  }
+
+  enum class BorrowedTargetBackend {
+    kVulkan,
+    kD3D12,
+  };
+
+  struct BorrowedTargetKey {
+    uint64_t request_id = 0;
+    uint64_t generation = 0;
+
+    bool operator==(const BorrowedTargetKey& other) const {
+      return request_id == other.request_id && generation == other.generation;
+    }
+  };
+
+  struct BorrowedTargetOperationResult {
+    std::string diagnostic;
+    scoped_refptr<gpu::ClientSharedImage> blit_target;
+  };
+
+  struct BorrowedTargetOperationState {
+    BorrowedTargetOperationState()
+        : completed(base::WaitableEvent::ResetPolicy::MANUAL,
+                    base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+
+    base::Lock lock;
+    base::WaitableEvent completed;
+    std::optional<BorrowedTargetOperationResult> result;
+  };
+
+  std::shared_ptr<BorrowedTargetOperationState>
+  BeginPrepareBorrowedVkImageTarget(
+      const gfx::Size& output_size,
+      const html_css_renderer::ExternalVulkanImageTarget* target) {
+    html_css_renderer::ExternalVulkanImageTarget target_copy;
+    if (target) {
+      target_copy = *target;
+    }
+    auto state = std::make_shared<BorrowedTargetOperationState>();
+    PostBorrowedTargetOperation(
+        base::BindOnce(
+            [](const gfx::Size& output_size,
+               html_css_renderer::ExternalVulkanImageTarget target,
+               bool has_target,
+               StandaloneOutputSurfaceProvider* provider) {
+              BorrowedTargetOperationResult result;
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              if (!dependency) {
+                result.diagnostic =
+                    "offscreen Vulkan Skia dependency is not available";
+                return result;
+              }
+              result.diagnostic =
+                  dependency->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+                      output_size, nullptr, has_target ? &target : nullptr,
+                      &result.blit_target);
+              return result;
+            },
+            output_size, target_copy, target != nullptr),
+        state);
+    return state;
+  }
+
+  std::shared_ptr<BorrowedTargetOperationState>
+  BeginPrepareBorrowedD3D12Target(const gfx::Size& output_size,
+                                   ID3D12Resource* resource,
+                                   void* shared_handle) {
+    const uintptr_t resource_value = reinterpret_cast<uintptr_t>(resource);
+    const uintptr_t shared_handle_value =
+        reinterpret_cast<uintptr_t>(shared_handle);
+    auto state = std::make_shared<BorrowedTargetOperationState>();
+    PostBorrowedTargetOperation(
+        base::BindOnce(
+            [](const gfx::Size& output_size,
+               uintptr_t resource_value,
+               uintptr_t shared_handle_value,
+               StandaloneOutputSurfaceProvider* provider) {
+              BorrowedTargetOperationResult result;
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              if (!dependency) {
+                result.diagnostic =
+                    "offscreen D3D12 Skia dependency is not available";
+                return result;
+              }
+              result.diagnostic =
+                  dependency->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+                      output_size,
+                      reinterpret_cast<ID3D12Resource*>(resource_value),
+                      reinterpret_cast<void*>(shared_handle_value),
+                      &result.blit_target);
+              return result;
+            },
+            output_size, resource_value, shared_handle_value),
+        state);
+    return state;
+  }
+
+  bool TakePreparedBorrowedTarget(
+      BorrowedTargetBackend backend,
+      uint64_t request_id,
+      uint64_t generation,
+      const std::shared_ptr<BorrowedTargetOperationState>& state,
+      BorrowedTargetOperationResult* result) {
+    if (!state || !state->completed.IsSignaled() || !result) {
+      return false;
+    }
+    {
+      base::AutoLock auto_lock(state->lock);
+      if (!state->result.has_value()) {
+        result->diagnostic = "Chromium Viz target provider is unavailable";
+      } else {
+        *result = std::move(*state->result);
+      }
+    }
+    if (result->blit_target && !result->blit_target->mailbox().IsZero()) {
+      active_borrowed_target_keys_[backend] =
+          BorrowedTargetKey{request_id, generation};
+    }
+    return true;
+  }
+
+  BorrowedTargetOperationResult PrepareBorrowedVkImageTarget(
+      uint64_t request_id,
+      uint64_t generation,
+      const gfx::Size& output_size,
+      const html_css_renderer::ExternalVulkanImageTarget* target) {
+    auto state = BeginPrepareBorrowedVkImageTarget(output_size, target);
+    state->completed.Wait();
+    BorrowedTargetOperationResult result;
+    TakePreparedBorrowedTarget(BorrowedTargetBackend::kVulkan, request_id,
+                               generation, state, &result);
+    return result;
+  }
+
+  BorrowedTargetOperationResult PrepareBorrowedD3D12Target(
+      uint64_t request_id,
+      uint64_t generation,
+      const gfx::Size& output_size,
+      ID3D12Resource* resource,
+      void* shared_handle) {
+    auto state = BeginPrepareBorrowedD3D12Target(output_size, resource,
+                                                  shared_handle);
+    state->completed.Wait();
+    BorrowedTargetOperationResult result;
+    TakePreparedBorrowedTarget(BorrowedTargetBackend::kD3D12, request_id,
+                               generation, state, &result);
+    return result;
+  }
+
+  // The adapter owns request and generation identity; this controller owns
+  // every operation on the borrowed target's Viz-sequence dependency.
+  void ReleasePreparedBorrowedTarget(BorrowedTargetBackend backend,
+                                     uint64_t request_id,
+                                     uint64_t generation,
+                                     bool wait) {
+    if (!IsActiveBorrowedTarget(backend, request_id, generation)) {
+      return;
+    }
+    if (wait && backend == BorrowedTargetBackend::kVulkan) {
+      RunOnVizOutputSurfaceProvider(
+          base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+            if (auto* dependency = provider ? provider->offscreen_dependency()
+                                            : nullptr) {
+              dependency->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+            }
+            return true;
+          }),
+          false);
+    }
+    DiscardBorrowedTarget(backend, request_id, generation);
+  }
+
+  void DiscardBorrowedVkImageTarget(uint64_t request_id,
+                                    uint64_t generation) {
+    DiscardBorrowedTarget(BorrowedTargetBackend::kVulkan, request_id,
+                          generation);
+  }
+
+  void DiscardBorrowedD3D12Target(uint64_t request_id,
+                                  uint64_t generation) {
+    DiscardBorrowedTarget(BorrowedTargetBackend::kD3D12, request_id,
+                          generation);
+  }
+
+  void WaitForBorrowedVkImageTarget(uint64_t request_id,
+                                    uint64_t generation) {
+    if (!IsActiveBorrowedTarget(BorrowedTargetBackend::kVulkan, request_id,
+                                generation)) {
+      return;
+    }
+    RunOnVizOutputSurfaceProvider(
+        base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+          if (auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr) {
+            dependency->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+          }
+          return true;
+        }),
+        false);
+  }
+
+  std::string VerifyBorrowedVkImageTarget(uint64_t request_id,
+                                           uint64_t generation) {
+    if (!IsActiveBorrowedTarget(BorrowedTargetBackend::kVulkan, request_id,
+                                generation)) {
+      return "borrowed Vulkan target generation is no longer active";
+    }
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+          auto* dependency = provider ? provider->offscreen_dependency()
+                                      : nullptr;
+          return dependency
+                     ? dependency->VerifyBorrowedVkImageRenderCopyBlitTargetForTesting()
+                     : std::string("offscreen Vulkan Skia dependency is not available");
+        }),
+        std::string("Chromium Viz Vulkan target provider is unavailable"));
+  }
+
+  std::string VerifyBorrowedD3D12Target(uint64_t request_id,
+                                         uint64_t generation) {
+    if (!IsActiveBorrowedTarget(BorrowedTargetBackend::kD3D12, request_id,
+                                generation)) {
+      return "borrowed D3D12 target generation is no longer active";
+    }
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+          auto* dependency = provider ? provider->offscreen_dependency()
+                                      : nullptr;
+          return dependency
+                     ? dependency->VerifyBorrowedD3D12RenderCopyBlitTargetForTesting()
+                     : std::string("offscreen D3D12 Skia dependency is not available");
+        }),
+        std::string("Chromium Viz D3D12 target provider is unavailable"));
+  }
+
+  std::string RenderVulkanBackdropMaskToExternalTarget(
+      const html_css_renderer::ExternalVulkanImageTarget* target,
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    html_css_renderer::ExternalVulkanImageTarget target_copy;
+    if (target) {
+      target_copy = *target;
+    }
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce(
+            [](html_css_renderer::ExternalVulkanImageTarget target,
+               bool has_target,
+               std::vector<LiveBackdropFilterRegion> regions,
+               gfx::Size output_size,
+               gfx::Size css_viewport,
+               StandaloneOutputSurfaceProvider* provider) {
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              return dependency
+                         ? dependency->RenderVulkanBackdropMaskToExternalTargetForTesting(
+                               has_target ? &target : nullptr, regions,
+                               output_size, css_viewport)
+                         : std::string(
+                               "offscreen Vulkan Skia dependency is not available");
+            },
+            target_copy, target != nullptr, regions, output_size, css_viewport),
+        std::string("Chromium Viz Vulkan target provider is unavailable"));
+  }
+
+  std::string RenderD3D12BackdropMaskToExternalTarget(
+      void* resource,
+      void* shared_handle,
+      const gfx::Size& output_size,
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& css_viewport) {
+    const uintptr_t resource_value = reinterpret_cast<uintptr_t>(resource);
+    const uintptr_t shared_handle_value =
+        reinterpret_cast<uintptr_t>(shared_handle);
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce(
+            [](uintptr_t resource_value,
+               uintptr_t shared_handle_value,
+               gfx::Size output_size,
+               std::vector<LiveBackdropFilterRegion> regions,
+               gfx::Size css_viewport,
+               StandaloneOutputSurfaceProvider* provider) {
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              return dependency
+                         ? dependency->RenderD3D12BackdropMaskToExternalTargetForTesting(
+                               reinterpret_cast<void*>(resource_value),
+                               reinterpret_cast<void*>(shared_handle_value),
+                               output_size.width(), output_size.height(), regions,
+                               css_viewport)
+                         : std::string(
+                               "offscreen D3D12 Skia dependency is not available");
+            },
+            resource_value, shared_handle_value, output_size, regions,
+            css_viewport),
+        std::string("Chromium Viz D3D12 target provider is unavailable"));
+  }
+
+  std::string RunBorrowedVkImageBackingSmokeForTesting() {
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce([](StandaloneOutputSurfaceProvider* provider) {
+          auto* dependency = provider ? provider->offscreen_dependency()
+                                      : nullptr;
+          return dependency ? dependency->RunBorrowedVkImageBackingSmokeForTesting()
+                            : std::string(
+                                  "offscreen Vulkan Skia dependency is not available");
+        }),
+        std::string("Chromium Viz Vulkan target provider is unavailable"));
+  }
+
+  std::string RunGpuOutputVulkanPixelSmokeForTesting(
+      scoped_refptr<gpu::ClientSharedImage> held_shared_image) {
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce(
+            [](scoped_refptr<gpu::ClientSharedImage> held_shared_image,
+               StandaloneOutputSurfaceProvider* provider) {
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              return dependency
+                         ? dependency->RunGpuOutputVulkanPixelSmokeForTesting(
+                               std::move(held_shared_image))
+                         : std::string(
+                               "offscreen Vulkan Skia dependency is not available");
+            },
+            std::move(held_shared_image)),
+        std::string("Chromium Viz Vulkan target provider is unavailable"));
+  }
+
+  std::string RunVulkanBackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce(
+            [](std::vector<LiveBackdropFilterRegion> regions,
+               gfx::Size output_size,
+               gfx::Size css_viewport,
+               StandaloneOutputSurfaceProvider* provider) {
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              return dependency
+                         ? dependency->RunVulkanBackdropMaskPrototypeForTesting(
+                               regions, output_size, css_viewport)
+                         : std::string(
+                               "offscreen Vulkan Skia dependency is not available");
+            },
+            regions, output_size, css_viewport),
+        std::string("Chromium Viz Vulkan target provider is unavailable"));
+  }
+
+  std::string RunD3D12BackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    return RunOnVizOutputSurfaceProvider(
+        base::BindOnce(
+            [](std::vector<LiveBackdropFilterRegion> regions,
+               gfx::Size output_size,
+               gfx::Size css_viewport,
+               StandaloneOutputSurfaceProvider* provider) {
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              return dependency
+                         ? dependency->RunD3D12BackdropMaskPrototypeForTesting(
+                               regions, output_size, css_viewport)
+                         : std::string(
+                               "offscreen D3D12 Skia dependency is not available");
+            },
+            regions, output_size, css_viewport),
+        std::string("Chromium Viz D3D12 target provider is unavailable"));
   }
 
  private:
+  bool IsActiveBorrowedTarget(BorrowedTargetBackend backend,
+                              uint64_t request_id,
+                              uint64_t generation) const {
+    auto it = active_borrowed_target_keys_.find(backend);
+    return it != active_borrowed_target_keys_.end() &&
+           it->second == BorrowedTargetKey{request_id, generation};
+  }
+
+  void DiscardBorrowedTarget(BorrowedTargetBackend backend,
+                             uint64_t request_id,
+                             uint64_t generation) {
+    if (!IsActiveBorrowedTarget(backend, request_id, generation)) {
+      return;
+    }
+    RunOnVizOutputSurfaceProvider(
+        base::BindOnce(
+            [](BorrowedTargetBackend backend,
+               StandaloneOutputSurfaceProvider* provider) {
+              auto* dependency = provider ? provider->offscreen_dependency()
+                                          : nullptr;
+              if (!dependency) {
+                return false;
+              }
+              if (backend == BorrowedTargetBackend::kVulkan) {
+                dependency->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+              } else {
+                dependency->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+              }
+              return true;
+            },
+            backend),
+        false);
+    active_borrowed_target_keys_.erase(backend);
+  }
+
+  void PostBorrowedTargetOperation(
+      base::OnceCallback<BorrowedTargetOperationResult(
+          StandaloneOutputSurfaceProvider*)> operation,
+      const std::shared_ptr<BorrowedTargetOperationState>& state) const {
+    if (!state) {
+      return;
+    }
+    if (!viz_compositor_thread_runner_ || !operation ||
+        !viz_compositor_thread_runner_->task_runner() ||
+        viz_compositor_thread_runner_->task_runner()
+            ->RunsTasksInCurrentSequence()) {
+      {
+        base::AutoLock auto_lock(state->lock);
+        state->result.emplace(BorrowedTargetOperationResult{
+            .diagnostic = "Chromium Viz target provider is unavailable"});
+      }
+      state->completed.Signal();
+      return;
+    }
+    viz_compositor_thread_runner_->PostStandaloneFrameSinkManagerTask(
+        base::BindOnce(
+            [](base::OnceCallback<BorrowedTargetOperationResult(
+                   StandaloneOutputSurfaceProvider*)> operation,
+               std::shared_ptr<BorrowedTargetOperationState> state,
+               viz::FrameSinkManagerImpl* /*frame_sink_manager*/,
+               viz::OutputSurfaceProvider* output_surface_provider) {
+              auto* standalone_provider =
+                  static_cast<StandaloneOutputSurfaceProvider*>(
+                      output_surface_provider);
+              BorrowedTargetOperationResult result;
+              if (standalone_provider) {
+                result = std::move(operation).Run(standalone_provider);
+              } else {
+                result.diagnostic =
+                    "Chromium Viz target provider is unavailable";
+              }
+              {
+                base::AutoLock auto_lock(state->lock);
+                state->result.emplace(std::move(result));
+              }
+              state->completed.Signal();
+            },
+            std::move(operation), state));
+  }
+
+  template <typename Result>
+  struct VizProviderOperationState {
+    VizProviderOperationState()
+        : completed(base::WaitableEvent::ResetPolicy::MANUAL,
+                    base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+
+    base::Lock lock;
+    base::WaitableEvent completed;
+    std::optional<Result> result;
+  };
+
+  template <typename Result>
+  Result RunOnVizOutputSurfaceProvider(
+      base::OnceCallback<Result(StandaloneOutputSurfaceProvider*)> operation,
+      Result unavailable) const {
+    if (!viz_compositor_thread_runner_ || !operation) {
+      return unavailable;
+    }
+    base::SingleThreadTaskRunner* task_runner =
+        viz_compositor_thread_runner_->task_runner();
+    if (!task_runner || task_runner->RunsTasksInCurrentSequence()) {
+      return unavailable;
+    }
+
+    auto state = std::make_shared<VizProviderOperationState<Result>>();
+    viz_compositor_thread_runner_->PostStandaloneFrameSinkManagerTask(
+        base::BindOnce(
+            [](base::OnceCallback<Result(StandaloneOutputSurfaceProvider*)>
+                   operation,
+               std::shared_ptr<VizProviderOperationState<Result>> state,
+               viz::FrameSinkManagerImpl* /*frame_sink_manager*/,
+               viz::OutputSurfaceProvider* output_surface_provider) {
+              auto* standalone_provider =
+                  static_cast<StandaloneOutputSurfaceProvider*>(
+                      output_surface_provider);
+              if (standalone_provider) {
+                base::AutoLock auto_lock(state->lock);
+                state->result.emplace(
+                    std::move(operation).Run(standalone_provider));
+              }
+              state->completed.Signal();
+            },
+            std::move(operation), state));
+    state->completed.Wait();
+    base::AutoLock auto_lock(state->lock);
+    if (!state->result.has_value()) {
+      return unavailable;
+    }
+    return std::move(*state->result);
+  }
+
   void DispatchExactCopyAfterMatchingActivation() {
     if (!pending_activation_callback_ || !HasMatchingSurfaceActivation() ||
         pending_activation_callback_generation_ !=
@@ -5393,19 +5989,23 @@ class StandaloneChromiumRootFrameSinkController
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   const bool use_vulkan_offscreen_output_;
   const bool use_d3d12_offscreen_output_;
-  raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
-  raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
   viz::RendererSettings renderer_settings_;
   viz::DebugRendererSettings debug_settings_;
-  std::unique_ptr<StandaloneOutputSurfaceProvider> output_surface_provider_;
-  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
-  std::unique_ptr<viz::RootCompositorFrameSinkImpl> root_frame_sink_;
-  raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
-      nullptr;
+  std::unique_ptr<viz::VizCompositorThreadRunnerImpl>
+      viz_compositor_thread_runner_;
+  mojo::Remote<viz::mojom::FrameSinkManager> frame_sink_manager_remote_;
+  mojo::Receiver<viz::mojom::FrameSinkManagerClient>
+      frame_sink_manager_client_receiver_{this};
+  StandaloneChromiumRootDisplayClient display_client_;
+  mojo::PendingAssociatedRemote<viz::mojom::CompositorFrameSink>
+      async_root_associated_remote_;
+  mojo::AssociatedRemote<viz::mojom::DisplayPrivate> display_private_remote_;
+  mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient>
+      async_client_receiver_;
   viz::LocalSurfaceId expected_local_surface_id_;
   gfx::Size expected_output_size_;
   gfx::Size last_prepared_output_size_;
@@ -5416,6 +6016,8 @@ class StandaloneChromiumRootFrameSinkController
   uint64_t expected_surface_generation_ = 0;
   uint64_t activated_surface_generation_ = 0;
   uint64_t last_prepared_surface_generation_ = 0;
+  std::map<BorrowedTargetBackend, BorrowedTargetKey>
+      active_borrowed_target_keys_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   base::OnceClosure pending_activation_callback_;
   uint64_t pending_activation_callback_generation_ = 0;
@@ -6011,7 +6613,6 @@ class StandaloneExternalTargetCopyAdapter final {
         failure_reason_(failure_reason) {
     CHECK(compositor_task_runner);
     CHECK(chromium_root_);
-    offscreen_skia_dependency_ = chromium_root_->offscreen_skia_dependency();
     vulkan_context_provider_available_ =
         chromium_root_->vulkan_context_provider_available();
     vulkan_shared_context_state_is_vulkan_ =
@@ -6031,11 +6632,7 @@ class StandaloneExternalTargetCopyAdapter final {
       return "gpu_borrowed_vkimage_backing_smoke: failed failure=Viz Display "
              "is not initialized";
     }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_borrowed_vkimage_backing_smoke: failed failure=offscreen "
-             "Vulkan Skia dependency is not available";
-    }
-    return offscreen_skia_dependency_->RunBorrowedVkImageBackingSmokeForTesting();
+    return chromium_root_->RunBorrowedVkImageBackingSmokeForTesting();
   }
 
   std::string RunBorrowedVkImageRenderCopySmokeForTesting() {
@@ -6098,6 +6695,8 @@ class StandaloneExternalTargetCopyAdapter final {
     html_css_renderer::ExternalGpuTargetCopyResult copy_result;
     gfx::Size output_size;
     scoped_refptr<gpu::ClientSharedImage> blit_target;
+    uint64_t request_id = 0;
+    uint64_t generation = 0;
     bool ready = false;
   };
 
@@ -6115,29 +6714,23 @@ class StandaloneExternalTargetCopyAdapter final {
       return prepared;
     }
     prepared.output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
+    prepared.request_id = ++next_borrowed_target_request_id_;
+    prepared.generation = ++next_borrowed_target_generation_;
+    auto target_result = chromium_root_->PrepareBorrowedVkImageTarget(
+        prepared.request_id, prepared.generation, prepared.output_size,
+        vulkan_image);
+    prepared.blit_target = std::move(target_result.blit_target);
+    if (!target_result.diagnostic.empty()) {
       prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          label_text + ": failed failure=offscreen Vulkan Skia dependency is "
-                       "not available",
-          prepared.output_size);
-      return prepared;
-    }
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
-                prepared.output_size, nullptr, vulkan_image,
-                &prepared.blit_target);
-    if (!prepare_result.empty()) {
-      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          label_text + ": failed failure=" + prepare_result,
+          label_text + ": failed failure=" + target_result.diagnostic,
           prepared.output_size);
       return prepared;
     }
     if (!prepared.blit_target || prepared.blit_target->mailbox().IsZero()) {
-      DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kVulkan);
+      ReleasePreparedExternalGpuTargetCopy(
+          AsyncExternalGpuTargetCopyBackend::kVulkan, prepared.request_id,
+          prepared.generation, /*wait=*/false);
       prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
           label_text + ": failed failure=external Vulkan blit target "
@@ -6183,22 +6776,15 @@ class StandaloneExternalTargetCopyAdapter final {
       return prepared;
     }
     prepared.output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          label_text + ": failed failure=offscreen D3D12 Skia dependency is "
-                       "not available",
-          prepared.output_size);
-      return prepared;
-    }
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
-                prepared.output_size, external_resource, shared_handle,
-                &prepared.blit_target);
-    if (!prepare_result.empty()) {
+    prepared.request_id = ++next_borrowed_target_request_id_;
+    prepared.generation = ++next_borrowed_target_generation_;
+    auto target_result = chromium_root_->PrepareBorrowedD3D12Target(
+        prepared.request_id, prepared.generation, prepared.output_size,
+        external_resource, shared_handle);
+    prepared.blit_target = std::move(target_result.blit_target);
+    if (!target_result.diagnostic.empty()) {
       const bool shared_handle_open_failure =
-          prepare_result.find(
+          target_result.diagnostic.find(
               "borrowed external D3D12 shared handle open failed") !=
           std::string::npos;
       prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
@@ -6206,13 +6792,14 @@ class StandaloneExternalTargetCopyAdapter final {
                   shared_handle_open_failure
               ? html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument
               : html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          label_text + ": failed failure=" + prepare_result,
+          label_text + ": failed failure=" + target_result.diagnostic,
           prepared.output_size);
       return prepared;
     }
     if (!prepared.blit_target || prepared.blit_target->mailbox().IsZero()) {
-      DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kD3D12);
+      ReleasePreparedExternalGpuTargetCopy(
+          AsyncExternalGpuTargetCopyBackend::kD3D12, prepared.request_id,
+          prepared.generation, /*wait=*/false);
       prepared.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
           label_text + ": failed failure=external D3D12 target SharedImage is "
@@ -6243,7 +6830,8 @@ class StandaloneExternalTargetCopyAdapter final {
 
     return CopyPreparedExternalGpuTargetSynchronously(
         AsyncExternalGpuTargetCopyBackend::kVulkan, prepared.output_size,
-        "gpu_external_vkimage_render_copy", std::move(prepared.blit_target));
+        "gpu_external_vkimage_render_copy", prepared.request_id,
+        prepared.generation, std::move(prepared.blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6263,17 +6851,22 @@ class StandaloneExternalTargetCopyAdapter final {
       return *begin_blocked;
     }
     async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
-
-    PreparedExternalGpuTargetCopy prepared = PrepareExternalVkImageCopyTarget(
-        vulkan_image, output_size, "gpu_external_vkimage_render_copy_async");
-    if (!prepared.ready) {
-      return prepared.copy_result;
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_vkimage_render_copy_async");
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
-
-    return BeginPreparedAsyncExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kVulkan, prepared.output_size,
-        "gpu_external_vkimage_render_copy_async",
-        std::move(prepared.blit_target));
+    BeginAsyncExternalGpuTargetCopyState(
+        AsyncExternalGpuTargetCopyBackend::kVulkan, display_ready.output_size,
+        "gpu_external_vkimage_render_copy_async");
+    async_external_gpu_target_copy_.borrowed_target_request_id =
+        async_external_gpu_target_copy_.request_id;
+    async_external_gpu_target_copy_.borrowed_target_generation =
+        async_external_gpu_target_copy_.generation;
+    async_external_gpu_target_copy_.has_vulkan_target = true;
+    async_external_gpu_target_copy_.vulkan_target = *vulkan_image;
+    StartAsyncTargetPreparation();
+    return CurrentAsyncExternalGpuTargetCopyResult();
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6292,17 +6885,8 @@ class StandaloneExternalTargetCopyAdapter final {
       return display_ready.copy_result;
     }
     output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_backdrop_mask: failed "
-          "failure=offscreen Vulkan Skia dependency is not available",
-          output_size);
-    }
-    std::string diagnostic =
-        offscreen_skia_dependency_
-            ->RenderVulkanBackdropMaskToExternalTargetForTesting(
-                vulkan_image, regions, output_size, viewport_);
+    std::string diagnostic = chromium_root_->RenderVulkanBackdropMaskToExternalTarget(
+        vulkan_image, regions, output_size, viewport_);
     return MakeAsyncExternalGpuTargetCopyResult(
         diagnostic.find(": ok") != std::string::npos
             ? html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted
@@ -6316,26 +6900,25 @@ class StandaloneExternalTargetCopyAdapter final {
       return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=Viz "
              "Display is not initialized";
     }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_borrowed_vkimage_render_copy_smoke: failed "
-             "failure=offscreen Vulkan Skia dependency is not available";
-    }
 
     gfx::Size output_size = viewport_;
     if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
     }
-    scoped_refptr<gpu::ClientSharedImage> blit_target;
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
-                output_size, nullptr, external_target, &blit_target);
-    if (!prepare_result.empty()) {
-      return prepare_result;
+    const uint64_t request_id = ++next_borrowed_target_request_id_;
+    const uint64_t generation = ++next_borrowed_target_generation_;
+    auto target_result = chromium_root_->PrepareBorrowedVkImageTarget(
+        request_id, generation, output_size, external_target);
+    if (!target_result.diagnostic.empty()) {
+      return target_result.diagnostic;
     }
+    scoped_refptr<gpu::ClientSharedImage> blit_target =
+        std::move(target_result.blit_target);
     if (!blit_target || blit_target->mailbox().IsZero()) {
-      offscreen_skia_dependency_
-          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      chromium_root_->ReleasePreparedBorrowedTarget(
+          StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+              kVulkan,
+          request_id, generation, /*wait=*/false);
       return "gpu_borrowed_vkimage_render_copy_smoke: failed "
              "failure=borrowed blit target SharedImage is unavailable "
              "path=viz_blit_request viz_blit_request=1";
@@ -6349,7 +6932,7 @@ class StandaloneExternalTargetCopyAdapter final {
     copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
       DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kVulkan);
+          AsyncExternalGpuTargetCopyBackend::kVulkan, request_id, generation);
       return "gpu_borrowed_vkimage_render_copy_smoke: failed "
              "failure=Viz BlitRequest CopyOutput did not complete "
              "path=viz_blit_request viz_blit_request=1";
@@ -6358,13 +6941,18 @@ class StandaloneExternalTargetCopyAdapter final {
       std::string failure =
           copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
       DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kVulkan);
+          AsyncExternalGpuTargetCopyBackend::kVulkan, request_id, generation);
       return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=" +
              failure + " path=viz_blit_request viz_blit_request=1";
     }
     copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
-    return offscreen_skia_dependency_
-        ->VerifyBorrowedVkImageRenderCopyBlitTargetForTesting();
+    std::string verification =
+        chromium_root_->VerifyBorrowedVkImageTarget(request_id, generation);
+    chromium_root_->ReleasePreparedBorrowedTarget(
+        StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+            kVulkan,
+        request_id, generation, /*wait=*/true);
+    return verification;
   }
 
   std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
@@ -6404,7 +6992,8 @@ class StandaloneExternalTargetCopyAdapter final {
 
     return CopyPreparedExternalGpuTargetSynchronously(
         AsyncExternalGpuTargetCopyBackend::kD3D12, prepared.output_size,
-        "gpu_external_d3d12_render_copy", std::move(prepared.blit_target));
+        "gpu_external_d3d12_render_copy", prepared.request_id,
+        prepared.generation, std::move(prepared.blit_target));
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6428,19 +7017,24 @@ class StandaloneExternalTargetCopyAdapter final {
       return *begin_blocked;
     }
     async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
-
-    PreparedExternalGpuTargetCopy prepared = PrepareExternalD3D12CopyTarget(
-        external_resource, shared_handle, output_size,
-        "gpu_external_d3d12_render_copy_async",
-        /*map_shared_handle_open_failure_to_invalid_argument=*/false);
-    if (!prepared.ready) {
-      return prepared.copy_result;
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_d3d12_render_copy_async");
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
-
-    return BeginPreparedAsyncExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kD3D12, prepared.output_size,
-        "gpu_external_d3d12_render_copy_async",
-        std::move(prepared.blit_target));
+    BeginAsyncExternalGpuTargetCopyState(
+        AsyncExternalGpuTargetCopyBackend::kD3D12,
+        display_ready.output_size, "gpu_external_d3d12_render_copy_async");
+    async_external_gpu_target_copy_.borrowed_target_request_id =
+        async_external_gpu_target_copy_.request_id;
+    async_external_gpu_target_copy_.borrowed_target_generation =
+        async_external_gpu_target_copy_.generation;
+    async_external_gpu_target_copy_.d3d12_resource_value =
+        reinterpret_cast<uintptr_t>(external_resource);
+    async_external_gpu_target_copy_.d3d12_shared_handle_value =
+        reinterpret_cast<uintptr_t>(shared_handle);
+    StartAsyncTargetPreparation();
+    return CurrentAsyncExternalGpuTargetCopyResult();
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6456,19 +7050,8 @@ class StandaloneExternalTargetCopyAdapter final {
       return display_ready.copy_result;
     }
     const gfx::Size output_size = display_ready.output_size;
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_backdrop_mask: failed "
-          "failure=offscreen D3D12 Skia dependency is not available",
-          output_size);
-    }
-    gfx::Size css_viewport = viewport_;
-    std::string diagnostic =
-        offscreen_skia_dependency_
-            ->RenderD3D12BackdropMaskToExternalTargetForTesting(
-                d3d12_resource, shared_handle, output_size.width(),
-                output_size.height(), regions, css_viewport);
+    std::string diagnostic = chromium_root_->RenderD3D12BackdropMaskToExternalTarget(
+        d3d12_resource, shared_handle, output_size, regions, viewport_);
     return MakeAsyncExternalGpuTargetCopyResult(
         diagnostic.find(": ok") != std::string::npos
             ? html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted
@@ -6482,26 +7065,25 @@ class StandaloneExternalTargetCopyAdapter final {
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=Viz "
              "Display is not initialized";
     }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_borrowed_d3d12_render_copy_smoke: failed "
-             "failure=offscreen D3D12 Skia dependency is not available";
-    }
 
     gfx::Size output_size = viewport_;
     if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
     }
-    scoped_refptr<gpu::ClientSharedImage> blit_target;
-    std::string prepare_result =
-        offscreen_skia_dependency_
-            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
-                output_size, external_resource, shared_handle, &blit_target);
-    if (!prepare_result.empty()) {
-      return prepare_result;
+    const uint64_t request_id = ++next_borrowed_target_request_id_;
+    const uint64_t generation = ++next_borrowed_target_generation_;
+    auto target_result = chromium_root_->PrepareBorrowedD3D12Target(
+        request_id, generation, output_size, external_resource, shared_handle);
+    if (!target_result.diagnostic.empty()) {
+      return target_result.diagnostic;
     }
+    scoped_refptr<gpu::ClientSharedImage> blit_target =
+        std::move(target_result.blit_target);
     if (!blit_target || blit_target->mailbox().IsZero()) {
-      offscreen_skia_dependency_
-          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      chromium_root_->ReleasePreparedBorrowedTarget(
+          StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+              kD3D12,
+          request_id, generation, /*wait=*/false);
       return "gpu_borrowed_d3d12_render_copy_smoke: failed "
              "failure=borrowed D3D12 target SharedImage is unavailable "
              "path=viz_blit_request viz_blit_request=1";
@@ -6515,7 +7097,7 @@ class StandaloneExternalTargetCopyAdapter final {
     copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
       DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kD3D12);
+          AsyncExternalGpuTargetCopyBackend::kD3D12, request_id, generation);
       return "gpu_borrowed_d3d12_render_copy_smoke: failed "
              "failure=Viz BlitRequest CopyOutput did not complete "
              "path=viz_blit_request viz_blit_request=1";
@@ -6524,13 +7106,18 @@ class StandaloneExternalTargetCopyAdapter final {
       std::string failure =
           copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
       DiscardPreparedExternalGpuTargetCopy(
-          AsyncExternalGpuTargetCopyBackend::kD3D12);
+          AsyncExternalGpuTargetCopyBackend::kD3D12, request_id, generation);
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=" +
              failure + " path=viz_blit_request viz_blit_request=1";
     }
     copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
-    return offscreen_skia_dependency_
-        ->VerifyBorrowedD3D12RenderCopyBlitTargetForTesting();
+    std::string verification =
+        chromium_root_->VerifyBorrowedD3D12Target(request_id, generation);
+    chromium_root_->ReleasePreparedBorrowedTarget(
+        StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+            kD3D12,
+        request_id, generation, /*wait=*/false);
+    return verification;
   }
 
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
@@ -6538,17 +7125,13 @@ class StandaloneExternalTargetCopyAdapter final {
       return "gpu_output_vulkan_pixel_smoke: failed failure=Viz Display is "
              "not initialized";
     }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_output_vulkan_pixel_smoke: failed failure=offscreen Vulkan "
-             "Skia dependency is not available";
-    }
     scoped_refptr<gpu::ClientSharedImage> held_shared_image =
         copy_output_.held_shared_image();
     if (!held_shared_image) {
       return "gpu_output_vulkan_pixel_smoke: failed failure=held Vulkan "
              "CopyOutput SharedImage is not available";
     }
-    return offscreen_skia_dependency_->RunGpuOutputVulkanPixelSmokeForTesting(
+    return chromium_root_->RunGpuOutputVulkanPixelSmokeForTesting(
         std::move(held_shared_image));
   }
 
@@ -6558,15 +7141,11 @@ class StandaloneExternalTargetCopyAdapter final {
       return "gpu_vulkan_backdrop_mask_prototype_smoke: failed failure=Viz "
              "Display is not initialized";
     }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_vulkan_backdrop_mask_prototype_smoke: failed "
-             "failure=offscreen Vulkan Skia dependency is not available";
-    }
     gfx::Size output_size = viewport_;
     if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
     }
-    return offscreen_skia_dependency_->RunVulkanBackdropMaskPrototypeForTesting(
+    return chromium_root_->RunVulkanBackdropMaskPrototypeForTesting(
         regions, output_size, viewport_);
   }
 
@@ -6576,15 +7155,11 @@ class StandaloneExternalTargetCopyAdapter final {
       return "gpu_d3d12_backdrop_mask_prototype_smoke: failed failure=Viz "
              "Display is not initialized";
     }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_d3d12_backdrop_mask_prototype_smoke: failed "
-             "failure=offscreen D3D12 Skia dependency is not available";
-    }
     gfx::Size output_size = viewport_;
     if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
     }
-    return offscreen_skia_dependency_->RunD3D12BackdropMaskPrototypeForTesting(
+    return chromium_root_->RunD3D12BackdropMaskPrototypeForTesting(
         regions, output_size, viewport_);
   }
 
@@ -6664,6 +7239,17 @@ class StandaloneExternalTargetCopyAdapter final {
         html_css_renderer::ExternalGpuTargetCopyStatus::kNone;
     AsyncExternalGpuTargetCopyBackend backend =
         AsyncExternalGpuTargetCopyBackend::kNone;
+    uint64_t borrowed_target_request_id = 0;
+    uint64_t borrowed_target_generation = 0;
+    bool preparing_target = false;
+    bool retryable_copy_miss = false;
+    bool has_vulkan_target = false;
+    html_css_renderer::ExternalVulkanImageTarget vulkan_target = {};
+    uintptr_t d3d12_resource_value = 0;
+    uintptr_t d3d12_shared_handle_value = 0;
+    std::shared_ptr<
+        StandaloneChromiumRootFrameSinkController::BorrowedTargetOperationState>
+        prepare_state;
     gfx::Size output_size;
     std::string label;
     std::string diagnostic;
@@ -6714,6 +7300,9 @@ class StandaloneExternalTargetCopyAdapter final {
     const std::string label_text = label ? label : "external_gpu_target_copy";
     const gfx::Size status_size = ExternalGpuTargetCopyStatusSize(output_size);
     if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
+      if (async_external_gpu_target_copy_.request_id != 0) {
+        return CurrentAsyncExternalGpuTargetCopyResult();
+      }
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           label_text + ": pending reason=previous external GPU target "
@@ -6722,63 +7311,66 @@ class StandaloneExternalTargetCopyAdapter final {
     }
     if (async_external_gpu_target_copy_.status ==
         html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          label_text + ": failed failure=async external GPU target copy is "
-                       "already pending",
-          status_size);
+      if (!async_external_gpu_target_copy_.retryable_copy_miss) {
+        return CurrentAsyncExternalGpuTargetCopyResult();
+      }
     }
     return std::nullopt;
   }
 
   void DiscardPreparedExternalGpuTargetCopy(
-      AsyncExternalGpuTargetCopyBackend backend) {
-    if (!offscreen_skia_dependency_) {
+      AsyncExternalGpuTargetCopyBackend backend,
+      uint64_t request_id,
+      uint64_t generation) {
+    ReleasePreparedExternalGpuTargetCopy(backend, request_id, generation,
+                                         /*wait=*/false);
+  }
+
+  void ReleasePreparedExternalGpuTargetCopy(
+      AsyncExternalGpuTargetCopyBackend backend,
+      uint64_t request_id,
+      uint64_t generation,
+      bool wait) {
+    if (!chromium_root_ || request_id == 0 || generation == 0) {
       return;
     }
     switch (backend) {
       case AsyncExternalGpuTargetCopyBackend::kVulkan:
-        offscreen_skia_dependency_
-            ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+        chromium_root_->ReleasePreparedBorrowedTarget(
+            StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+                kVulkan,
+            request_id, generation, wait);
         break;
       case AsyncExternalGpuTargetCopyBackend::kD3D12:
-        offscreen_skia_dependency_
-            ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+        chromium_root_->ReleasePreparedBorrowedTarget(
+            StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+                kD3D12,
+            request_id, generation, /*wait=*/false);
         break;
       case AsyncExternalGpuTargetCopyBackend::kNone:
         break;
     }
   }
 
-  void WaitForPreparedExternalGpuTargetCopy(
-      AsyncExternalGpuTargetCopyBackend backend) {
-    if (!offscreen_skia_dependency_) {
-      return;
-    }
-    if (backend == AsyncExternalGpuTargetCopyBackend::kVulkan) {
-      offscreen_skia_dependency_
-          ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
-    }
-  }
-
   void ReleaseCompletedExternalGpuTargetCopy(
-      AsyncExternalGpuTargetCopyBackend backend) {
+      AsyncExternalGpuTargetCopyBackend backend,
+      uint64_t request_id,
+      uint64_t generation) {
     // Chromium CopyOutput shared-image ownership is released at the callback
     // boundary. The borrowed external target cannot be discarded until that
     // release has happened; Vulkan additionally needs its borrowed target wait.
     copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
-    WaitForPreparedExternalGpuTargetCopy(backend);
-    DiscardPreparedExternalGpuTargetCopy(backend);
+    ReleasePreparedExternalGpuTargetCopy(backend, request_id, generation,
+                                         /*wait=*/true);
   }
 
   void ReleaseAllPreparedExternalGpuTargetCopies() {
     copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
-    WaitForPreparedExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kVulkan);
-    DiscardPreparedExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kVulkan);
-    DiscardPreparedExternalGpuTargetCopy(
-        AsyncExternalGpuTargetCopyBackend::kD3D12);
+    ReleasePreparedExternalGpuTargetCopy(
+        async_external_gpu_target_copy_.backend,
+        async_external_gpu_target_copy_.borrowed_target_request_id,
+        async_external_gpu_target_copy_.borrowed_target_generation,
+        /*wait=*/true);
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6786,6 +7378,8 @@ class StandaloneExternalTargetCopyAdapter final {
       AsyncExternalGpuTargetCopyBackend backend,
       const gfx::Size& output_size,
       const char* label,
+      uint64_t borrowed_target_request_id,
+      uint64_t borrowed_target_generation,
       scoped_refptr<gpu::ClientSharedImage> blit_target) {
     const std::string label_text = label ? label : "external_gpu_target_copy";
     RequestCopyOutput(output_size,
@@ -6795,7 +7389,8 @@ class StandaloneExternalTargetCopyAdapter final {
     DrawVizDisplayNow();
     copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
-      DiscardPreparedExternalGpuTargetCopy(backend);
+      DiscardPreparedExternalGpuTargetCopy(
+          backend, borrowed_target_request_id, borrowed_target_generation);
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           label_text +
@@ -6805,12 +7400,14 @@ class StandaloneExternalTargetCopyAdapter final {
     if (copy_output_.Failed()) {
       std::string failure =
           copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
-      DiscardPreparedExternalGpuTargetCopy(backend);
+      DiscardPreparedExternalGpuTargetCopy(
+          backend, borrowed_target_request_id, borrowed_target_generation);
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
           label_text + ": failed failure=" + failure, output_size);
     }
-    ReleaseCompletedExternalGpuTargetCopy(backend);
+    ReleaseCompletedExternalGpuTargetCopy(
+        backend, borrowed_target_request_id, borrowed_target_generation);
     std::ostringstream out;
     out << label_text << ": ok path=viz_blit_request"
         << " target=" << output_size.width() << "x" << output_size.height();
@@ -6824,8 +7421,14 @@ class StandaloneExternalTargetCopyAdapter final {
       AsyncExternalGpuTargetCopyBackend backend,
       const gfx::Size& output_size,
       const char* label,
+      uint64_t borrowed_target_request_id,
+      uint64_t borrowed_target_generation,
       scoped_refptr<gpu::ClientSharedImage> blit_target) {
     BeginAsyncExternalGpuTargetCopyState(backend, output_size, label);
+    async_external_gpu_target_copy_.borrowed_target_request_id =
+        borrowed_target_request_id;
+    async_external_gpu_target_copy_.borrowed_target_generation =
+        borrowed_target_generation;
     RequestCopyOutput(output_size,
                       /*wants_png=*/false,
                       /*wants_raw=*/false,
@@ -6847,6 +7450,7 @@ class StandaloneExternalTargetCopyAdapter final {
         ++async_external_gpu_target_copy_generation_;
     async_external_gpu_target_copy_.status =
         html_css_renderer::ExternalGpuTargetCopyStatus::kPending;
+    async_external_gpu_target_copy_.retryable_copy_miss = false;
     async_external_gpu_target_copy_.backend = backend;
     async_external_gpu_target_copy_.output_size = output_size;
     async_external_gpu_target_copy_.label = label ? label : "";
@@ -6857,6 +7461,42 @@ class StandaloneExternalTargetCopyAdapter final {
     async_external_gpu_target_copy_.diagnostic = out.str();
   }
 
+  void StartAsyncTargetPreparation() {
+    if (!chromium_root_ ||
+        async_external_gpu_target_copy_.status !=
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
+      return;
+    }
+    async_external_gpu_target_copy_.retryable_copy_miss = false;
+    async_external_gpu_target_copy_.preparing_target = true;
+    switch (async_external_gpu_target_copy_.backend) {
+      case AsyncExternalGpuTargetCopyBackend::kVulkan:
+        async_external_gpu_target_copy_.prepare_state =
+            chromium_root_->BeginPrepareBorrowedVkImageTarget(
+                async_external_gpu_target_copy_.output_size,
+                async_external_gpu_target_copy_.has_vulkan_target
+                    ? &async_external_gpu_target_copy_.vulkan_target
+                    : nullptr);
+        return;
+      case AsyncExternalGpuTargetCopyBackend::kD3D12:
+        async_external_gpu_target_copy_.prepare_state =
+            chromium_root_->BeginPrepareBorrowedD3D12Target(
+                async_external_gpu_target_copy_.output_size,
+                reinterpret_cast<ID3D12Resource*>(
+                    async_external_gpu_target_copy_.d3d12_resource_value),
+                reinterpret_cast<void*>(
+                    async_external_gpu_target_copy_.d3d12_shared_handle_value));
+        return;
+      case AsyncExternalGpuTargetCopyBackend::kNone:
+        async_external_gpu_target_copy_.preparing_target = false;
+        async_external_gpu_target_copy_.status =
+            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed;
+        async_external_gpu_target_copy_.diagnostic =
+            "async external GPU target copy has no backend";
+        return;
+    }
+  }
+
   void FinalizeAsyncExternalGpuTargetCopyIfReady() {
     if (async_external_gpu_target_copy_.status !=
         html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
@@ -6865,12 +7505,62 @@ class StandaloneExternalTargetCopyAdapter final {
     if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
       return;
     }
+    if (async_external_gpu_target_copy_.preparing_target) {
+      auto& state = async_external_gpu_target_copy_.prepare_state;
+      StandaloneChromiumRootFrameSinkController::BorrowedTargetOperationResult
+          prepared_target;
+      const auto root_backend =
+          async_external_gpu_target_copy_.backend ==
+                  AsyncExternalGpuTargetCopyBackend::kVulkan
+              ? StandaloneChromiumRootFrameSinkController::
+                    BorrowedTargetBackend::kVulkan
+              : StandaloneChromiumRootFrameSinkController::
+                    BorrowedTargetBackend::kD3D12;
+      if (!chromium_root_->TakePreparedBorrowedTarget(
+              root_backend,
+              async_external_gpu_target_copy_.borrowed_target_request_id,
+              async_external_gpu_target_copy_.borrowed_target_generation,
+              state, &prepared_target)) {
+        return;
+      }
+      async_external_gpu_target_copy_.preparing_target = false;
+      async_external_gpu_target_copy_.prepare_state.reset();
+      if (!prepared_target.diagnostic.empty() || !prepared_target.blit_target ||
+          prepared_target.blit_target->mailbox().IsZero()) {
+        ReleasePreparedExternalGpuTargetCopy(
+            async_external_gpu_target_copy_.backend,
+            async_external_gpu_target_copy_.borrowed_target_request_id,
+            async_external_gpu_target_copy_.borrowed_target_generation,
+            /*wait=*/false);
+        async_external_gpu_target_copy_.status =
+            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed;
+        async_external_gpu_target_copy_.diagnostic =
+            async_external_gpu_target_copy_.label + ": failed failure=" +
+            (prepared_target.diagnostic.empty()
+                 ? "external target SharedImage is unavailable"
+                 : prepared_target.diagnostic);
+        return;
+      }
+      RequestCopyOutput(async_external_gpu_target_copy_.output_size,
+                        /*wants_png=*/false,
+                        /*wants_raw=*/false,
+                        /*wants_gpu=*/true,
+                        std::move(prepared_target.blit_target),
+                        async_external_gpu_target_copy_.generation);
+      DrawVizDisplayNow();
+      return;
+    }
+    if (!async_external_gpu_target_copy_request_enqueued_) {
+      return;
+    }
     if (copy_output_.IsPending()) {
       return;
     }
     if (copy_output_.Succeeded()) {
       ReleaseCompletedExternalGpuTargetCopy(
-          async_external_gpu_target_copy_.backend);
+          async_external_gpu_target_copy_.backend,
+          async_external_gpu_target_copy_.borrowed_target_request_id,
+          async_external_gpu_target_copy_.borrowed_target_generation);
       async_external_gpu_target_copy_.status =
           html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted;
       async_external_gpu_target_copy_request_enqueued_ = false;
@@ -6886,7 +7576,29 @@ class StandaloneExternalTargetCopyAdapter final {
     std::string failure =
         copy_output_.FailureOr("Viz BlitRequest CopyOutput failed");
     DiscardPreparedExternalGpuTargetCopy(
-        async_external_gpu_target_copy_.backend);
+        async_external_gpu_target_copy_.backend,
+        async_external_gpu_target_copy_.borrowed_target_request_id,
+        async_external_gpu_target_copy_.borrowed_target_generation);
+    const bool copy_output_miss =
+        failure.find("Viz CopyOutput did not produce output") !=
+            std::string::npos ||
+        failure.find("cannot run without an activated root surface") !=
+            std::string::npos ||
+        failure.find("returned no result") != std::string::npos ||
+        failure.find("returned empty result") != std::string::npos;
+    if (copy_output_miss &&
+        (!chromium_root_->HasExpectedActiveRootSurface() ||
+         async_external_gpu_target_copy_.generation !=
+             async_external_gpu_target_copy_generation_)) {
+      async_external_gpu_target_copy_.retryable_copy_miss = true;
+      async_external_gpu_target_copy_request_enqueued_ = false;
+      async_external_gpu_target_copy_.diagnostic =
+          async_external_gpu_target_copy_.label +
+          ": pending reason=Viz CopyOutput did not produce output while "
+          "surface activation is pending";
+      StartAsyncTargetPreparation();
+      return;
+    }
     async_external_gpu_target_copy_.status =
         html_css_renderer::ExternalGpuTargetCopyStatus::kFailed;
     async_external_gpu_target_copy_request_enqueued_ = false;
@@ -6894,10 +7606,35 @@ class StandaloneExternalTargetCopyAdapter final {
         async_external_gpu_target_copy_.label + ": failed failure=" + failure;
   }
 
+  void DrainPendingAsyncTargetPreparation() {
+    if (!async_external_gpu_target_copy_.preparing_target ||
+        !async_external_gpu_target_copy_.prepare_state || !chromium_root_) {
+      return;
+    }
+    async_external_gpu_target_copy_.prepare_state->completed.Wait();
+    StandaloneChromiumRootFrameSinkController::BorrowedTargetOperationResult
+        ignored_result;
+    const auto root_backend =
+        async_external_gpu_target_copy_.backend ==
+                AsyncExternalGpuTargetCopyBackend::kVulkan
+            ? StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+                  kVulkan
+            : StandaloneChromiumRootFrameSinkController::BorrowedTargetBackend::
+                  kD3D12;
+    chromium_root_->TakePreparedBorrowedTarget(
+        root_backend,
+        async_external_gpu_target_copy_.borrowed_target_request_id,
+        async_external_gpu_target_copy_.borrowed_target_generation,
+        async_external_gpu_target_copy_.prepare_state, &ignored_result);
+    async_external_gpu_target_copy_.prepare_state.reset();
+    async_external_gpu_target_copy_.preparing_target = false;
+  }
+
   void InvalidatePendingAsyncExternalGpuTargetCopy(
       html_css_renderer::ExternalGpuTargetCopyStatus status,
       std::string diagnostic,
       bool discard_prepared_target) {
+    DrainPendingAsyncTargetPreparation();
     const bool was_pending =
         async_external_gpu_target_copy_.status ==
         html_css_renderer::ExternalGpuTargetCopyStatus::kPending;
@@ -6905,6 +7642,10 @@ class StandaloneExternalTargetCopyAdapter final {
         async_external_gpu_target_copy_.generation;
     const AsyncExternalGpuTargetCopyBackend invalidated_backend =
         async_external_gpu_target_copy_.backend;
+    const uint64_t invalidated_borrowed_target_request_id =
+        async_external_gpu_target_copy_.borrowed_target_request_id;
+    const uint64_t invalidated_borrowed_target_generation =
+        async_external_gpu_target_copy_.borrowed_target_generation;
     const bool wait_for_stale_callback =
         was_pending && invalidated_generation != 0 &&
         async_external_gpu_target_copy_request_enqueued_;
@@ -6918,13 +7659,19 @@ class StandaloneExternalTargetCopyAdapter final {
       stale_async_external_gpu_target_copy_waiting_for_callback_ = true;
       stale_async_external_gpu_target_copy_generation_ = invalidated_generation;
       stale_async_external_gpu_target_copy_backend_ = invalidated_backend;
+      stale_borrowed_target_request_id_ =
+          invalidated_borrowed_target_request_id;
+      stale_borrowed_target_generation_ =
+          invalidated_borrowed_target_generation;
       stale_async_external_gpu_target_copy_terminal_status_ = status;
     } else {
       async_external_gpu_target_copy_request_enqueued_ = false;
     }
     copy_output_.ReleaseHeldSharedImage(gpu::SyncToken());
     if (discard_prepared_target || !wait_for_stale_callback) {
-      DiscardPreparedExternalGpuTargetCopy(invalidated_backend);
+      DiscardPreparedExternalGpuTargetCopy(
+          invalidated_backend, invalidated_borrowed_target_request_id,
+          invalidated_borrowed_target_generation);
     }
     copy_output_.MarkExternalGpuTargetInvalidated();
   }
@@ -6935,7 +7682,8 @@ class StandaloneExternalTargetCopyAdapter final {
       return;
     }
     ReleaseCompletedExternalGpuTargetCopy(
-        stale_async_external_gpu_target_copy_backend_);
+        stale_async_external_gpu_target_copy_backend_,
+        stale_borrowed_target_request_id_, stale_borrowed_target_generation_);
     async_external_gpu_target_copy_.status =
         stale_async_external_gpu_target_copy_terminal_status_;
     async_external_gpu_target_copy_request_enqueued_ = false;
@@ -6943,6 +7691,8 @@ class StandaloneExternalTargetCopyAdapter final {
     stale_async_external_gpu_target_copy_generation_ = 0;
     stale_async_external_gpu_target_copy_backend_ =
         AsyncExternalGpuTargetCopyBackend::kNone;
+    stale_borrowed_target_request_id_ = 0;
+    stale_borrowed_target_generation_ = 0;
     stale_async_external_gpu_target_copy_terminal_status_ =
         html_css_renderer::ExternalGpuTargetCopyStatus::kNone;
   }
@@ -7070,8 +7820,6 @@ class StandaloneExternalTargetCopyAdapter final {
   gfx::Size viewport_;
   raw_ptr<StandaloneChromiumRootFrameSinkController> chromium_root_ =
       nullptr;
-  raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
-      nullptr;
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
@@ -7084,6 +7832,8 @@ class StandaloneExternalTargetCopyAdapter final {
   raw_ptr<bool> copy_output_raw_requested_ = nullptr;
   raw_ptr<bool> copy_output_gpu_requested_ = nullptr;
   StandaloneCopyOutputController copy_output_;
+  uint64_t next_borrowed_target_request_id_ = 0;
+  uint64_t next_borrowed_target_generation_ = 0;
   uint64_t next_async_external_gpu_target_copy_request_id_ = 0;
   uint64_t async_external_gpu_target_copy_generation_ = 0;
   AsyncExternalGpuTargetCopyState async_external_gpu_target_copy_;
@@ -7092,6 +7842,8 @@ class StandaloneExternalTargetCopyAdapter final {
   uint64_t stale_async_external_gpu_target_copy_generation_ = 0;
   AsyncExternalGpuTargetCopyBackend stale_async_external_gpu_target_copy_backend_ =
       AsyncExternalGpuTargetCopyBackend::kNone;
+  uint64_t stale_borrowed_target_request_id_ = 0;
+  uint64_t stale_borrowed_target_generation_ = 0;
   html_css_renderer::ExternalGpuTargetCopyStatus
       stale_async_external_gpu_target_copy_terminal_status_ =
           html_css_renderer::ExternalGpuTargetCopyStatus::kNone;
@@ -7851,9 +8603,7 @@ class StandaloneCcLayerHost final
     chromium_root_frame_sink_ =
         std::make_unique<StandaloneChromiumRootFrameSinkController>(
             frame_sink_id, gpu_thread_holder_, use_vulkan_offscreen_output_,
-            use_d3d12_offscreen_output_,
-            &vulkan_context_provider_available_,
-            &vulkan_shared_context_state_is_vulkan_, &viz_display_created_,
+            use_d3d12_offscreen_output_, &viz_display_created_,
             &skia_gpu_reached_,
             &viz_display_output_size_, &frame_sink_failure_reason_);
     const gfx::Size initial_output_size =
@@ -7866,28 +8616,44 @@ class StandaloneCcLayerHost final
             &gpu_context_created_, &raster_context_created_,
             &shared_image_interface_available_, &frame_sink_failure_reason_);
 
+    TraceLiveFrameProbeStage("cc host CreateFrameSink before compositor bind");
+    const gpu::ContextResult compositor_bind_result =
+        context_providers.compositor->BindToCurrentSequence();
+    TraceLiveFrameProbeStage("cc host CreateFrameSink after compositor bind");
+    if (compositor_bind_result != gpu::ContextResult::kSuccess) {
+      RememberFrameSinkFailure(
+          frame_sink_failure_reason_.empty()
+              ? "compositor raster context provider failed to bind"
+              : frame_sink_failure_reason_.c_str());
+      return false;
+    }
+
+    if (!chromium_root_frame_sink_->Initialize(initial_output_size)) {
+      return false;
+    }
     TraceLiveFrameProbeStage("cc host CreateFrameSink before worker bind");
     const gpu::ContextResult worker_bind_result =
         context_providers.worker->BindToCurrentSequence();
     TraceLiveFrameProbeStage("cc host CreateFrameSink after worker bind");
     if (worker_bind_result != gpu::ContextResult::kSuccess) {
       RememberFrameSinkFailure(
+          "cc host CreateFrameSink failed to bind the worker raster context");
+      return false;
+    }
+    auto async_frame_sink =
+        chromium_root_frame_sink_->CreateAsyncLayerTreeFrameSink(
+            std::move(context_providers.compositor),
+            std::move(context_providers.worker), main_task_runner);
+    if (!async_frame_sink) {
+      RememberFrameSinkFailure(
           frame_sink_failure_reason_.empty()
-              ? "worker raster context provider failed to bind"
+              ? "AsyncLayerTreeFrameSink construction failed"
               : frame_sink_failure_reason_.c_str());
       return false;
     }
-
-    auto direct_frame_sink =
-        std::make_unique<StandaloneChromiumDirectLayerTreeFrameSink>(
-            std::move(context_providers.compositor),
-            std::move(context_providers.worker), main_task_runner,
-            chromium_root_frame_sink_.get());
-    if (!chromium_root_frame_sink_->Initialize(initial_output_size,
-                                                direct_frame_sink.get())) {
-      return false;
-    }
-    chromium_direct_frame_sink_ = direct_frame_sink.get();
+    chromium_async_frame_sink_ =
+        static_cast<cc::mojo_embedder::AsyncLayerTreeFrameSink*>(
+            async_frame_sink.get());
 
     external_target_adapter_ =
         std::make_unique<StandaloneExternalTargetCopyAdapter>(
@@ -7908,8 +8674,8 @@ class StandaloneCcLayerHost final
             weak_factory_.GetWeakPtr()));
     active_frame_sink_ = external_target_adapter_.get();
     TraceLiveFrameProbeStage(
-        "cc host CreateFrameSink before direct Root LayerTreeFrameSink");
-    layer_tree_host_->SetLayerTreeFrameSink(std::move(direct_frame_sink));
+        "cc host CreateFrameSink before Chromium AsyncLayerTreeFrameSink");
+    layer_tree_host_->SetLayerTreeFrameSink(std::move(async_frame_sink));
     TraceLiveFrameProbeStage("cc host CreateFrameSink after SetLayerTreeFrameSink");
     return true;
   }
@@ -8033,14 +8799,14 @@ class StandaloneCcLayerHost final
       return;
     }
     compositor_frame_submitted_ = true;
-    if (chromium_direct_frame_sink_ && chromium_root_frame_sink_) {
+    if (chromium_async_frame_sink_ && chromium_root_frame_sink_) {
       chromium_root_frame_sink_->NotifyDirectSubmission(
-          chromium_direct_frame_sink_->local_surface_id(),
-          chromium_direct_frame_sink_->last_submitted_size_in_pixels(),
-          chromium_direct_frame_sink_->last_submitted_device_scale_factor());
+          chromium_async_frame_sink_->local_surface_id(),
+          chromium_async_frame_sink_->last_submitted_size_in_pixels(),
+          chromium_async_frame_sink_->last_submitted_device_scale_factor());
       if (active_frame_sink_) {
         active_frame_sink_->OnChromiumCompositorFrameSubmitted(
-            chromium_direct_frame_sink_->last_submitted_size_in_pixels());
+            chromium_async_frame_sink_->last_submitted_size_in_pixels());
       }
     }
     if (scheduler_frame_start_time_) {
@@ -8079,17 +8845,13 @@ class StandaloneCcLayerHost final
   }
 
   void ReleaseChromiumRootForFrameSinkReplacement() {
-    // LayerTreeHost owns the direct cc adapter, but Root owns the support that
-    // calls it. Keep the adapter alive while Root tears down, then leave its
-    // Root pointer null so a later host detach/replacement cannot dereference
-    // a destroyed RootCompositorFrameSinkImpl.
+    // LayerTreeHost owns the async cc adapter. Resetting Root's receivers
+    // closes the normal Mojo protocol before Root is destroyed, so the host
+    // cannot retain a direct pointer into Root during replacement.
     active_frame_sink_ = nullptr;
     external_target_adapter_.reset();
-    if (chromium_direct_frame_sink_) {
-      chromium_direct_frame_sink_->DetachChromiumRoot();
-    }
+    chromium_async_frame_sink_ = nullptr;
     chromium_root_frame_sink_.reset();
-    chromium_direct_frame_sink_ = nullptr;
   }
 
   cc::LayerTreeSettings settings_;
@@ -8104,8 +8866,8 @@ class StandaloneCcLayerHost final
       chromium_root_frame_sink_;
   std::unique_ptr<StandaloneExternalTargetCopyAdapter>
       external_target_adapter_;
-  raw_ptr<StandaloneChromiumDirectLayerTreeFrameSink>
-      chromium_direct_frame_sink_ = nullptr;
+  raw_ptr<cc::mojo_embedder::AsyncLayerTreeFrameSink>
+      chromium_async_frame_sink_ = nullptr;
   raw_ptr<StandaloneExternalTargetCopyAdapter> active_frame_sink_ = nullptr;
   raw_ptr<cc::Layer> attached_root_layer_ = nullptr;
   gfx::Size logical_viewport_;
@@ -19189,7 +19951,7 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
 void EnsureWtfInitializedForStandaloneRenderer() {
   static bool initialized = false;
   if (!initialized) {
-    InstallStandaloneMojoThunksForStandaloneRenderer();
+    EnsureChromiumMojoCoreForStandaloneRenderer();
     blink::InitializeWtf();
     blink::Length::Initialize();
     blink::CoreInitializer::GetInstance().Initialize();
@@ -19953,7 +20715,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
 std::string RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(
     int width,
     int height) {
-  InstallStandaloneMojoThunksForStandaloneRenderer();
+  EnsureChromiumMojoCoreForStandaloneRenderer();
   const int safe_width = std::max(1, width);
   const int safe_height = std::max(1, height);
   StandaloneChromiumRootFrameSinkProbe probe(
@@ -19964,7 +20726,7 @@ std::string RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(
 std::string RunStandaloneChromiumAsyncFrameSinkProbeForStandaloneRenderer(
     int width,
     int height) {
-  InstallStandaloneMojoCoreForStandaloneRenderer();
+  EnsureChromiumMojoCoreForStandaloneRenderer();
   const int safe_width = std::max(1, width);
   const int safe_height = std::max(1, height);
   StandaloneChromiumAsyncFrameSinkProbe probe(

@@ -227,6 +227,30 @@ void VizCompositorThreadRunnerImpl::CreateFrameSinkManager(
                                 base::Unretained(gpu_service)));
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void VizCompositorThreadRunnerImpl::
+    CreateFrameSinkManagerWithStandaloneOutputSurfaceProvider(
+        mojom::FrameSinkManagerParamsPtr params,
+        std::unique_ptr<OutputSurfaceProvider> output_surface_provider) {
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &VizCompositorThreadRunnerImpl::
+              CreateFrameSinkManagerWithStandaloneOutputSurfaceProviderOnCompositorThread,
+          base::Unretained(this), std::move(params),
+          std::move(output_surface_provider)));
+}
+
+void VizCompositorThreadRunnerImpl::PostStandaloneFrameSinkManagerTask(
+    StandaloneFrameSinkManagerTask task) {
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VizCompositorThreadRunnerImpl::
+                         RunStandaloneFrameSinkManagerTaskOnCompositorThread,
+                     base::Unretained(this), std::move(task)));
+}
+#endif
+
 void VizCompositorThreadRunnerImpl::CreateFrameSinkManagerOnCompositorThread(
     mojom::FrameSinkManagerParamsPtr params,
     GpuServiceImpl* gpu_service) {
@@ -296,6 +320,51 @@ void VizCompositorThreadRunnerImpl::CreateFrameSinkManagerOnCompositorThread(
       std::move(params->frame_sink_manager_client),
       shared_image_interface_provider_.get());
 }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void VizCompositorThreadRunnerImpl::
+    CreateFrameSinkManagerWithStandaloneOutputSurfaceProviderOnCompositorThread(
+        mojom::FrameSinkManagerParamsPtr params,
+        std::unique_ptr<OutputSurfaceProvider> output_surface_provider) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(!frame_sink_manager_);
+  CHECK(output_surface_provider);
+
+  // The standalone provider owns an in-process GPU task executor. Creating
+  // the Root display initializes its DisplayCompositorMemoryAndTaskController
+  // on this Viz sequence, which must schedule that first GPU task normally.
+
+  output_surface_provider_ = std::move(output_surface_provider);
+
+  FrameSinkManagerImpl::InitParams init_params;
+  init_params.activation_deadline_in_frames = std::nullopt;
+  if (params->use_activation_deadline) {
+    init_params.activation_deadline_in_frames =
+        params->activation_deadline_in_frames;
+  }
+  init_params.output_surface_provider = output_surface_provider_.get();
+  init_params.restart_id = params->restart_id;
+  init_params.debug_renderer_settings = params->debug_renderer_settings;
+  init_params.hint_session_factory = hint_session_factory_.get();
+  init_params.use_direct_receiver = false;
+
+  frame_sink_manager_ = std::make_unique<FrameSinkManagerImpl>(init_params);
+  frame_sink_manager_->BindAndSetClient(
+      std::move(params->frame_sink_manager), nullptr,
+      std::move(params->frame_sink_manager_client),
+      /*shared_image_interface_provider=*/nullptr);
+}
+
+void VizCompositorThreadRunnerImpl::
+    RunStandaloneFrameSinkManagerTaskOnCompositorThread(
+        StandaloneFrameSinkManagerTask task) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (task && frame_sink_manager_ && output_surface_provider_) {
+    std::move(task).Run(frame_sink_manager_.get(),
+                        output_surface_provider_.get());
+  }
+}
+#endif
 
 void VizCompositorThreadRunnerImpl::RequestBeginFrameForGpuService(
     bool toggle) {

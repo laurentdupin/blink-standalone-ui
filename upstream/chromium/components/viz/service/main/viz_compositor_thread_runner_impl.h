@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -61,6 +62,18 @@ class VizCompositorThreadRunnerImpl : public VizCompositorThreadRunner {
   void NotifyWorkloadIncrease() override;
   void CreateFrameSinkManager(mojom::FrameSinkManagerParamsPtr params,
                               GpuServiceImpl* gpu_service) override;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  using StandaloneFrameSinkManagerTask =
+      base::OnceCallback<void(FrameSinkManagerImpl*, OutputSurfaceProvider*)>;
+
+  // Creates the manager on the compositor thread using an embedder-owned
+  // provider. The provider is moved to and destroyed on that thread.
+  void CreateFrameSinkManagerWithStandaloneOutputSurfaceProvider(
+      mojom::FrameSinkManagerParamsPtr params,
+      std::unique_ptr<OutputSurfaceProvider> output_surface_provider);
+  void PostStandaloneFrameSinkManagerTask(
+      StandaloneFrameSinkManagerTask task);
+#endif
   void RequestBeginFrameForGpuService(bool toggle) override;
 
  private:
@@ -73,6 +86,13 @@ class VizCompositorThreadRunnerImpl : public VizCompositorThreadRunner {
   void CreateFrameSinkManagerOnCompositorThread(
       mojom::FrameSinkManagerParamsPtr params,
       GpuServiceImpl* gpu_service);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void CreateFrameSinkManagerWithStandaloneOutputSurfaceProviderOnCompositorThread(
+      mojom::FrameSinkManagerParamsPtr params,
+      std::unique_ptr<OutputSurfaceProvider> output_surface_provider);
+  void RunStandaloneFrameSinkManagerTaskOnCompositorThread(
+      StandaloneFrameSinkManagerTask task);
+#endif
   void RequestBeginFrameForGpuServiceOnCompositorThread(bool toggle);
   void TearDownOnCompositorThread();
 
