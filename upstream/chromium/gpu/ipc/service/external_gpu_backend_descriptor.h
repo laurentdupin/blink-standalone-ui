@@ -6,15 +6,22 @@
 #define GPU_IPC_SERVICE_EXTERNAL_GPU_BACKEND_DESCRIPTOR_H_
 
 #include <cstdint>
+#include <memory>
 
 #include "build/build_config.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
+#include "gpu/vulkan/buildflags.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_device_queue.h"
+#endif
 
 namespace gpu {
 
 // Optional, in-process embedder backend state supplied before Viz creates GPU
-// resources. Every handle is borrowed: GpuInit and GpuServiceImpl must never
-// destroy the embedder's device, queue, implementation, or Dawn context.
+// resources. Device, implementation, and Dawn pointers are borrowed. The
+// VulkanDeviceQueue wrapper is transferred to GpuServiceImpl, but it remains
+// non-owning with respect to the embedder's VkInstance, VkDevice, and VkQueue.
 //
 // The fields are opaque at the GpuInit boundary so this header stays portable
 // and does not pull Vulkan, D3D12, or Dawn headers into normal GPU startup.
@@ -22,7 +29,9 @@ namespace gpu {
 // GPU sequence. An empty descriptor preserves Chromium's normal ownership.
 struct GPU_IPC_SERVICE_EXPORT ExternalGpuBackendDescriptor {
   void* vulkan_implementation = nullptr;
-  void* vulkan_device_queue = nullptr;
+#if BUILDFLAG(ENABLE_VULKAN)
+  std::unique_ptr<VulkanDeviceQueue> vulkan_device_queue;
+#endif
   void* dawn_context_provider = nullptr;
 
 #if BUILDFLAG(IS_WIN)

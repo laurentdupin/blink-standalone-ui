@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -24,7 +25,9 @@
 #include "skia/buildflags.h"
 #include "ui/gfx/gpu_extra_info.h"
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #endif
 
@@ -71,10 +74,13 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
   // and is only consumed by a platform-specific Viz/GpuService adoption path.
   void set_external_gpu_backend_descriptor(
       ExternalGpuBackendDescriptor descriptor) {
-    external_gpu_backend_descriptor_ = descriptor;
+    external_gpu_backend_descriptor_ = std::move(descriptor);
   }
-  const ExternalGpuBackendDescriptor& external_gpu_backend_descriptor() const {
-    return external_gpu_backend_descriptor_;
+  bool has_external_gpu_backend_descriptor() const {
+    return external_gpu_backend_descriptor_.has_borrowed_backend();
+  }
+  ExternalGpuBackendDescriptor TakeExternalGpuBackendDescriptor() {
+    return std::move(external_gpu_backend_descriptor_);
   }
 #endif
 
@@ -102,7 +108,9 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
   std::unique_ptr<GpuWatchdogThread> TakeWatchdogThread() {
     return std::move(watchdog_thread_);
   }
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   std::unique_ptr<DawnContextProvider> TakeDawnContextProvider() {
     return std::move(dawn_context_provider_);
   }
@@ -130,7 +138,9 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
   bool gl_use_swiftshader_ = false;
   std::unique_ptr<GpuWatchdogThread> watchdog_thread_;
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   std::unique_ptr<DawnContextProvider> dawn_context_provider_;
 #endif
 

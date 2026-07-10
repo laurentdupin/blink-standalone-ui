@@ -93,14 +93,22 @@
 #endif
 
 #if (BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)) && \
-    !defined(HTML_CSS_RENDERER_STANDALONE)
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "third_party/dawn/include/dawn/dawn_proc.h"          // nogncheck
 #include "third_party/dawn/include/dawn/native/DawnNative.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "third_party/dawn/include/dawn/webgpu_cpp.h"  // nogncheck
+#endif
+
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#include <d3d12.h>
 #endif
 
 #if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_CHROMEOS) && \
@@ -122,7 +130,8 @@ bool CollectGraphicsInfo(GPUInfo* gpu_info) {
 
 void InitializeDawnProcs() {
 #if (BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)) && \
-    !defined(HTML_CSS_RENDERER_STANDALONE)
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   TRACE_EVENT("gpu,startup", "gpu_init::InitializeDawnProcs");
   // Setup the global procs table for GPU process.
   dawnProcSetProcs(&dawn::native::GetProcs());
@@ -1225,10 +1234,19 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   }
 #endif  // BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!has_external_gpu_backend_descriptor() ||
+      !external_gpu_backend_descriptor_.vulkan_implementation) {
+    DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
+  }
+#else
   DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
+#endif
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   InitializeDawnProcs();
 #if !BUILDFLAG(IS_ANDROID)
   if (gpu_preferences_.gr_context_type == GrContextType::kGraphiteDawn) {
@@ -1307,7 +1325,9 @@ void GpuInit::SetSkiaBackendType() {
       skia_backend_type = SkiaBackendType::kGaneshVulkan;
       break;
     case gpu::GrContextType::kGraphiteDawn: {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
       // The caller must ensure `dawn_context_provider_`'s creation, else the
       // GrContextType must be updated to fallback.
       CHECK(dawn_context_provider_);
@@ -1333,7 +1353,7 @@ void GpuInit::SetSkiaBackendType() {
       break;
 #else
       NOTREACHED();
-#endif  // BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(SKIA_USE_DAWN) && standalone Dawn support
     }
   }
 
@@ -1344,8 +1364,29 @@ void GpuInit::SetSkiaBackendType() {
 }
 
 bool GpuInit::InitializeDawn() {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   TRACE_EVENT("gpu,startup", "gpu::GpuInit::InitializeDawn");
+#if BUILDFLAG(IS_WIN) && defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  if (external_gpu_backend_descriptor_.d3d12_device &&
+      external_gpu_backend_descriptor_.d3d12_command_queue) {
+    LUID adapter_luid{};
+    adapter_luid.LowPart =
+        external_gpu_backend_descriptor_.d3d12_adapter_luid_low;
+    adapter_luid.HighPart =
+        external_gpu_backend_descriptor_.d3d12_adapter_luid_high;
+    dawn_context_provider_ = DawnContextProvider::CreateWithExternalD3D12Device(
+        static_cast<ID3D12Device*>(
+            external_gpu_backend_descriptor_.d3d12_device),
+        static_cast<ID3D12CommandQueue*>(
+            external_gpu_backend_descriptor_.d3d12_command_queue),
+        gpu_preferences_, gpu_feature_info_, /*progress_reporter=*/nullptr,
+        DawnContextProvider::DefaultValidateAdapterFn, adapter_luid);
+    return !!dawn_context_provider_;
+  }
+#endif
   if (gpu_feature_info_.status_values[GPU_FEATURE_TYPE_SKIA_GRAPHITE] !=
           kGpuFeatureStatusEnabled &&
       !gpu::DawnContextProvider::DefaultForceFallbackAdapter()) {

@@ -30,6 +30,11 @@
 #include "components/vrp_flags/buildflags.h"
 #include "gpu/command_buffer/common/shm_count.h"
 #include "gpu/command_buffer/service/gpu_persistent_cache.h"
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
+#include "gpu/command_buffer/service/dawn_context_provider.h"
+#endif
 #include "gpu/command_buffer/service/sequence_id.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_preferences.h"
@@ -118,7 +123,9 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
     // Borrowed embedder state. Empty retains Chromium's normal GPU ownership.
     gpu::ExternalGpuBackendDescriptor external_gpu_backend;
 #endif
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
     std::unique_ptr<gpu::DawnContextProvider> dawn_context_provider;
 #endif
   };
@@ -419,7 +426,9 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   VulkanContextProvider* vulkan_context_provider() const { return nullptr; }
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   gpu::DawnContextProvider* dawn_context_provider() const {
     return dawn_context_provider_.get();
   }
@@ -581,7 +590,9 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   std::unique_ptr<gpu::DawnContextProvider> dawn_context_provider_;
 #endif
 
@@ -592,7 +603,7 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   gpu::GpuPersistentCacheCollection persistent_caches_;
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  const gpu::ExternalGpuBackendDescriptor external_gpu_backend_;
+  gpu::ExternalGpuBackendDescriptor external_gpu_backend_;
 #endif
 
   // An event that will be signalled when we shutdown. On some platforms it

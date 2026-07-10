@@ -110,11 +110,6 @@ class VizMainImpl : public mojom::VizMain {
     raw_ptr<VizCompositorThreadRunner> viz_compositor_thread_runner = nullptr;
     raw_ptr<const gpu::SharedContextState::GrContextOptionsProvider>
         gr_context_options_provider = nullptr;
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    // Borrowed backend state for a platform-specific in-process adoption path.
-    // Empty retains the normal Chromium GPU initialization path.
-    gpu::ExternalGpuBackendDescriptor external_gpu_backend;
-#endif
 #endif
   };
 

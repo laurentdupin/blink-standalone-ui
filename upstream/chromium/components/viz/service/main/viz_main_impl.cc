@@ -122,18 +122,22 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
   GpuServiceImpl::InitParams init_params;
   init_params.watchdog_thread = gpu_init_->TakeWatchdogThread();
   init_params.io_runner = io_task_runner();
-  init_params.vulkan_implementation = gpu_init_->vulkan_implementation();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   init_params.external_gpu_backend =
-      dependencies_.external_gpu_backend.has_borrowed_backend()
-          ? dependencies_.external_gpu_backend
-          : gpu_init_->external_gpu_backend_descriptor();
+      gpu_init_->TakeExternalGpuBackendDescriptor();
+  init_params.vulkan_implementation =
+      init_params.external_gpu_backend.vulkan_implementation
+          ? static_cast<gpu::VulkanImplementation*>(
+                init_params.external_gpu_backend.vulkan_implementation)
+          : gpu_init_->vulkan_implementation();
+#else
+  init_params.vulkan_implementation = gpu_init_->vulkan_implementation();
 #endif
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   init_params.dawn_context_provider = gpu_init_->TakeDawnContextProvider();
 #endif
-
-  init_params.vulkan_implementation = gpu_init_->vulkan_implementation();
   gpu_service_ = std::make_unique<GpuServiceImpl>(
       gpu_init_->gpu_preferences(), gpu_init_->gpu_info(),
       gpu_init_->gpu_feature_info(), gpu_init_->gpu_info_for_hardware_gpu(),

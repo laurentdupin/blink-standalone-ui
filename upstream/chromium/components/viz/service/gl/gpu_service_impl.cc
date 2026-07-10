@@ -249,7 +249,7 @@ GpuServiceImpl::GpuServiceImpl(
           /*metadata_options=*/GetPersistentCacheMetadataOpts(),
           /*async_write_options=*/GetPersistentCacheAsyncDiskWriteOpts()),
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-      external_gpu_backend_(init_params.external_gpu_backend),
+      external_gpu_backend_(std::move(init_params.external_gpu_backend)),
 #endif
       clear_shader_cache_(base::FeatureList::IsEnabled(
           features::kClearGrShaderDiskCacheOnInvalidPrefix)) {
@@ -257,6 +257,16 @@ GpuServiceImpl::GpuServiceImpl(
 
 #if BUILDFLAG(ENABLE_VULKAN)
   if (vulkan_implementation_) {
+    if (external_gpu_backend_.vulkan_device_queue) {
+      vulkan_context_provider_ =
+          VulkanInProcessContextProvider::CreateForCompositorGpuThread(
+              vulkan_implementation_,
+              std::move(external_gpu_backend_.vulkan_device_queue),
+              gpu_preferences_.vulkan_sync_cpu_memory_limit);
+      if (!vulkan_context_provider_) {
+        LOG(ERROR) << "Failed to adopt external Vulkan device queue.";
+      }
+    } else {
     bool is_native_vulkan =
         gpu_preferences_.use_vulkan == gpu::VulkanImplementationName::kNative ||
         gpu_preferences_.use_vulkan ==
@@ -277,6 +287,7 @@ GpuServiceImpl::GpuServiceImpl(
     if (!vulkan_context_provider_) {
       DLOG(ERROR) << "Failed to create Vulkan context provider.";
     }
+    }
   }
 #endif
 
@@ -286,13 +297,16 @@ GpuServiceImpl::GpuServiceImpl(
       std::make_unique<gpu::webgpu::DawnCachingInterfaceFactory>();
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   if (gpu_preferences_.gr_context_type == gpu::GrContextType::kGraphiteDawn) {
     dawn_context_provider_ = std::move(init_params.dawn_context_provider);
 
     if (dawn_context_provider_) {
       // GpuServiceImpl holds the instance of DawnContextProvider, so it
       // outlives the DawnContextProvider.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
       if (features::kSkiaGraphiteDawnUsePersistentCache.Get()) {
         auto persistent_cache =
             persistent_caches_.GetCache(gpu::kGraphiteDawnGpuDiskCacheHandle);
@@ -313,9 +327,10 @@ GpuServiceImpl::GpuServiceImpl(
         dawn_context_provider_->SetCachingInterface(
             std::move(dawn_caching_interface));
       }
+#endif
     }
   }
-#endif  // BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(SKIA_USE_DAWN) && standalone Dawn support
 
   weak_ptr_ = weak_ptr_factory_.GetWeakPtr();
 }
