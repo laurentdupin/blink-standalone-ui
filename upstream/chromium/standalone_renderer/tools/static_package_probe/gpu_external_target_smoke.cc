@@ -1727,14 +1727,19 @@ bool RunVulkanDedicatedThreadResizeCancelSmoke() {
   status = blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
       renderer, cancel_post.command_id, &cancel_result);
   if (status != BLINK_STANDALONE_STATUS_OK ||
-      (cancel_result.state != BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED &&
-       cancel_result.state != BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED)) {
+      cancel_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED ||
+      cancel_result.render_result.main_target_written != 0 ||
+      cancel_result.render_result.backdrop_mask_written != 0) {
     std::fprintf(stderr,
                  "static_gpu_external_target_smoke: failed "
                  "vulkan_resize_cancel_result status=%d state=%u "
-                 "render_state=%u size=%ux%u error=%s\n",
+                 "render_state=%u main_written=%u mask_written=%u "
+                 "size=%ux%u error=%s\n",
                  status, cancel_result.state,
                  cancel_result.render_result.state,
+                 cancel_result.render_result.main_target_written,
+                 cancel_result.render_result.backdrop_mask_written,
                  cancel_result.render_result.physical_width,
                  cancel_result.render_result.physical_height,
                  cancel_result.error_message
@@ -1926,6 +1931,14 @@ bool RunVulkanDedicatedThreadResizeCancelSmoke() {
       static_cast<unsigned long long>(final_result.command_id),
       final_result.poll_iterations, final_result.elapsed_ms);
   return true;
+}
+
+bool RunVulkanDedicatedActivationSupersedeSmoke() {
+  // The resize/cancel sequence posts generation 2 and immediately cancels it
+  // before its borrowed targets may be destroyed. The strengthened assertions
+  // above require no generation-2 publication; generation 3 then proves the
+  // replacement target publishes atomically.
+  return RunVulkanDedicatedThreadResizeCancelSmoke();
 }
 
 bool RunVulkanResizeReturnSmoke() {
@@ -3903,6 +3916,7 @@ int main(int argc, char** argv) {
   bool d3d12_dedicated_resize_return_only = false;
   bool vulkan_dedicated_only = false;
   bool vulkan_dedicated_resize_cancel_only = false;
+  bool vulkan_dedicated_activation_supersede_only = false;
   bool vulkan_dedicated_resize_return_only = false;
   bool vulkan_resize_return_only = false;
   bool skip_dedicated = false;
@@ -3917,6 +3931,10 @@ int main(int argc, char** argv) {
     } else if (std::strcmp(argv[i],
                            "--vulkan-dedicated-resize-cancel-only") == 0) {
       vulkan_dedicated_resize_cancel_only = true;
+    } else if (std::strcmp(
+                   argv[i],
+                   "--vulkan-dedicated-activation-supersede-only") == 0) {
+      vulkan_dedicated_activation_supersede_only = true;
     } else if (std::strcmp(argv[i],
                            "--vulkan-dedicated-resize-return-only") == 0) {
       vulkan_dedicated_resize_return_only = true;
@@ -3949,6 +3967,17 @@ int main(int argc, char** argv) {
     std::printf(
         "static_gpu_external_target_smoke: blocked "
         "vulkan_dedicated_resize_cancel=0 "
+        "failure=static package lacks Vulkan headers\n");
+    return 0;
+#endif
+  }
+  if (vulkan_dedicated_activation_supersede_only) {
+#if BLINK_STATIC_PROBE_HAS_VULKAN_HEADERS
+    return RunVulkanDedicatedActivationSupersedeSmoke() ? 0 : 1;
+#else
+    std::printf(
+        "static_gpu_external_target_smoke: blocked "
+        "vulkan_dedicated_activation_supersede=0 "
         "failure=static package lacks Vulkan headers\n");
     return 0;
 #endif
