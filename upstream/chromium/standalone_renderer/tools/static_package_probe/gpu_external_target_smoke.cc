@@ -33,6 +33,59 @@ bool Fail(const char* message) {
   return false;
 }
 
+blink_standalone_resource_status_t EmptyResourceProvider(
+    void*,
+    const blink_standalone_resource_request_t*,
+    blink_standalone_resource_response_t*) {
+  return BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+}
+
+bool RunDedicatedAfterRawOrderingSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 64;
+  config.height = 64;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+
+  blink_standalone_renderer_t* raw_renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &raw_renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !raw_renderer) {
+    return Fail("ordering_raw_create");
+  }
+  status = blink_standalone_renderer_set_document_html(
+      raw_renderer,
+      "<!doctype html><style>body{margin:0}</style><div>raw</div>", "", "");
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_advance_frame(raw_renderer, 0.0);
+  }
+  blink_standalone_frame_output_t raw_output = {};
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_get_latest_output(raw_renderer,
+                                                         &raw_output);
+  }
+  blink_standalone_renderer_destroy(raw_renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !raw_output.pixels ||
+      raw_output.width != 64 || raw_output.height != 64) {
+    return Fail("ordering_raw_initialize");
+  }
+
+  blink_standalone_renderer_t* dedicated_renderer = nullptr;
+  status = blink_standalone_renderer_create_dedicated_thread(
+      &config, &dedicated_renderer);
+  if (status != BLINK_STANDALONE_STATUS_UNSUPPORTED || dedicated_renderer) {
+    if (dedicated_renderer) {
+      blink_standalone_renderer_destroy(dedicated_renderer);
+    }
+    return Fail("ordering_dedicated_not_rejected");
+  }
+  std::printf(
+      "static_gpu_external_target_smoke: ok "
+      "dedicated_after_raw=1 status=%d dedicated_rejected_before_post=1\n",
+      status);
+  return true;
+}
+
 void DestroyRenderer(blink_standalone_renderer_t* renderer) {
   if (renderer) {
     blink_standalone_renderer_destroy(renderer);
@@ -4198,6 +4251,65 @@ bool RunD3D12DedicatedThreadResizeReturnSmoke() {
   return true;
 }
 
+bool RunDedicatedHostBootstrapMixedSmoke() {
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_bootstrap_dedicated_host();
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return Fail("dedicated_host_bootstrap");
+  }
+
+  blink_standalone_renderer_config_t raw_config = {};
+  raw_config.width = 160;
+  raw_config.height = 120;
+  raw_config.device_scale_factor = 1.0f;
+  raw_config.no_script_profile = 1;
+  blink_standalone_renderer_t* raw_renderer = nullptr;
+  status = blink_standalone_renderer_create(&raw_config, &raw_renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !raw_renderer) {
+    return Fail("dedicated_host_raw_create");
+  }
+  status = blink_standalone_renderer_set_resource_provider(
+      raw_renderer, &EmptyResourceProvider, nullptr, nullptr, 0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    blink_standalone_renderer_destroy(raw_renderer);
+    return Fail("dedicated_host_raw_resource_provider");
+  }
+  status = blink_standalone_renderer_set_document_html(
+      raw_renderer,
+      "<!doctype html><style>body{margin:0}.raw{width:80px;height:60px;"
+      "background:#2878d8}</style><div class='raw'></div>", "", "");
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_advance_frame(raw_renderer, 0.0);
+  }
+  blink_standalone_frame_output_t raw_output = {};
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_get_latest_output(raw_renderer,
+                                                         &raw_output);
+  }
+  const bool raw_ok = status == BLINK_STANDALONE_STATUS_OK &&
+                      raw_output.pixels && raw_output.width == 160 &&
+                      raw_output.height == 120;
+  blink_standalone_renderer_destroy(raw_renderer);
+  if (!raw_ok) {
+    return Fail("dedicated_host_raw_output");
+  }
+
+  if (!RunD3D12DedicatedThreadFirstPublishSmoke()) {
+    return Fail("dedicated_host_d3d12");
+  }
+#if BLINK_STATIC_PROBE_HAS_VULKAN_HEADERS
+  if (!RunVulkanDedicatedThreadFirstPublishSmoke()) {
+    return Fail("dedicated_host_vulkan");
+  }
+#else
+  return Fail("dedicated_host_vulkan_headers");
+#endif
+  std::printf(
+      "static_gpu_external_target_smoke: ok dedicated_host_mixed=1 "
+      "raw=160x120 d3d12=1 vulkan=1\n");
+  return true;
+}
+
 #endif  // defined(_WIN32)
 
 }  // namespace
@@ -4207,6 +4319,8 @@ int main(int argc, char** argv) {
   bool d3d12_dedicated_only = false;
   bool d3d12_dedicated_cancel_replace_only = false;
   bool d3d12_dedicated_resize_return_only = false;
+  bool dedicated_after_raw_ordering_only = false;
+  bool dedicated_host_bootstrap_mixed_only = false;
   bool vulkan_dedicated_only = false;
   bool vulkan_dedicated_resize_cancel_only = false;
   bool vulkan_dedicated_activation_supersede_only = false;
@@ -4222,6 +4336,12 @@ int main(int argc, char** argv) {
     } else if (std::strcmp(argv[i],
                            "--d3d12-dedicated-resize-return-only") == 0) {
       d3d12_dedicated_resize_return_only = true;
+    } else if (std::strcmp(argv[i],
+                           "--dedicated-after-raw-ordering-only") == 0) {
+      dedicated_after_raw_ordering_only = true;
+    } else if (std::strcmp(argv[i],
+                           "--dedicated-host-bootstrap-mixed-only") == 0) {
+      dedicated_host_bootstrap_mixed_only = true;
     } else if (std::strcmp(argv[i], "--vulkan-dedicated-only") == 0) {
       vulkan_dedicated_only = true;
     } else if (std::strcmp(argv[i],
@@ -4250,6 +4370,12 @@ int main(int argc, char** argv) {
   }
   if (d3d12_dedicated_resize_return_only) {
     return RunD3D12DedicatedThreadResizeReturnSmoke() ? 0 : 1;
+  }
+  if (dedicated_after_raw_ordering_only) {
+    return RunDedicatedAfterRawOrderingSmoke() ? 0 : 1;
+  }
+  if (dedicated_host_bootstrap_mixed_only) {
+    return RunDedicatedHostBootstrapMixedSmoke() ? 0 : 1;
   }
   if (vulkan_dedicated_only) {
 #if BLINK_STATIC_PROBE_HAS_VULKAN_HEADERS

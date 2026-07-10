@@ -20765,6 +20765,11 @@ uint64_t StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer() {
   return instance_id;
 }
 
+int StandaloneBlinkLiveFrameBridgeBootstrapMainSequenceForStandaloneRenderer() {
+  EnsureWtfInitializedForStandaloneRenderer();
+  return blink::IsMainThread() ? 1 : 0;
+}
+
 void StandaloneBlinkLiveFrameBridgeSetCurrentInstanceForStandaloneRenderer(
     uint64_t instance_id) {
   CurrentProbeInstanceId() = instance_id;

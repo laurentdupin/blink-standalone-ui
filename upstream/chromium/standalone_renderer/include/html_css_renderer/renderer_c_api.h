@@ -678,6 +678,13 @@ typedef struct blink_standalone_gpu_backdrop_effect {
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
     const blink_standalone_renderer_config_t* config,
     blink_standalone_renderer_t** renderer_out);
+/* Selects a process-wide Blink main sequence on the dedicated renderer host.
+ * Call before creating any renderer to safely mix CPU/raw and dedicated GPU
+ * renderers. Returns UNSUPPORTED once normal-mode Blink initialization won. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_bootstrap_dedicated_host(void);
+/* In dedicated-host mode this and create() both return sequence-owned shells.
+ * Without bootstrap, dedicated creation remains incompatible with normal-mode
+ * Blink initialization in the same process. */
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create_dedicated_thread(
     const blink_standalone_renderer_config_t* config,
     blink_standalone_renderer_t** renderer_out);

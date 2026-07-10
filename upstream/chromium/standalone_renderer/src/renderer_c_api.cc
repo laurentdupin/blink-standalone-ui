@@ -58,6 +58,7 @@
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
+#include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -82,6 +83,10 @@ void StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
     void* d3d12_command_queue);
 }  // namespace blink::standalone_renderer_probe
 #endif
+
+namespace blink::standalone_renderer_probe {
+int StandaloneBlinkLiveFrameBridgeBootstrapMainSequenceForStandaloneRenderer();
+}  // namespace blink::standalone_renderer_probe
 
 namespace {
 
@@ -698,6 +703,46 @@ struct blink_standalone_renderer {
       BLINK_STANDALONE_STATUS_OK;
   std::string last_error;
 };
+
+enum class StandaloneBlinkProcessMode {
+  kUnselected,
+  kCallerThread,
+  kDedicatedHost,
+};
+
+struct StandaloneBlinkProcessModeState {
+  base::Lock lock;
+  StandaloneBlinkProcessMode mode = StandaloneBlinkProcessMode::kUnselected;
+};
+
+StandaloneBlinkProcessModeState& BlinkProcessModeState() {
+  static auto* state = new StandaloneBlinkProcessModeState();
+  return *state;
+}
+
+StandaloneBlinkProcessMode GetBlinkProcessMode() {
+  StandaloneBlinkProcessModeState& state = BlinkProcessModeState();
+  base::AutoLock auto_lock(state.lock);
+  return state.mode;
+}
+
+bool SelectCallerThreadBlinkProcessMode() {
+  StandaloneBlinkProcessModeState& state = BlinkProcessModeState();
+  base::AutoLock auto_lock(state.lock);
+  if (state.mode == StandaloneBlinkProcessMode::kUnselected) {
+    state.mode = StandaloneBlinkProcessMode::kCallerThread;
+  }
+  return state.mode == StandaloneBlinkProcessMode::kCallerThread;
+}
+
+bool SelectDedicatedHostBlinkProcessMode() {
+  StandaloneBlinkProcessModeState& state = BlinkProcessModeState();
+  base::AutoLock auto_lock(state.lock);
+  if (state.mode == StandaloneBlinkProcessMode::kUnselected) {
+    state.mode = StandaloneBlinkProcessMode::kDedicatedHost;
+  }
+  return state.mode == StandaloneBlinkProcessMode::kDedicatedHost;
+}
 
 namespace {
 
@@ -2526,6 +2571,12 @@ blink_standalone_status_code_t CreateRendererOnCurrentThread(
   }
   *renderer_out = nullptr;
   EnsureStandaloneCApiProcessInitialized();
+  if (blink::g_main_thread_identifier != base::kInvalidThreadId &&
+      !blink::IsMainThread()) {
+    // Live Blink DOM and LocalFrame work is main-sequence-only. Do not create
+    // a renderer on a later worker after another sequence initialized Blink.
+    return BLINK_STANDALONE_STATUS_UNSUPPORTED;
+  }
   auto renderer = std::make_unique<blink_standalone_renderer>();
   if (config) {
     if (config->width > 0) {
@@ -2550,10 +2601,66 @@ blink_standalone_status_code_t CreateRendererOnCurrentThread(
   return BLINK_STANDALONE_STATUS_OK;
 }
 
+blink_standalone_status_code_t CreateRendererOnDedicatedHost(
+    const blink_standalone_renderer_config_t* config,
+    blink_standalone_renderer_t** renderer_out) {
+  if (!renderer_out) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  *renderer_out = nullptr;
+  auto shell = std::make_unique<blink_standalone_renderer>();
+  shell->dedicated_thread_shell = true;
+  DedicatedRendererSequence& sequence = DedicatedRendererSequence::Get();
+  shell->dedicated_thread_sequence = &sequence;
+  blink_standalone_renderer_t* inner = nullptr;
+  const blink_standalone_status_code_t status = sequence.CallSync([&]() {
+    return CreateRendererOnCurrentThread(config, &inner);
+  });
+  shell->dedicated_thread_inner = inner;
+  if (status != BLINK_STANDALONE_STATUS_OK || !inner) {
+    *renderer_out = shell.release();
+    return status;
+  }
+  *renderer_out = shell.release();
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
+blink_standalone_status_code_t BootstrapDedicatedBlinkHost() {
+  EnsureStandaloneCApiProcessInitialized();
+  const StandaloneBlinkProcessMode mode = GetBlinkProcessMode();
+  if (mode == StandaloneBlinkProcessMode::kCallerThread ||
+      (mode == StandaloneBlinkProcessMode::kUnselected &&
+       blink::g_main_thread_identifier != base::kInvalidThreadId)) {
+    return BLINK_STANDALONE_STATUS_UNSUPPORTED;
+  }
+  if (!SelectDedicatedHostBlinkProcessMode()) {
+    return BLINK_STANDALONE_STATUS_UNSUPPORTED;
+  }
+  DedicatedRendererSequence& sequence = DedicatedRendererSequence::Get();
+  const blink_standalone_status_code_t status = sequence.CallSync([]() {
+    return ::blink::standalone_renderer_probe::
+                   StandaloneBlinkLiveFrameBridgeBootstrapMainSequenceForStandaloneRenderer()
+               ? BLINK_STANDALONE_STATUS_OK
+               : BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED;
+  });
+  return status;
+}
+
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
     const blink_standalone_renderer_config_t* config,
     blink_standalone_renderer_t** renderer_out) {
+  EnsureStandaloneCApiProcessInitialized();
+  if (GetBlinkProcessMode() == StandaloneBlinkProcessMode::kDedicatedHost) {
+    return CreateRendererOnDedicatedHost(config, renderer_out);
+  }
+  if (!SelectCallerThreadBlinkProcessMode()) {
+    return BLINK_STANDALONE_STATUS_UNSUPPORTED;
+  }
   return CreateRendererOnCurrentThread(config, renderer_out);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_bootstrap_dedicated_host(void) {
+  return BootstrapDedicatedBlinkHost();
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create_dedicated_thread(
@@ -2564,22 +2671,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   EnsureStandaloneCApiProcessInitialized();
   *renderer_out = nullptr;
-  auto shell = std::make_unique<blink_standalone_renderer>();
-  shell->dedicated_thread_shell = true;
-  DedicatedRendererSequence& sequence = DedicatedRendererSequence::Get();
-  shell->dedicated_thread_sequence = &sequence;
-  blink_standalone_renderer_t* inner = nullptr;
-  blink_standalone_status_code_t status =
-      sequence.CallSync([&]() {
-        return CreateRendererOnCurrentThread(config, &inner);
-      });
-  shell->dedicated_thread_inner = inner;
-  if (status != BLINK_STANDALONE_STATUS_OK || !inner) {
-    *renderer_out = shell.release();
-    return status;
+  if (GetBlinkProcessMode() != StandaloneBlinkProcessMode::kDedicatedHost) {
+    const blink_standalone_status_code_t bootstrap_status =
+        BootstrapDedicatedBlinkHost();
+    if (bootstrap_status != BLINK_STANDALONE_STATUS_OK) {
+      return bootstrap_status;
+    }
   }
-  *renderer_out = shell.release();
-  return BLINK_STANDALONE_STATUS_OK;
+  return CreateRendererOnDedicatedHost(config, renderer_out);
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_destroy(
@@ -2659,6 +2758,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_release_resource_callback release,
     void* user_data,
     uint32_t flags) {
+  if (IsDedicatedThreadShell(renderer)) {
+    blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
+    if (!inner) {
+      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                          "set_resource_provider failed: dedicated renderer is unavailable");
+    }
+    return DedicatedSequenceFor(renderer).CallSync(
+        [inner, load, release, user_data, flags]() {
+          return blink_standalone_renderer_set_resource_provider(
+              inner, load, release, user_data, flags);
+        });
+  }
   if (!renderer) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
@@ -2724,6 +2835,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_advance_frame(
     blink_standalone_renderer_t* renderer,
     double timeline_time_seconds) {
+  if (IsDedicatedThreadShell(renderer)) {
+    blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
+    if (!inner) {
+      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                          "advance_frame failed: dedicated renderer is unavailable");
+    }
+    return DedicatedSequenceFor(renderer).CallSync(
+        [inner, timeline_time_seconds]() {
+          return blink_standalone_renderer_advance_frame(inner,
+                                                         timeline_time_seconds);
+        });
+  }
   if (!renderer || !renderer->runtime) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
@@ -4849,6 +4972,16 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_latest_output(
     blink_standalone_renderer_t* renderer,
     blink_standalone_frame_output_t* output) {
+  if (IsDedicatedThreadShell(renderer)) {
+    if (!output || !renderer->dedicated_thread_inner) {
+      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                          "get_latest_output failed: renderer and output pointer are required");
+    }
+    blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
+    return DedicatedSequenceFor(renderer).CallSync([inner, output]() {
+      return blink_standalone_renderer_get_latest_output(inner, output);
+    });
+  }
   if (!renderer || !output) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "get_latest_output failed: renderer and output pointer are required");
@@ -4876,6 +5009,16 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_release_latest_output(
     blink_standalone_renderer_t* renderer) {
+  if (IsDedicatedThreadShell(renderer)) {
+    blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
+    if (inner) {
+      DedicatedSequenceFor(renderer).CallSync([inner]() {
+        blink_standalone_renderer_release_latest_output(inner);
+        return BLINK_STANDALONE_STATUS_OK;
+      });
+    }
+    return;
+  }
   if (!renderer) {
     return;
   }
