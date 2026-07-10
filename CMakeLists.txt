@@ -1206,6 +1206,20 @@ if(NOT BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc")
 endif()
 
 set(BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES)
+set(BLINK_STANDALONE_VIZ_NATIVE_GPU_SERVICE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/gl/gpu_service_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/gl/gpu_service_impl.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/main/viz_main_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/main/viz_main_impl.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/output_surface_provider_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/output_surface_provider_impl.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_surface_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_surface_impl.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/software_output_surface.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/software_output_surface.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display/display_compositor_memory_and_task_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display/display_compositor_memory_and_task_controller.h
+)
 if(BLINK_STANDALONE_DAWN_D3D12)
   set(BLINK_STANDALONE_DAWN_D3D12_ADDED_SOURCES
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/image_context_impl.cc
@@ -1248,6 +1262,7 @@ if(BLINK_STANDALONE_DAWN_D3D12)
   )
   set(BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES
     ${BLINK_STANDALONE_DAWN_D3D12_ADDED_SOURCES}
+    ${BLINK_STANDALONE_VIZ_NATIVE_GPU_SERVICE_SOURCES}
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/compositor_gpu_thread.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/compositor_gpu_thread.h
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_surface_dependency_impl.cc

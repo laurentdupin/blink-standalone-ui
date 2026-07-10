@@ -97,9 +97,9 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
   if (!dependencies_.io_thread_task_runner)
     io_thread_ = CreateAndStartIOThread();
 
-#if BUILDFLAG(IS_ANDROID)
-  // On Android, the compositor thread runner may be created externally and
-  // passed in (in particular, for WebView).
+#if BUILDFLAG(IS_ANDROID) || defined(HTML_CSS_RENDERER_STANDALONE)
+  // An in-process embedder may own the compositor runner. Android WebView is
+  // the existing caller; other embedders keep the default null path.
   viz_compositor_thread_runner_ = dependencies_.viz_compositor_thread_runner;
 #endif
   if (!viz_compositor_thread_runner_) {
@@ -123,6 +123,12 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
   init_params.watchdog_thread = gpu_init_->TakeWatchdogThread();
   init_params.io_runner = io_task_runner();
   init_params.vulkan_implementation = gpu_init_->vulkan_implementation();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  init_params.external_gpu_backend =
+      dependencies_.external_gpu_backend.has_borrowed_backend()
+          ? dependencies_.external_gpu_backend
+          : gpu_init_->external_gpu_backend_descriptor();
+#endif
 #if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
   init_params.dawn_context_provider = gpu_init_->TakeDawnContextProvider();
 #endif
@@ -212,7 +218,17 @@ void VizMainImpl::CreateGpuService(
         std::move(pending_gpu_logging), io_task_runner());
   }
 
-#if BUILDFLAG(IS_ANDROID)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  gpu_service_->InitializeWithHost(
+      gpu_host.Unbind(),
+      gpu::GpuProcessShmCount(std::move(use_shader_cache_shm_region)),
+      gpu_init_->TakeDefaultOffscreenSurface(), std::move(params),
+      {.sync_point_manager = dependencies_.sync_point_manager,
+       .shared_image_manager = dependencies_.shared_image_manager,
+       .scheduler = dependencies_.scheduler,
+       .shutdown_event = dependencies_.shutdown_event,
+       .gr_context_options_provider = dependencies_.gr_context_options_provider});
+#elif BUILDFLAG(IS_ANDROID)
   gpu_service_->InitializeWithHost(
       gpu_host.Unbind(),
       gpu::GpuProcessShmCount(std::move(use_shader_cache_shm_region)),

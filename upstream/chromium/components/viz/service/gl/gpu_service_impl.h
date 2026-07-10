@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/clang_profiling_buildflags.h"
 #include "base/compiler_specific.h"
@@ -38,6 +39,9 @@
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/gpu_config.h"
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "gpu/ipc/service/external_gpu_backend_descriptor.h"
+#endif
 #include "gpu/ipc/service/x_util.h"
 #include "gpu/vulkan/buildflags.h"
 #include "media/media_buildflags.h"
@@ -110,6 +114,10 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
     std::unique_ptr<gpu::GpuWatchdogThread> watchdog_thread;
     scoped_refptr<base::SingleThreadTaskRunner> io_runner;
     raw_ptr<gpu::VulkanImplementation> vulkan_implementation = nullptr;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    // Borrowed embedder state. Empty retains Chromium's normal GPU ownership.
+    gpu::ExternalGpuBackendDescriptor external_gpu_backend;
+#endif
 #if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
     std::unique_ptr<gpu::DawnContextProvider> dawn_context_provider;
 #endif
@@ -132,7 +140,36 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   void UpdateGPUInfo();
   void UpdateGPUInfoGL();
 
-#if BUILDFLAG(IS_ANDROID)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Standalone's in-process Viz host may supply service-owned primitives. Null
+  // values retain the normal GpuServiceImpl creation path. This is separate
+  // from Android WebView's API.
+  struct ExternalDependencies {
+    raw_ptr<gpu::SyncPointManager> sync_point_manager = nullptr;
+    raw_ptr<gpu::SharedImageManager> shared_image_manager = nullptr;
+    raw_ptr<gpu::Scheduler> scheduler = nullptr;
+    raw_ptr<base::WaitableEvent> shutdown_event = nullptr;
+    raw_ptr<const gpu::SharedContextState::GrContextOptionsProvider>
+        gr_context_options_provider = nullptr;
+  };
+
+  void InitializeWithHost(
+      mojo::PendingRemote<mojom::GpuHost> gpu_host,
+      gpu::GpuProcessShmCount use_shader_cache_shm_count,
+      scoped_refptr<gl::GLSurface> default_offscreen_surface,
+      mojom::GpuServiceCreationParamsPtr creation_params,
+      ExternalDependencies dependencies);
+  void InitializeWithHost(
+      mojo::PendingRemote<mojom::GpuHost> gpu_host,
+      gpu::GpuProcessShmCount use_shader_cache_shm_count,
+      scoped_refptr<gl::GLSurface> default_offscreen_surface,
+      mojom::GpuServiceCreationParamsPtr creation_params) {
+    InitializeWithHost(std::move(gpu_host),
+                       std::move(use_shader_cache_shm_count),
+                       std::move(default_offscreen_surface),
+                       std::move(creation_params), ExternalDependencies());
+  }
+#elif BUILDFLAG(IS_ANDROID)
   void InitializeWithHost(
       mojo::PendingRemote<mojom::GpuHost> gpu_host,
       gpu::GpuProcessShmCount use_shader_cache_shm_count,
@@ -156,6 +193,14 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
   void Bind(mojo::PendingReceiver<mojom::GpuService> pending_receiver);
 
   scoped_refptr<gpu::SharedContextState> GetContextState();
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Borrowed backend state supplied by an in-process embedder. This is only
+  // configuration until a platform-specific adoption path consumes it.
+  const gpu::ExternalGpuBackendDescriptor& external_gpu_backend() const {
+    return external_gpu_backend_;
+  }
+#endif
 
   // Notifies the GpuHost to stop using GPU compositing. This should be called
   // in response to an error in the GPU process that occurred after
@@ -545,6 +590,10 @@ class VIZ_SERVICE_EXPORT GpuServiceImpl
 #endif
 
   gpu::GpuPersistentCacheCollection persistent_caches_;
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const gpu::ExternalGpuBackendDescriptor external_gpu_backend_;
+#endif
 
   // An event that will be signalled when we shutdown. On some platforms it
   // comes from external sources.

@@ -16,6 +16,9 @@
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "gpu/ipc/service/external_gpu_backend_descriptor.h"
+#endif
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/vulkan/buildflags.h"
 #include "skia/buildflags.h"
@@ -63,6 +66,18 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
     sandbox_helper_ = helper;
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // This is an internal in-process embedder seam. The descriptor is borrowed
+  // and is only consumed by a platform-specific Viz/GpuService adoption path.
+  void set_external_gpu_backend_descriptor(
+      ExternalGpuBackendDescriptor descriptor) {
+    external_gpu_backend_descriptor_ = descriptor;
+  }
+  const ExternalGpuBackendDescriptor& external_gpu_backend_descriptor() const {
+    return external_gpu_backend_descriptor_;
+  }
+#endif
+
   // TODO(zmo): Get rid of |command_line| in the following two functions.
   // Pass all bits through GpuPreferences.
   bool InitializeAndStartSandbox(base::CommandLine* command_line,
@@ -109,6 +124,9 @@ class GPU_IPC_SERVICE_EXPORT GpuInit {
   void RecordUMA();
 
   raw_ptr<GpuSandboxHelper> sandbox_helper_ = nullptr;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  ExternalGpuBackendDescriptor external_gpu_backend_descriptor_;
+#endif
   bool gl_use_swiftshader_ = false;
   std::unique_ptr<GpuWatchdogThread> watchdog_thread_;
 

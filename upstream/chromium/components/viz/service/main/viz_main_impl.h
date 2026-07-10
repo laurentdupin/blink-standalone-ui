@@ -18,6 +18,9 @@
 #include "components/viz/service/gl/gpu_log_message_manager.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
 #include "components/viz/service/main/viz_compositor_thread_runner_impl.h"
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "gpu/ipc/service/external_gpu_backend_descriptor.h"
+#endif
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -98,15 +101,20 @@ class VizMainImpl : public mojom::VizMain {
     raw_ptr<base::WaitableEvent> shutdown_event = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner;
     std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder;
-#if BUILDFLAG(IS_ANDROID)
-    // GpuServiceImpl normally creates the below objects internally. However,
-    // on Android WebView it is created by the embedder.
+#if BUILDFLAG(IS_ANDROID) || defined(HTML_CSS_RENDERER_STANDALONE)
+    // GpuServiceImpl normally creates the below objects internally. In-process
+    // embedders may supply them when their service host owns the GPU sequence.
     raw_ptr<gpu::SyncPointManager> sync_point_manager = nullptr;
     raw_ptr<gpu::SharedImageManager> shared_image_manager = nullptr;
     raw_ptr<gpu::Scheduler> scheduler = nullptr;
     raw_ptr<VizCompositorThreadRunner> viz_compositor_thread_runner = nullptr;
     raw_ptr<const gpu::SharedContextState::GrContextOptionsProvider>
         gr_context_options_provider = nullptr;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    // Borrowed backend state for a platform-specific in-process adoption path.
+    // Empty retains the normal Chromium GPU initialization path.
+    gpu::ExternalGpuBackendDescriptor external_gpu_backend;
+#endif
 #endif
   };
 

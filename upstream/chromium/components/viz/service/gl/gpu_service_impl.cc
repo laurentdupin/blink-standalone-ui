@@ -248,6 +248,9 @@ GpuServiceImpl::GpuServiceImpl(
           /*max_in_memory_cache_size=*/gpu::GetDefaultGpuDiskCacheSize(),
           /*metadata_options=*/GetPersistentCacheMetadataOpts(),
           /*async_write_options=*/GetPersistentCacheAsyncDiskWriteOpts()),
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      external_gpu_backend_(init_params.external_gpu_backend),
+#endif
       clear_shader_cache_(base::FeatureList::IsEnabled(
           features::kClearGrShaderDiskCacheOnInvalidPrefix)) {
   DCHECK(!io_runner_->BelongsToCurrentThread());
@@ -415,66 +418,40 @@ void GpuServiceImpl::UpdateGPUInfoGL() {
   gpu_host_->DidUpdateGPUInfo(gpu_info_);
 }
 
-#if BUILDFLAG(IS_ANDROID)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 void GpuServiceImpl::InitializeWithHost(
     mojo::PendingRemote<mojom::GpuHost> pending_gpu_host,
     gpu::GpuProcessShmCount use_shader_cache_shm_count,
     scoped_refptr<gl::GLSurface> default_offscreen_surface,
     mojom::GpuServiceCreationParamsPtr creation_params,
-    gpu::SyncPointManager* sync_point_manager,
-    gpu::SharedImageManager* shared_image_manager,
-    gpu::Scheduler* scheduler,
-    base::WaitableEvent* shutdown_event,
-    const gpu::SharedContextState::GrContextOptionsProvider*
-        gr_context_options_provider) {
+    ExternalDependencies dependencies) {
+  gpu::SyncPointManager* sync_point_manager = dependencies.sync_point_manager;
   if (!sync_point_manager) {
     sync_point_manager = CreateSyncPointManager();
   }
 
+  gpu::SharedImageManager* shared_image_manager =
+      dependencies.shared_image_manager;
   if (!shared_image_manager) {
     shared_image_manager = CreateSharedImageManager();
   }
 
+  gpu::Scheduler* scheduler = dependencies.scheduler;
   if (!scheduler) {
     scheduler = CreateScheduler(sync_point_manager);
   }
 
+  base::WaitableEvent* shutdown_event = dependencies.shutdown_event;
   if (!shutdown_event) {
     shutdown_event = CreateShutdownEvent();
   }
 
-  gr_context_options_provider_ = gr_context_options_provider;
+  gr_context_options_provider_ = dependencies.gr_context_options_provider;
 
   InitializeWithHostInternal(
       std::move(pending_gpu_host), std::move(use_shader_cache_shm_count),
       default_offscreen_surface, std::move(creation_params), sync_point_manager,
       shared_image_manager, scheduler, shutdown_event);
-}
-#else
-void GpuServiceImpl::InitializeWithHost(
-    mojo::PendingRemote<mojom::GpuHost> pending_gpu_host,
-    gpu::GpuProcessShmCount use_shader_cache_shm_count,
-    scoped_refptr<gl::GLSurface> default_offscreen_surface,
-    mojom::GpuServiceCreationParamsPtr creation_params,
-    base::WaitableEvent* shutdown_event) {
-  gpu::SyncPointManager* sync_point_manager = CreateSyncPointManager();
-#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
-  gpu::SharedImageManager* shared_image_manager =
-      CreateSharedImageManager(creation_params->supports_overlays);
-#else
-  gpu::SharedImageManager* shared_image_manager = CreateSharedImageManager();
-#endif
-  gpu::Scheduler* scheduler = CreateScheduler(sync_point_manager);
-
-  if (!shutdown_event) {
-    shutdown_event = CreateShutdownEvent();
-  }
-
-  InitializeWithHostInternal(
-      std::move(pending_gpu_host), std::move(use_shader_cache_shm_count),
-      default_offscreen_surface, std::move(creation_params), sync_point_manager,
-      shared_image_manager, scheduler, shutdown_event);
-
 #if BUILDFLAG(IS_WIN)
   // shared_image_d3d must be initialized after we call
   // InitializeWithHostInternal as that is where the shared context state is
@@ -492,6 +469,68 @@ void GpuServiceImpl::InitializeWithHost(
     gpu_host_->DidUpdateGPUInfo(gpu_info_);
   }
 #endif
+#endif
+}
+#elif BUILDFLAG(IS_ANDROID)
+void GpuServiceImpl::InitializeWithHost(
+    mojo::PendingRemote<mojom::GpuHost> pending_gpu_host,
+    gpu::GpuProcessShmCount use_shader_cache_shm_count,
+    scoped_refptr<gl::GLSurface> default_offscreen_surface,
+    mojom::GpuServiceCreationParamsPtr creation_params,
+    gpu::SyncPointManager* sync_point_manager,
+    gpu::SharedImageManager* shared_image_manager,
+    gpu::Scheduler* scheduler,
+    base::WaitableEvent* shutdown_event,
+    const gpu::SharedContextState::GrContextOptionsProvider*
+        gr_context_options_provider) {
+  if (!sync_point_manager) {
+    sync_point_manager = CreateSyncPointManager();
+  }
+  if (!shared_image_manager) {
+    shared_image_manager = CreateSharedImageManager();
+  }
+  if (!scheduler) {
+    scheduler = CreateScheduler(sync_point_manager);
+  }
+  if (!shutdown_event) {
+    shutdown_event = CreateShutdownEvent();
+  }
+  gr_context_options_provider_ = gr_context_options_provider;
+  InitializeWithHostInternal(
+      std::move(pending_gpu_host), std::move(use_shader_cache_shm_count),
+      default_offscreen_surface, std::move(creation_params), sync_point_manager,
+      shared_image_manager, scheduler, shutdown_event);
+}
+#else
+void GpuServiceImpl::InitializeWithHost(
+    mojo::PendingRemote<mojom::GpuHost> pending_gpu_host,
+    gpu::GpuProcessShmCount use_shader_cache_shm_count,
+    scoped_refptr<gl::GLSurface> default_offscreen_surface,
+    mojom::GpuServiceCreationParamsPtr creation_params,
+    base::WaitableEvent* shutdown_event) {
+  gpu::SyncPointManager* sync_point_manager = CreateSyncPointManager();
+#if BUILDFLAG(IS_OZONE)
+  gpu::SharedImageManager* shared_image_manager =
+      CreateSharedImageManager(creation_params->supports_overlays);
+#else
+  gpu::SharedImageManager* shared_image_manager = CreateSharedImageManager();
+#endif
+  gpu::Scheduler* scheduler = CreateScheduler(sync_point_manager);
+  if (!shutdown_event) {
+    shutdown_event = CreateShutdownEvent();
+  }
+  InitializeWithHostInternal(
+      std::move(pending_gpu_host), std::move(use_shader_cache_shm_count),
+      default_offscreen_surface, std::move(creation_params), sync_point_manager,
+      shared_image_manager, scheduler, shutdown_event);
+#if BUILDFLAG(IS_WIN)
+  auto shared_context_state = GetContextState();
+  if (shared_context_state) {
+    gpu_info_.shared_image_d3d =
+        gpu::D3DImageBackingFactory::IsD3DSharedImageSupported(
+            shared_context_state->GetD3D11Device().Get(), gpu_preferences_);
+    gpu_host_->DidUpdateGPUInfo(gpu_info_);
+  }
 #endif
 }
 #endif
