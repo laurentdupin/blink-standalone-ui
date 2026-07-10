@@ -6942,6 +6942,15 @@ class StandaloneCopyOutputController {
   viz::ReleaseCallback held_release_callback_;
 };
 
+// The legacy root stack is retained exclusively for
+// StandaloneCcSchedulerParityProbe. Product C API output supplies the
+// Chromium Root controller and uses this class only as a borrowed-target
+// CopyOutput adapter; it never creates a standalone Display or support.
+enum class StandaloneDirectFrameSinkMode {
+  kLegacyProbe,
+  kChromiumExternalTargetAdapter,
+};
+
 class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
  public:
   StandaloneDirectLayerTreeFrameSink(
@@ -6975,7 +6984,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       bool async_compositor_frame_ack = false,
       bool use_vulkan_offscreen_output = false,
       bool use_d3d12_offscreen_output = false,
-      StandaloneChromiumRootFrameSinkController* chromium_root = nullptr)
+      StandaloneChromiumRootFrameSinkController* chromium_root = nullptr,
+      StandaloneDirectFrameSinkMode mode =
+          StandaloneDirectFrameSinkMode::kLegacyProbe)
       : cc::LayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
                                std::move(compositor_task_runner),
@@ -7002,13 +7013,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         did_not_produce_count_(did_not_produce_count),
         last_frame_skipped_reason_(last_frame_skipped_reason),
         last_did_not_produce_has_damage_(
-            last_did_not_produce_has_damage) {
+            last_did_not_produce_has_damage),
+        mode_(mode) {
     // Standalone screenshot/readback consumers compare CSS top-left pixel
     // coordinates. Disable Viz backing/output-surface padding that is useful
     // for production buffer reuse but changes observable CopyOutput bounds.
     renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
     renderer_settings_.requires_alpha_channel = true;
-    if (!chromium_root_) {
+    if (mode_ == StandaloneDirectFrameSinkMode::kLegacyProbe) {
+      CHECK(!chromium_root_);
+      CHECK(frame_sink_manager);
       legacy_root_frame_sink_ = std::make_unique<StandaloneRootFrameSinkController>(
           frame_sink_manager, frame_sink_id, &viz_client_,
           begin_frame_source_set, std::move(gpu_thread_holder),
@@ -7021,6 +7035,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           failure_reason);
       viz_client_.SetAsyncCompositorFrameAck(async_compositor_frame_ack);
     } else {
+      CHECK(chromium_root_);
+      CHECK(!frame_sink_manager);
+      CHECK(!gpu_thread_holder);
       offscreen_skia_dependency_ =
           chromium_root_->offscreen_skia_dependency();
       vulkan_context_provider_available_ =
@@ -7036,6 +7053,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       const StandaloneDirectLayerTreeFrameSink&) = delete;
 
   ~StandaloneDirectLayerTreeFrameSink() override = default;
+
+  bool IsChromiumExternalTargetAdapter() const {
+    return mode_ ==
+               StandaloneDirectFrameSinkMode::kChromiumExternalTargetAdapter &&
+           chromium_root_ && !legacy_root_frame_sink_;
+  }
 
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override {
     TraceLiveFrameProbeStage("direct frame sink BindToClient begin");
@@ -8363,6 +8386,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<int> did_not_produce_count_ = nullptr;
   raw_ptr<int> last_frame_skipped_reason_ = nullptr;
   raw_ptr<int> last_did_not_produce_has_damage_ = nullptr;
+  const StandaloneDirectFrameSinkMode mode_;
   base::RepeatingClosure copy_output_completion_callback_;
   base::WeakPtrFactory<StandaloneDirectLayerTreeFrameSink> weak_factory_{this};
 };
@@ -9178,7 +9202,9 @@ class StandaloneCcLayerHost final
             /*last_did_not_produce_has_damage=*/nullptr,
             /*async_compositor_frame_ack=*/false,
             use_vulkan_offscreen_output_, use_d3d12_offscreen_output_,
-            chromium_root_frame_sink_.get());
+            chromium_root_frame_sink_.get(),
+            StandaloneDirectFrameSinkMode::kChromiumExternalTargetAdapter);
+    CHECK(external_target_adapter_->IsChromiumExternalTargetAdapter());
     external_target_adapter_->SetCopyOutputCompletionCallback(
         base::BindRepeating(
             &StandaloneCcLayerHost::OnDirectRootCopyOutputCompleted,
@@ -10286,7 +10312,11 @@ class StandaloneCcSchedulerParityProbe final
             &failure_reason_,
             &begin_frame_source_set_, &did_not_produce_count_,
             &last_frame_skipped_reason_, &last_did_not_produce_has_damage_,
-            /*async_compositor_frame_ack=*/true);
+            /*async_compositor_frame_ack=*/true,
+            /*use_vulkan_offscreen_output=*/false,
+            /*use_d3d12_offscreen_output=*/false,
+            /*chromium_root=*/nullptr,
+            StandaloneDirectFrameSinkMode::kLegacyProbe);
     layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
     return true;
   }
