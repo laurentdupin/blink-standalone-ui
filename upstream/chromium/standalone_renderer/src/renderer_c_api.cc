@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -700,6 +701,14 @@ struct blink_standalone_renderer {
 
 namespace {
 
+blink_standalone_status_code_t QueueDomMutation(
+    blink_standalone_renderer_t* renderer,
+    html_css_renderer::DomMutationType type,
+    const char* element_id,
+    const char* name,
+    const char* value);
+void ClearLastError(blink_standalone_renderer* renderer);
+
 struct DedicatedGpuFrameCommand {
   DedicatedGpuFrameCommand() : cv(&lock) {}
 
@@ -716,12 +725,28 @@ struct DedicatedGpuFrameCommand {
   base::TimeTicks started_at;
 };
 
+struct DedicatedTextMutationCommand {
+  DedicatedTextMutationCommand() : cv(&lock) {}
+
+  base::Lock lock;
+  base::ConditionVariable cv;
+  blink_standalone_renderer* inner = nullptr;
+  std::string element_id;
+  std::string text;
+  uint64_t sequence_order = 0;
+  bool done = false;
+  blink_standalone_dedicated_thread_text_mutation_result_t result = {};
+  std::string error;
+};
+
 class DedicatedRendererSequence {
  public:
   static DedicatedRendererSequence& Get() {
     static DedicatedRendererSequence* sequence = new DedicatedRendererSequence();
     return *sequence;
   }
+
+  static constexpr size_t kMaxRetainedTextMutationCommands = 256;
 
   blink_standalone_status_code_t CallSync(
       std::function<blink_standalone_status_code_t()> task) {
@@ -768,6 +793,154 @@ class DedicatedRendererSequence {
                        std::move(task)));
     if (!posted) {
       MarkAsyncCommandComplete(sequence_order);
+    }
+  }
+
+  uint64_t PostTextMutation(blink_standalone_renderer* inner,
+                            std::string element_id,
+                            std::string text) {
+    auto command = std::make_shared<DedicatedTextMutationCommand>();
+    uint64_t command_id = 0;
+    {
+      base::AutoLock auto_lock(lock_);
+      while (text_mutation_commands_.size() >=
+             kMaxRetainedTextMutationCommands) {
+        auto completed = text_mutation_commands_.end();
+        for (auto it = text_mutation_commands_.begin();
+             it != text_mutation_commands_.end(); ++it) {
+          base::AutoLock command_lock(it->second->lock);
+          if (it->second->done) {
+            completed = it;
+            break;
+          }
+        }
+        if (completed == text_mutation_commands_.end()) {
+          return 0;
+        }
+        text_mutation_commands_.erase(completed);
+      }
+      command_id = next_command_id_++;
+      command->inner = inner;
+      command->element_id = std::move(element_id);
+      command->text = std::move(text);
+      command->sequence_order = next_sequence_order_++;
+      command->result.command_id = command_id;
+      command->result.status = BLINK_STANDALONE_STATUS_PENDING;
+      command->result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
+      text_mutation_commands_[command_id] = command;
+    }
+    const bool posted = task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DedicatedRendererSequence::RunPostedTextMutationCommand,
+                       base::Unretained(this), command_id, command));
+    if (!posted) {
+      FinishTextMutationCommand(
+          command, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED,
+          "dedicated text mutation failed: renderer thread task post failed");
+      MarkSequenceCompleted(command->sequence_order);
+      PruneCompletedTextMutationCommands();
+    }
+    return command_id;
+  }
+
+  bool PollTextMutation(
+      uint64_t command_id,
+      blink_standalone_dedicated_thread_text_mutation_result_t* result) {
+    if (!command_id) {
+      return false;
+    }
+    std::shared_ptr<DedicatedTextMutationCommand> command;
+    {
+      base::AutoLock auto_lock(lock_);
+      auto it = text_mutation_commands_.find(command_id);
+      if (it == text_mutation_commands_.end()) {
+        return false;
+      }
+      command = it->second;
+    }
+    base::AutoLock auto_lock(command->lock);
+    if (result) {
+      *result = command->result;
+      result->error_message =
+          command->error.empty() ? nullptr : command->error.c_str();
+    }
+    return true;
+  }
+
+  void CancelTextMutationsForRenderer(blink_standalone_renderer* inner) {
+    if (!inner) {
+      return;
+    }
+    std::vector<uint64_t> completed_sequence_orders;
+    {
+      base::AutoLock auto_lock(lock_);
+      for (const auto& entry : text_mutation_commands_) {
+        const std::shared_ptr<DedicatedTextMutationCommand>& command =
+            entry.second;
+        base::AutoLock command_lock(command->lock);
+        if (command->inner != inner) {
+          continue;
+        }
+        command->inner = nullptr;
+        if (command->done) {
+          continue;
+        }
+        command->error =
+            "dedicated text mutation cancelled: renderer destroyed";
+        command->result.status = BLINK_STANDALONE_STATUS_OK;
+        command->result.state =
+            BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+        command->result.error_message = command->error.c_str();
+        command->done = true;
+        command->cv.Broadcast();
+        completed_sequence_orders.push_back(command->sequence_order);
+      }
+    }
+    for (uint64_t sequence_order : completed_sequence_orders) {
+      MarkSequenceCompleted(sequence_order);
+    }
+  }
+
+  void CancelGpuFramesForRenderer(blink_standalone_renderer* inner) {
+    if (!inner) {
+      return;
+    }
+    std::vector<uint64_t> completed_sequence_orders;
+    {
+      base::AutoLock auto_lock(lock_);
+      for (const auto& entry : gpu_commands_) {
+        const std::shared_ptr<DedicatedGpuFrameCommand>& command = entry.second;
+        base::AutoLock command_lock(command->lock);
+        if (command->inner != inner) {
+          continue;
+        }
+        command->inner = nullptr;
+        if (command->done) {
+          continue;
+        }
+        command->cancel_requested = true;
+        blink_standalone_dedicated_thread_gpu_frame_result_t result =
+            command->result;
+        if (command->started) {
+          CancelDedicatedGpuFrameAndReleaseExternalTargets(inner, &result);
+        } else {
+          result.status = BLINK_STANDALONE_STATUS_OK;
+          result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+          result.render_result.status = BLINK_STANDALONE_STATUS_OK;
+          result.render_result.state =
+              BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+        }
+        command->error.clear();
+        result.error_message = nullptr;
+        command->result = result;
+        command->done = true;
+        command->cv.Broadcast();
+        completed_sequence_orders.push_back(command->sequence_order);
+      }
+    }
+    for (uint64_t sequence_order : completed_sequence_orders) {
+      MarkSequenceCompleted(sequence_order);
     }
   }
 
@@ -945,6 +1118,62 @@ class DedicatedRendererSequence {
     MarkAsyncCommandComplete(sequence_order);
   }
 
+  void RunPostedTextMutationCommand(
+      uint64_t command_id,
+      const std::shared_ptr<DedicatedTextMutationCommand>& command) {
+    {
+      base::AutoLock auto_lock(command->lock);
+      if (command->done || !command->inner) {
+        return;
+      }
+    }
+    if (!CanRunSequenceOrder(command->sequence_order)) {
+      const bool posted = task_runner_->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(
+              &DedicatedRendererSequence::RunPostedTextMutationCommand,
+              base::Unretained(this), command_id, command),
+          base::Milliseconds(1));
+      if (!posted) {
+        FinishTextMutationCommand(
+            command, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+            BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED,
+            "dedicated text mutation failed: renderer thread ordering post failed");
+        MarkSequenceCompleted(command->sequence_order);
+        PruneCompletedTextMutationCommands();
+      }
+      return;
+    }
+
+    blink_standalone_status_code_t status = BLINK_STANDALONE_STATUS_OK;
+    std::string error;
+    if (!command->inner) {
+      status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+      error = "dedicated text mutation failed: renderer is not available";
+    } else {
+      ClearLastError(command->inner);
+      status = QueueDomMutation(command->inner,
+                                html_css_renderer::DomMutationType::kSetTextContent,
+                                command->element_id.c_str(), "",
+                                command->text.c_str());
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        const char* last_error =
+            blink_standalone_renderer_last_error(command->inner);
+        error = last_error && last_error[0]
+                    ? last_error
+                    : "dedicated text mutation failed";
+      }
+    }
+    FinishTextMutationCommand(
+        command, status,
+        status == BLINK_STANDALONE_STATUS_OK
+            ? BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED
+            : BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED,
+        std::move(error));
+    MarkSequenceCompleted(command->sequence_order);
+    PruneCompletedTextMutationCommands();
+  }
+
   bool CanRunSequenceOrder(uint64_t sequence_order) {
     base::AutoLock auto_lock(lock_);
     return sequence_order <= last_completed_sequence_order_ + 1;
@@ -955,19 +1184,69 @@ class DedicatedRendererSequence {
     if (pending_async_count_ > 0) {
       --pending_async_count_;
     }
-    last_completed_sequence_order_ =
-        std::max(last_completed_sequence_order_, sequence_order);
+    MarkSequenceCompletedLocked(sequence_order);
   }
 
   void MarkSequenceCompleted(uint64_t sequence_order) {
     base::AutoLock auto_lock(lock_);
-    last_completed_sequence_order_ =
-        std::max(last_completed_sequence_order_, sequence_order);
+    MarkSequenceCompletedLocked(sequence_order);
+  }
+
+  void MarkSequenceCompletedLocked(uint64_t sequence_order) {
+    if (sequence_order <= last_completed_sequence_order_) {
+      return;
+    }
+    completed_sequence_orders_.insert(sequence_order);
+    while (completed_sequence_orders_.erase(
+               last_completed_sequence_order_ + 1) != 0) {
+      ++last_completed_sequence_order_;
+    }
+  }
+
+  static void FinishTextMutationCommand(
+      const std::shared_ptr<DedicatedTextMutationCommand>& command,
+      blink_standalone_status_code_t status,
+      uint32_t state,
+      std::string error) {
+    base::AutoLock auto_lock(command->lock);
+    command->error = std::move(error);
+    command->result.status = status;
+    command->result.state = state;
+    command->result.error_message =
+        command->error.empty() ? nullptr : command->error.c_str();
+    command->done = true;
+    command->cv.Broadcast();
+  }
+
+  void PruneCompletedTextMutationCommands() {
+    base::AutoLock auto_lock(lock_);
+    while (text_mutation_commands_.size() >
+           kMaxRetainedTextMutationCommands) {
+      auto completed = text_mutation_commands_.end();
+      for (auto it = text_mutation_commands_.begin();
+           it != text_mutation_commands_.end(); ++it) {
+        base::AutoLock command_lock(it->second->lock);
+        if (it->second->done) {
+          completed = it;
+          break;
+        }
+      }
+      if (completed == text_mutation_commands_.end()) {
+        return;
+      }
+      text_mutation_commands_.erase(completed);
+    }
   }
 
   void RunPostedGpuFrameCommand(
       uint64_t command_id,
       const std::shared_ptr<DedicatedGpuFrameCommand>& command) {
+    {
+      base::AutoLock auto_lock(command->lock);
+      if (command->done || command->cancel_requested || !command->inner) {
+        return;
+      }
+    }
     if (!CanRunSequenceOrder(command->sequence_order)) {
       const uint32_t poll_interval_ms =
           command->request.poll_interval_ms ? command->request.poll_interval_ms
@@ -1373,11 +1652,14 @@ class DedicatedRendererSequence {
 
   base::Lock lock_;
   std::map<uint64_t, std::shared_ptr<DedicatedGpuFrameCommand>> gpu_commands_;
+  std::map<uint64_t, std::shared_ptr<DedicatedTextMutationCommand>>
+      text_mutation_commands_;
   base::Thread thread_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   uint64_t next_command_id_ = 1;
   uint64_t next_sequence_order_ = 1;
   uint64_t last_completed_sequence_order_ = 0;
+  std::set<uint64_t> completed_sequence_orders_;
   size_t pending_async_count_ = 0;
 };
 
@@ -2309,7 +2591,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_destro
     blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
     renderer->dedicated_thread_inner = nullptr;
     if (inner) {
-      DedicatedSequenceFor(renderer).CallSync([inner]() {
+      DedicatedRendererSequence& sequence = DedicatedSequenceFor(renderer);
+      sequence.CallSync([&sequence, inner]() {
+        sequence.CancelGpuFramesForRenderer(inner);
+        sequence.CancelTextMutationsForRenderer(inner);
         blink_standalone_renderer_destroy(inner);
         return BLINK_STANDALONE_STATUS_OK;
       });
@@ -3972,6 +4257,70 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   ClearLastError(renderer);
   if (!DedicatedSequenceFor(renderer).CancelGpuFrame(command_id, result)) {
+    result->command_id = command_id;
+    result->status = BLINK_STANDALONE_STATUS_OK;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE;
+    return BLINK_STANDALONE_STATUS_OK;
+  }
+  return result->state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING
+             ? BLINK_STANDALONE_STATUS_PENDING
+             : static_cast<blink_standalone_status_code_t>(result->status);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_post_dedicated_thread_set_element_text(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* utf8_text,
+    blink_standalone_dedicated_thread_text_mutation_result_t* result) {
+  if (!renderer || !element_id || !*element_id || !utf8_text || !result) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "post_dedicated_thread_set_element_text failed: renderer, element id, UTF-8 text, and result are required");
+  }
+  *result = blink_standalone_dedicated_thread_text_mutation_result_t{};
+  if (!IsDedicatedThreadShell(renderer) || !renderer->dedicated_thread_inner) {
+    result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "post_dedicated_thread_set_element_text failed: renderer was not created with create_dedicated_thread");
+  }
+  ClearLastError(renderer);
+  const uint64_t command_id = DedicatedSequenceFor(renderer).PostTextMutation(
+      renderer->dedicated_thread_inner, element_id, utf8_text);
+  if (!command_id) {
+    result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+    result->error_message =
+        "post_dedicated_thread_set_element_text failed: pending command limit reached";
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+                        result->error_message);
+  }
+  result->command_id = command_id;
+  result->status = BLINK_STANDALONE_STATUS_PENDING;
+  result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
+  return BLINK_STANDALONE_STATUS_PENDING;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_poll_dedicated_thread_text_mutation(
+    blink_standalone_renderer_t* renderer,
+    uint64_t command_id,
+    blink_standalone_dedicated_thread_text_mutation_result_t* result) {
+  if (!renderer || !result) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "poll_dedicated_thread_text_mutation failed: renderer and result are required");
+  }
+  *result = blink_standalone_dedicated_thread_text_mutation_result_t{};
+  if (!IsDedicatedThreadShell(renderer)) {
+    result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "poll_dedicated_thread_text_mutation failed: renderer was not created with create_dedicated_thread");
+  }
+  ClearLastError(renderer);
+  if (!DedicatedSequenceFor(renderer).PollTextMutation(command_id, result)) {
     result->command_id = command_id;
     result->status = BLINK_STANDALONE_STATUS_OK;
     result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE;

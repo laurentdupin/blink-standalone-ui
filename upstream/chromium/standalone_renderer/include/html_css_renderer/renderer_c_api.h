@@ -572,6 +572,19 @@ typedef struct blink_standalone_dedicated_thread_gpu_frame_result {
   const char* error_message;
 } blink_standalone_dedicated_thread_gpu_frame_result_t;
 
+/* Result for an opt-in dedicated-thread DOM mutation command. The strings
+ * passed to the post call are copied before it returns. error_message is
+ * renderer-owned and valid until the terminal command record is pruned or the
+ * renderer is destroyed. The command table retains at most 256 entries,
+ * pruning terminal results first; an older or unknown command polls as STALE.
+ * A post fails if all 256 retained commands are still pending. */
+typedef struct blink_standalone_dedicated_thread_text_mutation_result {
+  uint32_t status;
+  uint32_t state;
+  uint64_t command_id;
+  const char* error_message;
+} blink_standalone_dedicated_thread_text_mutation_result_t;
+
 /* Pointers returned in this struct are owned by the renderer and are valid
  * until the next output release, renderer mutation, frame advance, or destroy.
  * Call release_latest_output when the embedder has finished reading pixels. */
@@ -772,6 +785,19 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     uint64_t command_id,
     blink_standalone_dedicated_thread_gpu_frame_result_t* result);
+/* Nonblocking dedicated-thread text mutation. The command is ordered after
+ * every previously accepted dedicated command, including an in-flight GPU
+ * frame. Posting and polling never execute Blink or compositor work on the
+ * caller thread. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_post_dedicated_thread_set_element_text(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* utf8_text,
+    blink_standalone_dedicated_thread_text_mutation_result_t* result);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_poll_dedicated_thread_text_mutation(
+    blink_standalone_renderer_t* renderer,
+    uint64_t command_id,
+    blink_standalone_dedicated_thread_text_mutation_result_t* result);
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(
     blink_standalone_renderer_t* renderer,

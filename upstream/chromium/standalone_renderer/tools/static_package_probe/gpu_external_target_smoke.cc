@@ -1123,20 +1123,40 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
     return false;
   }
   const uint64_t duplicate_command_id = duplicate_result.command_id;
+  blink_standalone_dedicated_thread_gpu_frame_result_t in_flight_result = {};
+  status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+      renderer, command_id, &in_flight_result);
+  if (status != BLINK_STANDALONE_STATUS_PENDING ||
+      in_flight_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_expected_in_flight status=%d state=%u\n",
+                 status, in_flight_result.state);
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
   const auto mutation_start = std::chrono::steady_clock::now();
-  status = blink_standalone_renderer_set_element_text(
-      renderer, "live_style", "#dynamic{background:#ff00ff}");
+  blink_standalone_dedicated_thread_text_mutation_result_t text_mutation = {};
+  status = blink_standalone_renderer_post_dedicated_thread_set_element_text(
+      renderer, "live_style", "#dynamic{background:#ff00ff}",
+      &text_mutation);
   const auto mutation_end = std::chrono::steady_clock::now();
   const double mutation_ms =
       std::chrono::duration<double, std::milli>(mutation_end - mutation_start)
           .count();
-  if (status != BLINK_STANDALONE_STATUS_OK || mutation_ms > 10.0) {
+  if (status != BLINK_STANDALONE_STATUS_PENDING ||
+      text_mutation.state != BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING ||
+      text_mutation.command_id == 0 || mutation_ms > 10.0) {
     std::fprintf(stderr,
                  "static_gpu_external_target_smoke: failed "
-                 "vulkan_dedicated_mutation_enqueue status=%d elapsed_ms=%.3f "
-                 "error=%s\n",
-                 status, mutation_ms,
-                 blink_standalone_renderer_last_error(renderer));
+                 "vulkan_dedicated_text_mutation_post status=%d state=%u "
+                 "command_id=%llu elapsed_ms=%.3f error=%s\n",
+                 status, text_mutation.state,
+                 static_cast<unsigned long long>(text_mutation.command_id),
+                 mutation_ms, blink_standalone_renderer_last_error(renderer));
     DestroyRenderer(renderer);
     destroy_mask();
     DestroyVulkanProbeContext(&context);
@@ -1229,6 +1249,35 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
       blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
           renderer, duplicate_command_id, &cancel_result);
     }
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  for (uint32_t poll = 0;
+       text_mutation.state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+       poll < 10000;
+       ++poll) {
+    ::Sleep(1);
+    status = blink_standalone_renderer_poll_dedicated_thread_text_mutation(
+        renderer, text_mutation.command_id, &text_mutation);
+    if (status != BLINK_STANDALONE_STATUS_OK &&
+        status != BLINK_STANDALONE_STATUS_PENDING) {
+      break;
+    }
+  }
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      text_mutation.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_text_mutation_complete status=%d state=%u "
+                 "command_id=%llu error=%s\n",
+                 status, text_mutation.state,
+                 static_cast<unsigned long long>(text_mutation.command_id),
+                 text_mutation.error_message ? text_mutation.error_message
+                                             : blink_standalone_renderer_last_error(renderer));
     DestroyRenderer(renderer);
     destroy_mask();
     DestroyVulkanProbeContext(&context);
@@ -1457,7 +1506,8 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
       "static_gpu_external_target_smoke: ok vulkan_dedicated=1 "
       "main_written=1 mask_written=%u effects=%u mutation_changed=%u "
       "mutation_enqueue_ms=%.3f size=%ux%u command_id=%llu "
-      "mutation_command_id=%llu polls=%u mutation_polls=%u elapsed_ms=%.3f "
+      "text_mutation_command_id=%llu mutation_command_id=%llu polls=%u "
+      "mutation_polls=%u elapsed_ms=%.3f "
       "source_ms=%.3f submit_ms=%.3f poll_ms=%.3f\n",
       command_result.render_result.backdrop_mask_written,
       command_result.render_result.effect_count, mutation_changed_pixels,
@@ -1465,6 +1515,7 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
       command_result.render_result.physical_width,
       command_result.render_result.physical_height,
       static_cast<unsigned long long>(command_id),
+      static_cast<unsigned long long>(text_mutation.command_id),
       static_cast<unsigned long long>(mutation_command_id),
       command_result.poll_iterations, mutation_result.poll_iterations,
       command_result.elapsed_ms,
@@ -3469,20 +3520,40 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke(bool cancel_replace = false) {
   }
 
   const uint64_t command_id = command_result.command_id;
+  blink_standalone_dedicated_thread_gpu_frame_result_t in_flight_result = {};
+  status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+      renderer, command_id, &in_flight_result);
+  if (status != BLINK_STANDALONE_STATUS_PENDING ||
+      in_flight_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_expected_in_flight status=%d state=%u\n",
+                 status, in_flight_result.state);
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
   const auto mutation_start = std::chrono::steady_clock::now();
-  status = blink_standalone_renderer_set_element_text(
-      renderer, "live_style", "#dynamic{background:#ff00ff}");
+  blink_standalone_dedicated_thread_text_mutation_result_t text_mutation = {};
+  status = blink_standalone_renderer_post_dedicated_thread_set_element_text(
+      renderer, "live_style", "#dynamic{background:#ff00ff}",
+      &text_mutation);
   const auto mutation_end = std::chrono::steady_clock::now();
   const double mutation_ms =
       std::chrono::duration<double, std::milli>(mutation_end - mutation_start)
           .count();
-  if (status != BLINK_STANDALONE_STATUS_OK || mutation_ms > 10.0) {
+  if (status != BLINK_STANDALONE_STATUS_PENDING ||
+      text_mutation.state != BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING ||
+      text_mutation.command_id == 0 || mutation_ms > 10.0) {
     std::fprintf(stderr,
                  "static_gpu_external_target_smoke: failed "
-                 "d3d12_dedicated_mutation_enqueue status=%d elapsed_ms=%.3f "
-                 "error=%s\n",
-                 status, mutation_ms,
-                 blink_standalone_renderer_last_error(renderer));
+                 "d3d12_dedicated_text_mutation_post status=%d state=%u "
+                 "command_id=%llu elapsed_ms=%.3f error=%s\n",
+                 status, text_mutation.state,
+                 static_cast<unsigned long long>(text_mutation.command_id),
+                 mutation_ms, blink_standalone_renderer_last_error(renderer));
     DestroyRenderer(renderer);
     ::CloseHandle(mask_shared_handle);
     ::CloseHandle(shared_handle);
@@ -3538,6 +3609,35 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke(bool cancel_replace = false) {
       blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
           renderer, command_id, &cancel_result);
     }
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+
+  for (uint32_t poll = 0;
+       text_mutation.state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+       poll < 10000;
+       ++poll) {
+    ::Sleep(1);
+    status = blink_standalone_renderer_poll_dedicated_thread_text_mutation(
+        renderer, text_mutation.command_id, &text_mutation);
+    if (status != BLINK_STANDALONE_STATUS_OK &&
+        status != BLINK_STANDALONE_STATUS_PENDING) {
+      break;
+    }
+  }
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      text_mutation.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_text_mutation_complete status=%d state=%u "
+                 "command_id=%llu error=%s\n",
+                 status, text_mutation.state,
+                 static_cast<unsigned long long>(text_mutation.command_id),
+                 text_mutation.error_message ? text_mutation.error_message
+                                             : blink_standalone_renderer_last_error(renderer));
     DestroyRenderer(renderer);
     ::CloseHandle(mask_shared_handle);
     ::CloseHandle(shared_handle);
@@ -3753,7 +3853,8 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke(bool cancel_replace = false) {
       "static_gpu_external_target_smoke: ok d3d12_dedicated=1 "
       "main_written=%u mask_written=%u effects=%u mask_pixels=%u "
       "mutation_changed=%u mutation_enqueue_ms=%.3f size=%ux%u "
-      "command_id=%llu mutation_command_id=%llu polls=%u mutation_polls=%u "
+      "command_id=%llu text_mutation_command_id=%llu mutation_command_id=%llu "
+      "polls=%u mutation_polls=%u "
       "elapsed_ms=%.3f source_ms=%.3f submit_ms=%.3f poll_ms=%.3f\n",
       command_result.render_result.main_target_written,
       command_result.render_result.backdrop_mask_written,
@@ -3762,6 +3863,7 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke(bool cancel_replace = false) {
       command_result.render_result.physical_width,
       command_result.render_result.physical_height,
       static_cast<unsigned long long>(command_id),
+      static_cast<unsigned long long>(text_mutation.command_id),
       static_cast<unsigned long long>(mutation_command_id),
       command_result.poll_iterations, mutation_result.poll_iterations,
       command_result.elapsed_ms,
