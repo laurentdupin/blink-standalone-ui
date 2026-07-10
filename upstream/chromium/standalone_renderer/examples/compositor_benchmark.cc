@@ -79,10 +79,6 @@
 #endif
 
 extern "C" const char*
-StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
-    int width,
-    int height);
-extern "C" const char*
 StandaloneBlinkLiveFrameBridgeRunChromiumRootFrameSinkProbeForStandaloneRenderer(
     int width,
     int height);
@@ -303,7 +299,7 @@ void PrintUsage() {
       "[--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--trace-stages] [--lifecycle-stop <stage>] "
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
-      "[--result-collection full|minimal] [--cc-scheduler-probe] "
+      "[--result-collection full|minimal] "
       "[--chromium-root-frame-sink-probe] "
       "[--chromium-async-frame-sink-probe] "
       "[--gpu-output-smoke] "
@@ -14146,7 +14142,6 @@ int main(int argc, char** argv) {
   bool trace_stages = false;
   std::string lifecycle_stop;
   bool unsupported_out_requested = false;
-  bool cc_scheduler_probe = false;
   bool chromium_root_frame_sink_probe = false;
   bool chromium_async_frame_sink_probe = false;
   bool gpu_output_smoke = false;
@@ -14343,8 +14338,6 @@ int main(int argc, char** argv) {
       resource_base_path = value;
     } else if (arg == "--trace-stages") {
       trace_stages = true;
-    } else if (arg == "--cc-scheduler-probe") {
-      cc_scheduler_probe = true;
     } else if (arg == "--chromium-root-frame-sink-probe") {
       chromium_root_frame_sink_probe = true;
     } else if (arg == "--chromium-async-frame-sink-probe") {
@@ -14655,25 +14648,6 @@ int main(int argc, char** argv) {
       PrintUsage();
       return 2;
     }
-  }
-
-  if (cc_scheduler_probe) {
-    const char* probe_json =
-        StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
-            static_cast<int>(renderer.viewport.width),
-            static_cast<int>(renderer.viewport.height));
-    const std::string json = probe_json ? probe_json : "{}\n";
-    if (!json_path.empty()) {
-      std::ofstream file(json_path, std::ios::binary);
-      if (!file) {
-        std::fprintf(stderr, "failed to write json: %s\n",
-                     json_path.c_str());
-        return 1;
-      }
-      file << json;
-    }
-    std::printf("%s", json.c_str());
-    return json.find("\"success\": true") != std::string::npos ? 0 : 6;
   }
 
   if (chromium_root_frame_sink_probe) {

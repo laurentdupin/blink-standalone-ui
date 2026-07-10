@@ -1080,183 +1080,6 @@ struct EmptyClipChunkForStandaloneRenderer {
   std::optional<SkRRect> clip_rrect;
 };
 
-class StandaloneVizFrameSinkClient final
-    : public viz::mojom::CompositorFrameSinkClient {
- public:
-  StandaloneVizFrameSinkClient() = default;
-  StandaloneVizFrameSinkClient(const StandaloneVizFrameSinkClient&) = delete;
-  StandaloneVizFrameSinkClient& operator=(const StandaloneVizFrameSinkClient&) =
-      delete;
-  ~StandaloneVizFrameSinkClient() override = default;
-
-  void SetCcClient(cc::LayerTreeFrameSinkClient* client) {
-    cc_client_ = client;
-  }
-
-  void SetAsyncCompositorFrameAck(bool enabled) {
-    async_compositor_frame_ack_ = enabled;
-  }
-
-  void SetDeferCompositorFrameAck(bool enabled) {
-    defer_compositor_frame_ack_ = enabled;
-  }
-
-  void FlushDeferredCompositorFrameAck() {
-    if (!deferred_compositor_frame_ack_pending_) {
-      return;
-    }
-    deferred_compositor_frame_ack_pending_ = false;
-    std::vector<viz::ReturnedResource> resources =
-        std::move(deferred_compositor_frame_ack_resources_);
-    deferred_compositor_frame_ack_resources_.clear();
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&StandaloneVizFrameSinkClient::ForwardCompositorFrameAck,
-                       weak_factory_.GetWeakPtr(), std::move(resources)));
-  }
-
-  void DidReceiveCompositorFrameAck(
-      std::vector<viz::ReturnedResource> resources) override {
-    if (async_compositor_frame_ack_) {
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              &StandaloneVizFrameSinkClient::ForwardCompositorFrameAck,
-              weak_factory_.GetWeakPtr(), std::move(resources)));
-      return;
-    }
-    ForwardCompositorFrameAck(std::move(resources));
-  }
-
-  void ForwardCompositorFrameAck(
-      std::vector<viz::ReturnedResource> resources) {
-    if (defer_compositor_frame_ack_) {
-      for (auto& resource : resources) {
-        deferred_compositor_frame_ack_resources_.push_back(std::move(resource));
-      }
-      deferred_compositor_frame_ack_pending_ = true;
-      return;
-    }
-    if (!cc_client_) {
-      return;
-    }
-    cc_client_->ReclaimResources(std::move(resources));
-    cc_client_->DidReceiveCompositorFrameAck();
-  }
-
-  void OnBeginFrame(
-      const viz::BeginFrameArgs& args,
-      const base::flat_map<uint32_t, viz::FrameTimingDetails>& details,
-      std::vector<viz::ReturnedResource> resources) override {
-    if (cc_client_ && !resources.empty()) {
-      cc_client_->ReclaimResources(std::move(resources));
-    }
-  }
-
-  void OnBeginFramePausedChanged(bool paused) override {}
-
-  void ReclaimResources(
-      std::vector<viz::ReturnedResource> resources) override {
-    if (cc_client_ && !resources.empty()) {
-      cc_client_->ReclaimResources(std::move(resources));
-    }
-  }
-
-  void OnCompositorFrameTransitionDirectiveProcessed(
-      uint32_t sequence_id) override {
-    if (cc_client_) {
-      cc_client_->OnCompositorFrameTransitionDirectiveProcessed(sequence_id);
-    }
-  }
-
-  void OnSurfaceEvicted(
-      const viz::LocalSurfaceId& local_surface_id) override {
-    if (cc_client_) {
-      cc_client_->OnSurfaceEvicted(local_surface_id);
-    }
-  }
-
- private:
-  raw_ptr<cc::LayerTreeFrameSinkClient> cc_client_ = nullptr;
-  bool async_compositor_frame_ack_ = false;
-  bool defer_compositor_frame_ack_ = false;
-  bool deferred_compositor_frame_ack_pending_ = false;
-  std::vector<viz::ReturnedResource> deferred_compositor_frame_ack_resources_;
-  base::WeakPtrFactory<StandaloneVizFrameSinkClient> weak_factory_{this};
-};
-
-class StandaloneDisplayClient final : public viz::DisplayClient {
- public:
-  StandaloneDisplayClient(bool* skia_gpu_reached, std::string* failure_reason)
-      : skia_gpu_reached_(skia_gpu_reached),
-        failure_reason_(failure_reason) {}
-
-  StandaloneDisplayClient(const StandaloneDisplayClient&) = delete;
-  StandaloneDisplayClient& operator=(const StandaloneDisplayClient&) = delete;
-  ~StandaloneDisplayClient() override = default;
-
-  void ResetForNewDisplay() {
-    output_surface_lost_ = false;
-    last_completed_swap_size_ = gfx::Size();
-    child_window_ = gpu::kNullSurfaceHandle;
-    wide_color_enabled_ = false;
-  }
-
-  void DisplayOutputSurfaceLost() override {
-    output_surface_lost_ = true;
-    if (failure_reason_) {
-      *failure_reason_ = "Viz Display output surface was lost";
-    }
-  }
-
-  void DisplayWillDrawAndSwap(
-      bool will_draw_and_swap,
-      viz::AggregatedRenderPassList* render_passes) override {
-    if (will_draw_and_swap && skia_gpu_reached_) {
-      *skia_gpu_reached_ = true;
-    }
-  }
-
-  void DisplayDidDrawAndSwap() override {
-    if (skia_gpu_reached_) {
-      *skia_gpu_reached_ = true;
-    }
-    ++draw_and_swap_count_;
-  }
-
-  void DisplayDidReceiveCALayerParams(gfx::CALayerParams ca_layer_params)
-      override {}
-
-  void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {
-    last_completed_swap_size_ = pixel_size;
-  }
-
-  void DisplayAddChildWindowToBrowser(gpu::SurfaceHandle child_window) override {
-    child_window_ = child_window;
-  }
-
-  void SetWideColorEnabled(bool enabled) override {
-    wide_color_enabled_ = enabled;
-  }
-
-  uint64_t draw_and_swap_count() const { return draw_and_swap_count_; }
-  bool output_surface_lost() const { return output_surface_lost_; }
-  const gfx::Size& last_completed_swap_size() const {
-    return last_completed_swap_size_;
-  }
-  gpu::SurfaceHandle child_window() const { return child_window_; }
-  bool wide_color_enabled() const { return wide_color_enabled_; }
-
- private:
-  raw_ptr<bool> skia_gpu_reached_ = nullptr;
-  raw_ptr<std::string> failure_reason_ = nullptr;
-  uint64_t draw_and_swap_count_ = 0;
-  bool output_surface_lost_ = false;
-  gfx::Size last_completed_swap_size_;
-  gpu::SurfaceHandle child_window_ = gpu::kNullSurfaceHandle;
-  bool wide_color_enabled_ = false;
-};
-
 const char* StandaloneCopyOutputErrorName(viz::CopyOutputResult::Error error) {
   switch (error) {
     case viz::CopyOutputResult::Error::kNone:
@@ -5187,31 +5010,6 @@ void TraceStandaloneFrameSinkStage(const char* trace_prefix,
   TraceLiveFrameProbeStage((std::string(trace_prefix) + suffix).c_str());
 }
 
-void EnsureStandaloneFrameSinkManagerAndRegistration(
-    const char* trace_prefix,
-    std::unique_ptr<viz::FrameSinkManagerImpl>* frame_sink_manager,
-    const viz::FrameSinkId& frame_sink_id,
-    const char* debug_label,
-    bool* frame_sink_id_registered) {
-  if (!*frame_sink_manager) {
-    TraceStandaloneFrameSinkStage(trace_prefix, " before manager");
-    viz::FrameSinkManagerImpl::InitParams manager_params;
-    *frame_sink_manager =
-        std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
-    TraceStandaloneFrameSinkStage(trace_prefix, " after manager");
-  }
-
-  if (!frame_sink_id_registered || *frame_sink_id_registered) {
-    return;
-  }
-  TraceStandaloneFrameSinkStage(trace_prefix, " before register id");
-  (*frame_sink_manager)
-      ->RegisterFrameSinkId(frame_sink_id, /*report_activation=*/true);
-  (*frame_sink_manager)->SetFrameSinkDebugLabel(frame_sink_id, debug_label);
-  *frame_sink_id_registered = true;
-  TraceStandaloneFrameSinkStage(trace_prefix, " after register id");
-}
-
 std::shared_ptr<gpu::InProcessGpuThreadHolder>
 EnsureStandaloneGpuThreadHolderForFrameSink(
     const char* trace_prefix,
@@ -5259,780 +5057,6 @@ StandaloneRasterContextProviderPair CreateStandaloneRasterContextProviders(
   return providers;
 }
 
-class StandaloneRootVizDisplayController {
- public:
-  StandaloneRootVizDisplayController(
-      viz::FrameSinkManagerImpl* frame_sink_manager,
-      const viz::FrameSinkId& frame_sink_id,
-      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
-      viz::RendererSettings* renderer_settings,
-      viz::DebugRendererSettings* debug_settings,
-      StandaloneDisplayClient* display_client,
-      std::unique_ptr<viz::Display>* display,
-      raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency,
-      bool* display_uses_software_output,
-      bool* vulkan_context_provider_available,
-      bool* shared_context_state_is_vulkan,
-      bool use_vulkan_offscreen_output,
-      bool use_d3d12_offscreen_output,
-      bool* viz_display_created,
-      gfx::Size* viz_display_output_size,
-      bool* skia_gpu_reached,
-      std::string* failure_reason)
-      : frame_sink_manager_(frame_sink_manager),
-        frame_sink_id_(frame_sink_id),
-        gpu_thread_holder_(std::move(gpu_thread_holder)),
-        renderer_settings_(renderer_settings),
-        debug_settings_(debug_settings),
-        display_client_(display_client),
-        display_(display),
-        offscreen_dependency_(offscreen_dependency),
-        display_uses_software_output_(display_uses_software_output),
-        vulkan_context_provider_available_(vulkan_context_provider_available),
-        shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
-        use_vulkan_offscreen_output_(use_vulkan_offscreen_output),
-        use_d3d12_offscreen_output_(use_d3d12_offscreen_output),
-        viz_display_created_(viz_display_created),
-        viz_display_output_size_(viz_display_output_size),
-        skia_gpu_reached_(skia_gpu_reached),
-        failure_reason_(failure_reason) {}
-
-  StandaloneRootVizDisplayController(
-      const StandaloneRootVizDisplayController&) = delete;
-  StandaloneRootVizDisplayController& operator=(
-      const StandaloneRootVizDisplayController&) = delete;
-
-  bool EnsureDisplay(const gfx::Size& output_size,
-                     viz::CompositorFrameSinkSupport* support,
-                     viz::SyntheticBeginFrameSource* begin_frame_source) {
-    if (display_ && *display_) {
-      return true;
-    }
-    const bool offscreen = !g_standalone_native_window_handle;
-    if (!gpu_thread_holder_) {
-      SetFailure(offscreen
-                     ? "Offscreen Viz Display cannot initialize without GPU "
-                       "thread holder"
-                     : "Viz Display cannot initialize without GPU thread "
-                       "holder");
-      return false;
-    }
-    gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
-    if (!offscreen) {
-      surface_handle =
-#if BUILDFLAG(IS_WIN)
-          reinterpret_cast<gpu::SurfaceHandle>(
-              g_standalone_native_window_handle);
-#else
-          static_cast<gpu::SurfaceHandle>(
-              reinterpret_cast<uintptr_t>(g_standalone_native_window_handle));
-#endif
-      if (surface_handle == gpu::kNullSurfaceHandle) {
-        SetFailure("Viz Display received a null native surface handle");
-        return false;
-      }
-    }
-    if (!gpu_thread_holder_->GetTaskExecutor()) {
-      SetFailure(offscreen
-                     ? "Offscreen Viz Display GPU thread holder failed to "
-                       "initialize"
-                     : "Viz Display GPU thread holder failed to initialize");
-      return false;
-    }
-    if (!begin_frame_source) {
-      SetFailure("Viz Display cannot initialize without root BeginFrameSource");
-      return false;
-    }
-    return CreateRootDisplayLikeChromium(output_size, support,
-                                         begin_frame_source, surface_handle,
-                                         offscreen);
-  }
-
-  void UpdateForFrame(const viz::CompositorFrame& frame,
-                      viz::CompositorFrameSinkSupport* support,
-                      const viz::LocalSurfaceId& local_surface_id,
-                      const gfx::Size& output_size) {
-    if (!display_ || !*display_ || !support) {
-      return;
-    }
-    const bool activated = ActivateRootSurfaceForFrameLikeChromium(
-        support, local_surface_id, frame.device_scale_factor());
-    const gfx::Size display_size =
-        DisplaySizeForRootFrame(frame, output_size, activated);
-    ResizeForRootFrameLikeChromium(display_size, activated);
-    if (viz_display_output_size_) {
-      *viz_display_output_size_ = display_size;
-    }
-  }
-
-  void UpdateForExternalTargetCopy(
-      const viz::LocalSurfaceId& local_surface_id,
-      float device_scale_factor,
-      const gfx::Size& last_submitted_size_in_pixels,
-      const gfx::Size& output_size) {
-    if (!display_ || !*display_ || output_size.IsEmpty()) {
-      return;
-    }
-    (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
-    ResizeForExternalTargetCopyLikeChromium(output_size,
-                                            last_submitted_size_in_pixels);
-  }
-
-  bool HasDisplay() const { return display_ && *display_; }
-
-  bool ShouldResetOffscreenForExternalTargetResize(
-      const gfx::Size& output_size) const {
-    return !g_standalone_native_window_handle && display_ && *display_ &&
-           viz_display_output_size_ && !viz_display_output_size_->IsEmpty() &&
-           *viz_display_output_size_ != output_size;
-  }
-
-  void ResetDisplay() {
-    if (!display_ || !*display_) {
-      return;
-    }
-    display_->reset();
-    if (offscreen_dependency_) {
-      *offscreen_dependency_ = nullptr;
-    }
-    if (viz_display_output_size_) {
-      *viz_display_output_size_ = gfx::Size();
-    }
-    display_begin_frame_source_ = nullptr;
-  }
-
-  void ResetOffscreenForExternalTargetResize() {
-    ResetDisplay();
-  }
-
-  bool DisplayOutputSurfaceLost() const {
-    return display_client_ && display_client_->output_surface_lost();
-  }
-
-  void ResetDisplayAfterOutputSurfaceLoss() {
-    ResetDisplay();
-    if (display_client_) {
-      display_client_->ResetForNewDisplay();
-    }
-  }
-
-  void SetDisplayVisible(bool visible) {
-    if (!display_ || !*display_) {
-      return;
-    }
-    (*display_)->SetVisible(visible);
-  }
-
-  void Resize(const gfx::Size& size) {
-    if (!display_ || !*display_ || (*display_)->resize_based_on_root_surface()) {
-      return;
-    }
-    (*display_)->Resize(size);
-  }
-
-  void ForceImmediateDrawAndSwapIfPossible() {
-    if (!display_ || !*display_) {
-      return;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before Display DrawAndSwap");
-    (*display_)->ForceImmediateDrawAndSwapIfPossible();
-    TraceLiveFrameProbeStage(
-        "direct frame sink after scheduled Display DrawAndSwap");
-  }
-
- private:
-  bool CreateRootDisplayLikeChromium(
-      const gfx::Size& output_size,
-      viz::CompositorFrameSinkSupport* support,
-      viz::SyntheticBeginFrameSource* begin_frame_source,
-      gpu::SurfaceHandle surface_handle,
-      bool offscreen) {
-    TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
-    if (offscreen_dependency_) {
-      *offscreen_dependency_ = nullptr;
-    }
-    StandaloneOutputSurfaceProvider output_surface_provider(
-        gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
-        use_d3d12_offscreen_output_, vulkan_context_provider_available_,
-        shared_context_state_is_vulkan_, offscreen_dependency_);
-    std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
-        display_controller = output_surface_provider.CreateGpuDependency(
-            /*gpu_compositing=*/true, surface_handle);
-    if (!display_controller) {
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
-    std::unique_ptr<viz::OutputSurface> output_surface =
-        output_surface_provider.CreateOutputSurface(
-            surface_handle, /*gpu_compositing=*/true,
-            /*display_client=*/nullptr, display_controller.get(),
-            *renderer_settings_, debug_settings_);
-    if (!output_surface) {
-      return false;
-    }
-    // Keep the standalone root synthetic begin-frame source synchronized with
-    // OutputSurface VSync updates, as RootCompositorFrameSinkImpl does for its
-    // normal synthetic begin-frame-source path.
-    display_begin_frame_source_ = begin_frame_source;
-    output_surface->SetUpdateVSyncParametersCallback(base::BindRepeating(
-        &StandaloneRootVizDisplayController::SetDisplayVSyncParameters,
-        base::Unretained(this)));
-    TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
-    std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
-    if (offscreen) {
-      overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
-    } else {
-      overlay_processor =
-          viz::OverlayProcessorInterface::CreateOverlayProcessor(
-              output_surface.get(), output_surface->GetSurfaceHandle(),
-              output_surface->capabilities(), display_controller.get(),
-              output_surface_provider.GetSharedImageManager(),
-              *renderer_settings_, debug_settings_);
-    }
-    if (!overlay_processor) {
-      SetFailure("Viz Display overlay processor creation failed");
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before Display create");
-    if (display_client_) {
-      display_client_->ResetForNewDisplay();
-    }
-    auto task_runner = base::SingleThreadTaskRunner::GetCurrentDefault();
-    const auto& capabilities = output_surface->capabilities();
-    CHECK_GT(capabilities.pending_swap_params.max_pending_swaps, 0);
-    auto display_scheduler = std::make_unique<viz::DisplayScheduler>(
-        begin_frame_source, task_runner.get(), capabilities.pending_swap_params);
-    *display_ = std::make_unique<viz::Display>(
-        output_surface_provider.GetSharedImageManager(),
-        output_surface_provider.GetGpuScheduler(), *renderer_settings_,
-        debug_settings_, frame_sink_id_, std::move(display_controller),
-        std::move(output_surface), std::move(overlay_processor),
-        std::move(display_scheduler), std::move(task_runner));
-    (*display_)->Initialize(display_client_,
-                            frame_sink_manager_->surface_manager());
-    if (support) {
-      support->SetUpHitTest(display_->get());
-    }
-    SetDisplayVisible(true);
-    (*display_)->Resize(output_size);
-    if (display_uses_software_output_) {
-      *display_uses_software_output_ = false;
-    }
-    if (viz_display_created_) {
-      *viz_display_created_ = true;
-    }
-    TraceLiveFrameProbeStage(
-        offscreen ? "direct frame sink after offscreen Display initialize"
-                  : "direct frame sink after Display initialize");
-    return true;
-  }
-  bool ActivateRootSurfaceForFrameLikeChromium(
-      viz::CompositorFrameSinkSupport* support,
-      const viz::LocalSurfaceId& local_surface_id,
-      float device_scale_factor) {
-    if (support->last_activated_local_surface_id() == local_surface_id ||
-        support->IsEvicted(local_surface_id)) {
-      return false;
-    }
-    // This mirrors RootCompositorFrameSinkImpl::SubmitCompositorFrame: a root
-    // Display observes a new LocalSurfaceId only as Viz activates the matching
-    // root surface.
-    (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
-    return true;
-  }
-
-  gfx::Size DisplaySizeForRootFrame(const viz::CompositorFrame& frame,
-                                    const gfx::Size& fallback_size,
-                                    bool root_surface_activated) const {
-    if (!root_surface_activated ||
-        !(*display_)->resize_based_on_root_surface() ||
-        frame.render_pass_list.empty()) {
-      return fallback_size;
-    }
-    // RootCompositorFrameSinkImpl sizes gutter-free displays from the root
-    // compositor frame render pass when the output surface owns resize.
-    return frame.render_pass_list.back()->output_rect.size();
-  }
-
-  void ResizeForRootFrameLikeChromium(const gfx::Size& display_size,
-                                      bool root_surface_activated) {
-    if (!(*display_)->resize_based_on_root_surface() || root_surface_activated) {
-      (*display_)->Resize(display_size);
-    }
-  }
-
-  void ResizeForExternalTargetCopyLikeChromium(
-      const gfx::Size& output_size,
-      const gfx::Size& last_submitted_size_in_pixels) {
-    if (!(*display_)->resize_based_on_root_surface() ||
-        output_size == last_submitted_size_in_pixels) {
-      (*display_)->Resize(output_size);
-    }
-  }
-
-  void SetFailure(const char* reason) {
-    if (failure_reason_) {
-      *failure_reason_ = reason ? reason : "";
-    }
-  }
-
-  void SetDisplayVSyncParameters(base::TimeTicks timebase,
-                                 base::TimeDelta interval) {
-    if (display_begin_frame_source_) {
-      display_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
-    }
-  }
-
-  raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
-  viz::FrameSinkId frame_sink_id_;
-  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
-  raw_ptr<viz::RendererSettings> renderer_settings_ = nullptr;
-  raw_ptr<viz::DebugRendererSettings> debug_settings_ = nullptr;
-  raw_ptr<StandaloneDisplayClient> display_client_ = nullptr;
-  std::unique_ptr<viz::Display>* display_ = nullptr;
-  raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency_ =
-      nullptr;
-  raw_ptr<bool> display_uses_software_output_ = nullptr;
-  raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
-  raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
-  bool use_vulkan_offscreen_output_ = false;
-  bool use_d3d12_offscreen_output_ = false;
-  raw_ptr<bool> viz_display_created_ = nullptr;
-  raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
-  raw_ptr<bool> skia_gpu_reached_ = nullptr;
-  raw_ptr<std::string> failure_reason_ = nullptr;
-  raw_ptr<viz::SyntheticBeginFrameSource> display_begin_frame_source_ =
-      nullptr;
-};
-
-class StandaloneRootFrameSinkSupportController {
- public:
-  StandaloneRootFrameSinkSupportController(
-      viz::FrameSinkManagerImpl* frame_sink_manager,
-      const viz::FrameSinkId& frame_sink_id,
-      StandaloneVizFrameSinkClient* viz_client,
-      bool* begin_frame_source_set)
-      : frame_sink_manager_(frame_sink_manager),
-        frame_sink_id_(frame_sink_id),
-        viz_client_(viz_client),
-        begin_frame_source_set_(begin_frame_source_set) {}
-
-  StandaloneRootFrameSinkSupportController(
-      const StandaloneRootFrameSinkSupportController&) = delete;
-  StandaloneRootFrameSinkSupportController& operator=(
-      const StandaloneRootFrameSinkSupportController&) = delete;
-
-  void BindToClient(cc::LayerTreeFrameSinkClient* client,
-                    base::SingleThreadTaskRunner* compositor_task_runner) {
-    begin_frame_source_ = std::make_unique<viz::DelayBasedBeginFrameSource>(
-        std::make_unique<viz::DelayBasedTimeSource>(compositor_task_runner),
-        viz::BeginFrameSource::kNotRestartableId);
-    client->SetBeginFrameSource(begin_frame_source_.get());
-    if (begin_frame_source_set_) {
-      *begin_frame_source_set_ = true;
-    }
-    viz_client_->SetCcClient(client);
-    TraceLiveFrameProbeStage("direct frame sink before support create");
-    support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
-        viz_client_, frame_sink_manager_, frame_sink_id_, /*is_root=*/true);
-    TraceLiveFrameProbeStage("direct frame sink after support create");
-    frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
-                                                 frame_sink_id_);
-    begin_frame_source_registered_ = true;
-  }
-
-  void DetachFromClient(cc::LayerTreeFrameSinkClient* client) {
-    if (client) {
-      client->SetBeginFrameSource(nullptr);
-    }
-    if (begin_frame_source_registered_) {
-      frame_sink_manager_->UnregisterBeginFrameSource(
-          begin_frame_source_.get());
-      begin_frame_source_registered_ = false;
-    }
-    begin_frame_source_.reset();
-    if (begin_frame_source_set_) {
-      *begin_frame_source_set_ = false;
-    }
-    viz_client_->SetCcClient(nullptr);
-    support_.reset();
-  }
-
-  viz::CompositorFrameSinkSupport* support() const { return support_.get(); }
-
-  viz::SyntheticBeginFrameSource* begin_frame_source() const {
-    return begin_frame_source_.get();
-  }
-
-  std::optional<viz::SubmitResult> MaybeSubmitCompositorFrame(
-      const viz::LocalSurfaceId& local_surface_id,
-      viz::CompositorFrame frame,
-      std::optional<viz::HitTestRegionList> hit_test_region_list,
-      uint64_t submit_time) {
-    if (!support_) {
-      return std::nullopt;
-    }
-    return support_->MaybeSubmitCompositorFrame(
-        local_surface_id, std::move(frame), std::move(hit_test_region_list),
-        submit_time);
-  }
-
-  void DidNotProduceFrame(const viz::BeginFrameAck& ack) {
-    if (support_) {
-      support_->DidNotProduceFrame(ack);
-    }
-  }
-
-  void NotifyNewLocalSurfaceIdExpectedWhilePaused() {
-    if (support_) {
-      support_->NotifyNewLocalSurfaceIdExpectedWhilePaused();
-    }
-  }
-
-  void ReclaimResources(std::vector<viz::ReturnedResource> resources) {
-    if (!resources.empty()) {
-      viz_client_->ReclaimResources(std::move(resources));
-    }
-  }
-
-  bool NeedsActivatedRootSurface(
-      const viz::LocalSurfaceId& local_surface_id) const {
-    if (!support_ || !local_surface_id.is_valid()) {
-      return false;
-    }
-    // RootCompositorFrameSinkImpl updates Display to a new LocalSurfaceId only
-    // while submitting the matching CompositorFrame. External target CopyOutput
-    // does not submit a frame, so it must wait until cc/Viz has activated the
-    // root surface instead of publishing a Display root that has no frame yet.
-    return support_->last_activated_local_surface_id() != local_surface_id ||
-           support_->IsEvicted(local_surface_id);
-  }
-
-  void SetDeferCompositorFrameAck(bool defer) {
-    viz_client_->SetDeferCompositorFrameAck(defer);
-  }
-
-  void FlushDeferredCompositorFrameAck() {
-    viz_client_->FlushDeferredCompositorFrameAck();
-  }
-
-  void RequestCopyOfOutput(const viz::LocalSurfaceId& local_surface_id,
-                           std::unique_ptr<viz::CopyOutputRequest> request) {
-    // Standalone captures are always tied to the root surface that produced the
-    // target size. Let Viz enforce that LocalSurfaceId match instead of letting
-    // a later resize surface satisfy an older external-target copy request.
-    frame_sink_manager_->RequestCopyOfOutput(
-        viz::SurfaceId(frame_sink_id_, local_surface_id), std::move(request),
-        /*capture_exact_surface_id=*/true, base::Seconds(5));
-  }
-
- private:
-  raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
-  viz::FrameSinkId frame_sink_id_;
-  raw_ptr<StandaloneVizFrameSinkClient> viz_client_ = nullptr;
-  raw_ptr<bool> begin_frame_source_set_ = nullptr;
-  std::unique_ptr<viz::SyntheticBeginFrameSource> begin_frame_source_;
-  bool begin_frame_source_registered_ = false;
-  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
-};
-
-class StandaloneRootFrameSinkController {
- public:
-  struct RootCompositorFrameSubmitResult {
-    std::optional<viz::SubmitResult> submit_result;
-    bool display_available = false;
-  };
-
-  // Keep external target setup on the same root-surface lifecycle boundary as
-  // compositor-frame submission. The direct cc frame sink owns only the
-  // embedder's borrowed target and its release callback; Viz owns whether a
-  // root surface is activated, visible, and sized for a CopyOutput request.
-  enum class ExternalTargetDisplayPrepareStatus {
-    kReady,
-    kPendingSurfaceSize,
-    kPendingSurfaceActivation,
-    kPendingLocalSurfaceId,
-    kFailedOutputSurfaceLost,
-    kFailedDisplayInitialization,
-  };
-
-  struct ExternalTargetDisplayPrepareResult {
-    ExternalTargetDisplayPrepareStatus status =
-        ExternalTargetDisplayPrepareStatus::kPendingLocalSurfaceId;
-    gfx::Size output_size;
-    bool display_created = false;
-  };
-
-  StandaloneRootFrameSinkController(
-      viz::FrameSinkManagerImpl* frame_sink_manager,
-      const viz::FrameSinkId& frame_sink_id,
-      StandaloneVizFrameSinkClient* viz_client,
-      bool* begin_frame_source_set,
-      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
-      viz::RendererSettings* renderer_settings,
-      viz::DebugRendererSettings* debug_settings,
-      StandaloneDisplayClient* display_client,
-      std::unique_ptr<viz::Display>* display,
-      raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency,
-      bool* display_uses_software_output,
-      bool* vulkan_context_provider_available,
-      bool* shared_context_state_is_vulkan,
-      bool use_vulkan_offscreen_output,
-      bool use_d3d12_offscreen_output,
-      bool* viz_display_created,
-      gfx::Size* viz_display_output_size,
-      bool* skia_gpu_reached,
-      std::string* failure_reason)
-      : support_(frame_sink_manager,
-                 frame_sink_id,
-                 viz_client,
-                 begin_frame_source_set),
-        display_root_(frame_sink_manager,
-                      frame_sink_id,
-                      std::move(gpu_thread_holder),
-                      renderer_settings,
-                      debug_settings,
-                      display_client,
-                      display,
-                      offscreen_dependency,
-                      display_uses_software_output,
-                      vulkan_context_provider_available,
-                      shared_context_state_is_vulkan,
-                      use_vulkan_offscreen_output,
-                      use_d3d12_offscreen_output,
-                      viz_display_created,
-                      viz_display_output_size,
-                      skia_gpu_reached,
-                      failure_reason),
-        viz_display_output_size_(viz_display_output_size) {}
-
-  StandaloneRootFrameSinkController(
-      const StandaloneRootFrameSinkController&) = delete;
-  StandaloneRootFrameSinkController& operator=(
-      const StandaloneRootFrameSinkController&) = delete;
-
-  void BindToClient(cc::LayerTreeFrameSinkClient* client,
-                    base::SingleThreadTaskRunner* compositor_task_runner) {
-    cc_client_ = client;
-    support_.BindToClient(client, compositor_task_runner);
-  }
-
-  void DetachFromClient(cc::LayerTreeFrameSinkClient* client) {
-    // Keep Chromium's root-frame-sink destruction ordering: Display must go
-    // away before the BeginFrameSource owned by the support controller.
-    display_root_.ResetDisplay();
-    support_.DetachFromClient(client);
-    cc_client_ = nullptr;
-    last_hit_test_data_ = viz::HitTestRegionList();
-  }
-
-  viz::CompositorFrameSinkSupport* support() const {
-    return support_.support();
-  }
-
-  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) {
-    local_surface_id_ = local_surface_id;
-  }
-
-  bool HasValidLocalSurfaceId() const { return local_surface_id_.is_valid(); }
-
-  bool ShouldDropFrameForLocalSurfaceIdMismatch(
-      const gfx::Size& output_size) const {
-    return cc::ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
-        output_size, local_surface_id_, last_submitted_size_in_pixels_,
-        last_submitted_local_surface_id_);
-  }
-
-  RootCompositorFrameSubmitResult SubmitRootCompositorFrameLikeChromium(
-      viz::CompositorFrame frame,
-      bool hit_test_data_changed,
-      bool needs_display,
-      const gfx::Size& output_size,
-      uint64_t submit_time) {
-    RootCompositorFrameSubmitResult result;
-    const float frame_device_scale_factor = frame.device_scale_factor();
-    const bool local_surface_id_changed =
-        local_surface_id_ != last_submitted_local_surface_id_;
-    std::optional<viz::HitTestRegionList> hit_test_region_list =
-        BuildHitTestRegionList(hit_test_data_changed,
-                               local_surface_id_changed);
-    if (needs_display) {
-      if (!display_root_.EnsureDisplay(output_size, support_.support(),
-                                       support_.begin_frame_source())) {
-        return result;
-      }
-      display_root_.UpdateForFrame(frame, support_.support(), local_surface_id_,
-                                   output_size);
-    }
-    result.display_available = display_root_.HasDisplay();
-    result.submit_result = support_.MaybeSubmitCompositorFrame(
-        local_surface_id_, std::move(frame), std::move(hit_test_region_list),
-        submit_time);
-    if (result.submit_result &&
-        *result.submit_result == viz::SubmitResult::ACCEPTED) {
-      last_submitted_size_in_pixels_ = output_size;
-      last_submitted_local_surface_id_ = local_surface_id_;
-      last_submitted_device_scale_factor_ = frame_device_scale_factor;
-    }
-    return result;
-  }
-
-  void DidNotProduceFrame(const viz::BeginFrameAck& ack) {
-    support_.DidNotProduceFrame(ack);
-  }
-
-  void NotifyNewLocalSurfaceIdExpectedWhilePaused() {
-    support_.NotifyNewLocalSurfaceIdExpectedWhilePaused();
-  }
-
-  void ReclaimResources(std::vector<viz::ReturnedResource> resources) {
-    support_.ReclaimResources(std::move(resources));
-  }
-
-  bool NeedsFreshActivatedSurfaceForExternalTarget(
-      const gfx::Size& output_size) const {
-    if (output_size.IsEmpty() || !local_surface_id_.is_valid()) {
-      return false;
-    }
-    if (last_submitted_size_in_pixels_.IsEmpty()) {
-      return false;
-    }
-    // Match the RootCompositorFrameSinkImpl/cc resize contract used for
-    // compositor frame submission: Viz should not be resized/copied for a new
-    // pixel size until cc has activated a root surface with a fresh
-    // LocalSurfaceId. Treating this as pending keeps external GPU targets from
-    // observing stale root-surface state during resize churn.
-    return output_size != last_submitted_size_in_pixels_ &&
-           local_surface_id_ == last_submitted_local_surface_id_;
-  }
-
-  bool NeedsActivatedRootSurfaceForExternalTarget() const {
-    return support_.NeedsActivatedRootSurface(local_surface_id_);
-  }
-
-  void SetDeferCompositorFrameAck(bool defer) {
-    support_.SetDeferCompositorFrameAck(defer);
-  }
-
-  void FlushDeferredCompositorFrameAck() {
-    support_.FlushDeferredCompositorFrameAck();
-  }
-
-  void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request) {
-    support_.RequestCopyOfOutput(local_surface_id_, std::move(request));
-  }
-
-  ExternalTargetDisplayPrepareResult PrepareExternalTargetCopy(
-      const gfx::Size& output_size,
-      base::OnceClosure invalidate_superseded_copy) {
-    ExternalTargetDisplayPrepareResult result;
-    result.output_size = output_size;
-    if (output_size.IsEmpty()) {
-      result.status = ExternalTargetDisplayPrepareStatus::kPendingSurfaceSize;
-      return result;
-    }
-    if (NeedsFreshActivatedSurfaceForExternalTarget(output_size)) {
-      result.status = ExternalTargetDisplayPrepareStatus::kPendingSurfaceSize;
-      return result;
-    }
-    if (NeedsActivatedRootSurfaceForExternalTarget()) {
-      result.status =
-          ExternalTargetDisplayPrepareStatus::kPendingSurfaceActivation;
-      return result;
-    }
-    if (display_root_.DisplayOutputSurfaceLost()) {
-      display_root_.ResetDisplayAfterOutputSurfaceLoss();
-      result.status =
-          ExternalTargetDisplayPrepareStatus::kFailedOutputSurfaceLost;
-      return result;
-    }
-
-    // A resize supersedes the previous exact-surface CopyOutput request. Let
-    // the external-target adapter mark that request stale before Display sees
-    // the new size, while retaining the borrowed target until Viz completes
-    // its callback/release path.
-    if (display_root_.ShouldResetOffscreenForExternalTargetResize(
-            output_size)) {
-      if (invalidate_superseded_copy) {
-        std::move(invalidate_superseded_copy).Run();
-      }
-      display_root_.ResetOffscreenForExternalTargetResize();
-    }
-
-    if (!HasValidLocalSurfaceId()) {
-      result.status =
-          ExternalTargetDisplayPrepareStatus::kPendingLocalSurfaceId;
-      return result;
-    }
-    const bool had_display = display_root_.HasDisplay();
-    if (!display_root_.EnsureDisplay(output_size, support_.support(),
-                                     support_.begin_frame_source())) {
-      result.status =
-          ExternalTargetDisplayPrepareStatus::kFailedDisplayInitialization;
-      return result;
-    }
-    display_root_.UpdateForExternalTargetCopy(
-        local_surface_id_, last_submitted_device_scale_factor_,
-        last_submitted_size_in_pixels_, output_size);
-    if (viz_display_output_size_) {
-      *viz_display_output_size_ = output_size;
-    }
-    result.display_created = !had_display && display_root_.HasDisplay();
-    result.status = ExternalTargetDisplayPrepareStatus::kReady;
-    return result;
-  }
-
-  void ResetOffscreenForExternalTargetResize() {
-    display_root_.ResetOffscreenForExternalTargetResize();
-  }
-
-  void ForceImmediateDrawAndSwapIfPossible() {
-    display_root_.ForceImmediateDrawAndSwapIfPossible();
-  }
-
- private:
-  std::optional<viz::HitTestRegionList> BuildHitTestRegionList(
-      bool hit_test_data_changed,
-      bool local_surface_id_changed) {
-    if (!cc_client_) {
-      last_hit_test_data_ = viz::HitTestRegionList();
-      return std::nullopt;
-    }
-    std::optional<viz::HitTestRegionList> hit_test_region_list =
-        cc_client_->BuildHitTestData();
-    if (!hit_test_region_list) {
-      last_hit_test_data_ = viz::HitTestRegionList();
-      return std::nullopt;
-    }
-    // Match AsyncLayerTreeFrameSink: send hit-test data whenever cc says it
-    // changed or the root surface changes; otherwise suppress identical data.
-    if (!hit_test_data_changed && !local_surface_id_changed) {
-      if (viz::HitTestRegionList::IsEqual(*hit_test_region_list,
-                                          last_hit_test_data_)) {
-        DCHECK(!viz::HitTestRegionList::IsEqual(*hit_test_region_list,
-                                                viz::HitTestRegionList()));
-        return std::nullopt;
-      }
-    }
-    last_hit_test_data_ = *hit_test_region_list;
-    return hit_test_region_list;
-  }
-
-  StandaloneRootFrameSinkSupportController support_;
-  StandaloneRootVizDisplayController display_root_;
-  raw_ptr<cc::LayerTreeFrameSinkClient> cc_client_ = nullptr;
-  viz::LocalSurfaceId local_surface_id_;
-  float last_submitted_device_scale_factor_ = 1.0f;
-  gfx::Size last_submitted_size_in_pixels_;
-  viz::LocalSurfaceId last_submitted_local_surface_id_;
-  viz::HitTestRegionList last_hit_test_data_;
-  raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
-};
-
-// Owns the Chromium root service side of a standalone compositor. cc submits
-// through a direct in-process endpoint; no standalone CompositorFrameSinkSupport
-// or Display shares this FrameSinkId. Borrowed GPU targets remain outside this
-// controller and are copied through the active SurfaceId below.
 class StandaloneChromiumRootFrameSinkController
     : public viz::mojom::FrameSinkManagerClient {
  public:
@@ -6942,23 +5966,12 @@ class StandaloneCopyOutputController {
   viz::ReleaseCallback held_release_callback_;
 };
 
-// The legacy root stack is retained exclusively for
-// StandaloneCcSchedulerParityProbe. Product C API output supplies the
-// Chromium Root controller and uses this class only as a borrowed-target
-// CopyOutput adapter; it never creates a standalone Display or support.
-enum class StandaloneDirectFrameSinkMode {
-  kLegacyProbe,
-  kChromiumExternalTargetAdapter,
-};
-
-class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
+// Chromium Root owns all frame-sink, Display, support, begin-frame, and
+// LocalSurfaceId state. This adapter owns only the standalone C API's borrowed
+// external-target import and exact-surface CopyOutput completion boundary.
+class StandaloneExternalTargetCopyAdapter final {
  public:
-  StandaloneDirectLayerTreeFrameSink(
-      viz::FrameSinkManagerImpl* frame_sink_manager,
-      const viz::FrameSinkId& frame_sink_id,
-      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
-      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
-      scoped_refptr<viz::RasterContextProvider> worker_context_provider,
+  StandaloneExternalTargetCopyAdapter(
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       const gfx::Size& viewport,
       bool* compositor_frame_submitted,
@@ -6977,22 +5990,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       LiveGpuFrameOutput* copy_output_gpu_frame,
       std::string* copy_output_failure,
       std::string* failure_reason,
-      bool* begin_frame_source_set = nullptr,
-      int* did_not_produce_count = nullptr,
-      int* last_frame_skipped_reason = nullptr,
-      int* last_did_not_produce_has_damage = nullptr,
-      bool async_compositor_frame_ack = false,
-      bool use_vulkan_offscreen_output = false,
-      bool use_d3d12_offscreen_output = false,
-      StandaloneChromiumRootFrameSinkController* chromium_root = nullptr,
-      StandaloneDirectFrameSinkMode mode =
-          StandaloneDirectFrameSinkMode::kLegacyProbe)
-      : cc::LayerTreeFrameSink(std::move(compositor_context_provider),
-                               std::move(worker_context_provider),
-                               std::move(compositor_task_runner),
-                               /*shared_image_interface=*/nullptr),
-        viewport_(viewport),
-        display_client_(skia_gpu_reached, failure_reason),
+      StandaloneChromiumRootFrameSinkController* chromium_root)
+      : viewport_(viewport),
         chromium_root_(chromium_root),
         compositor_frame_submitted_(compositor_frame_submitted),
         viz_display_created_(viz_display_created),
@@ -7009,210 +6008,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                      copy_output_raw_frame,
                      copy_output_gpu_frame,
                      copy_output_failure),
-        failure_reason_(failure_reason),
-        did_not_produce_count_(did_not_produce_count),
-        last_frame_skipped_reason_(last_frame_skipped_reason),
-        last_did_not_produce_has_damage_(
-            last_did_not_produce_has_damage),
-        mode_(mode) {
-    // Standalone screenshot/readback consumers compare CSS top-left pixel
-    // coordinates. Disable Viz backing/output-surface padding that is useful
-    // for production buffer reuse but changes observable CopyOutput bounds.
-    renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
-    renderer_settings_.requires_alpha_channel = true;
-    if (mode_ == StandaloneDirectFrameSinkMode::kLegacyProbe) {
-      CHECK(!chromium_root_);
-      CHECK(frame_sink_manager);
-      legacy_root_frame_sink_ = std::make_unique<StandaloneRootFrameSinkController>(
-          frame_sink_manager, frame_sink_id, &viz_client_,
-          begin_frame_source_set, std::move(gpu_thread_holder),
-          &renderer_settings_, &debug_settings_, &display_client_, &display_,
-          &offscreen_skia_dependency_, &display_uses_software_output_,
-          &vulkan_context_provider_available_,
-          &vulkan_shared_context_state_is_vulkan_,
-          use_vulkan_offscreen_output, use_d3d12_offscreen_output,
-          viz_display_created, viz_display_output_size, skia_gpu_reached,
-          failure_reason);
-      viz_client_.SetAsyncCompositorFrameAck(async_compositor_frame_ack);
-    } else {
-      CHECK(chromium_root_);
-      CHECK(!frame_sink_manager);
-      CHECK(!gpu_thread_holder);
-      offscreen_skia_dependency_ =
-          chromium_root_->offscreen_skia_dependency();
-      vulkan_context_provider_available_ =
-          chromium_root_->vulkan_context_provider_available();
-      vulkan_shared_context_state_is_vulkan_ =
-          chromium_root_->shared_context_state_is_vulkan();
-    }
+        failure_reason_(failure_reason) {
+    CHECK(compositor_task_runner);
+    CHECK(chromium_root_);
+    offscreen_skia_dependency_ = chromium_root_->offscreen_skia_dependency();
+    vulkan_context_provider_available_ =
+        chromium_root_->vulkan_context_provider_available();
+    vulkan_shared_context_state_is_vulkan_ =
+        chromium_root_->shared_context_state_is_vulkan();
   }
 
-  StandaloneDirectLayerTreeFrameSink(
-      const StandaloneDirectLayerTreeFrameSink&) = delete;
-  StandaloneDirectLayerTreeFrameSink& operator=(
-      const StandaloneDirectLayerTreeFrameSink&) = delete;
+  StandaloneExternalTargetCopyAdapter(
+      const StandaloneExternalTargetCopyAdapter&) = delete;
+  StandaloneExternalTargetCopyAdapter& operator=(
+      const StandaloneExternalTargetCopyAdapter&) = delete;
+  ~StandaloneExternalTargetCopyAdapter() = default;
 
-  ~StandaloneDirectLayerTreeFrameSink() override = default;
-
-  bool IsChromiumExternalTargetAdapter() const {
-    return mode_ ==
-               StandaloneDirectFrameSinkMode::kChromiumExternalTargetAdapter &&
-           chromium_root_ && !legacy_root_frame_sink_;
-  }
-
-  bool BindToClient(cc::LayerTreeFrameSinkClient* client) override {
-    TraceLiveFrameProbeStage("direct frame sink BindToClient begin");
-    if (!cc::LayerTreeFrameSink::BindToClient(client)) {
-      TraceLiveFrameProbeStage("direct frame sink base BindToClient failed");
-      if (!failure_reason_ || failure_reason_->empty()) {
-        SetFailure("cc::LayerTreeFrameSink rejected the cc client");
-      }
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink after base BindToClient");
-    if (!legacy_root_frame_sink_) {
-      SetFailure("standalone direct frame sink cannot bind in Chromium root mode");
-      return false;
-    }
-    legacy_root_frame_sink_->BindToClient(client, compositor_task_runner_.get());
-    return true;
-  }
-
-  void DetachFromClient() override {
-    if (legacy_root_frame_sink_) {
-      legacy_root_frame_sink_->DetachFromClient(client_);
-    }
-    cc::LayerTreeFrameSink::DetachFromClient();
-  }
-
-  void SetLocalSurfaceId(
-      const viz::LocalSurfaceId& local_surface_id) override {
-    TraceLiveFrameProbeStage("direct frame sink SetLocalSurfaceId");
-    if (legacy_root_frame_sink_) {
-      legacy_root_frame_sink_->SetLocalSurfaceId(local_surface_id);
-    }
-  }
-
-  void SubmitCompositorFrame(viz::CompositorFrame frame,
-                             bool hit_test_data_changed) override {
-    TraceLiveFrameProbeStage("direct frame sink SubmitCompositorFrame begin");
-    if (std::getenv("HTML_CSS_RENDERER_DUMP_CC_FRAME")) {
-      const std::string frame_json = frame.ToString();
-      std::fprintf(stderr, "standalone_cc_frame=%s\n", frame_json.c_str());
-      std::fflush(stderr);
-    }
-    if (!legacy_root_frame_sink_ || !legacy_root_frame_sink_->support()) {
-      SetFailure("Viz CompositorFrameSinkSupport is not initialized");
-      return;
-    }
-    if (!legacy_root_frame_sink_->HasValidLocalSurfaceId()) {
-      SetFailure("cc submitted a frame before setting a valid LocalSurfaceId");
-      return;
-    }
-    gfx::Size output_size = frame.size_in_pixels();
-    if (output_size.IsEmpty()) {
-      output_size = viewport_;
-    }
-    if (submitted_output_size_) {
-      *submitted_output_size_ = output_size;
-    }
-    if (legacy_root_frame_sink_->ShouldDropFrameForLocalSurfaceIdMismatch(
-            output_size)) {
-      TraceLiveFrameProbeStage(
-          "direct frame sink dropped resized frame awaiting LocalSurfaceId");
-      ReclaimDroppedCompositorFrameResources(frame);
-      SetFailure("");
-      return;
-    }
-    const bool should_copy_output =
-        copy_output_requested_ && *copy_output_requested_;
-    const bool needs_display =
-        g_standalone_native_window_handle || should_copy_output;
-    StandaloneRootFrameSinkController::RootCompositorFrameSubmitResult
-        submit_result = legacy_root_frame_sink_->SubmitRootCompositorFrameLikeChromium(
-            std::move(frame), hit_test_data_changed, needs_display,
-            output_size, /*submit_time=*/0);
-    if (!submit_result.submit_result) {
-      return;
-    }
-    TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
-    if (*submit_result.submit_result == viz::SubmitResult::ACCEPTED) {
-      if (compositor_frame_submitted_) {
-        *compositor_frame_submitted_ = true;
-      }
-      SetFailure("");
-      if (submit_result.display_available) {
-        DrawVizDisplayNow();
-      }
-      if (should_copy_output && submit_result.display_available) {
-        RequestCopyOutput(output_size,
-                          copy_output_png_requested_ &&
-                              *copy_output_png_requested_,
-                          copy_output_raw_requested_ &&
-                              *copy_output_raw_requested_,
-                          copy_output_gpu_requested_ &&
-                              *copy_output_gpu_requested_);
-        DrawVizDisplayNow();
-      }
-      if (should_copy_output) {
-        if (copy_output_.IsPending()) {
-          legacy_root_frame_sink_->SetDeferCompositorFrameAck(true);
-          copy_output_.WaitForCompletion(base::Seconds(5));
-          legacy_root_frame_sink_->SetDeferCompositorFrameAck(false);
-          legacy_root_frame_sink_->FlushDeferredCompositorFrameAck();
-        }
-        if (copy_output_requested_) {
-          *copy_output_requested_ = false;
-        }
-        if (copy_output_.IsPending()) {
-          copy_output_.SetFailure(
-              "Viz CopyOutput did not complete during Display DrawAndSwap");
-        }
-      }
-      return;
-    }
-    SetFailure(
-        viz::CompositorFrameSinkSupport::GetSubmitResultAsString(
-            *submit_result.submit_result));
-  }
-
-  void ReclaimDroppedCompositorFrameResources(
-      const viz::CompositorFrame& frame) {
-    std::vector<viz::ReturnedResource> returned_resources =
-        viz::TransferableResource::ReturnResources(frame.resource_list);
-    if (legacy_root_frame_sink_) {
-      legacy_root_frame_sink_->ReclaimResources(std::move(returned_resources));
-    }
-  }
-
-  void DidNotProduceFrame(const viz::BeginFrameAck& ack,
-                          cc::FrameSkippedReason reason) override {
-    if (did_not_produce_count_) {
-      ++*did_not_produce_count_;
-    }
-    if (last_frame_skipped_reason_) {
-      *last_frame_skipped_reason_ = static_cast<int>(reason);
-    }
-    if (last_did_not_produce_has_damage_) {
-      *last_did_not_produce_has_damage_ = ack.has_damage ? 1 : 0;
-    }
-    TraceLiveFrameProbeStagef(
-        "direct frame sink DidNotProduceFrame reason=%lu has_damage=%lu",
-        static_cast<wtf_size_t>(reason),
-        ack.has_damage ? static_cast<wtf_size_t>(1)
-                       : static_cast<wtf_size_t>(0));
-    if (legacy_root_frame_sink_) {
-      legacy_root_frame_sink_->DidNotProduceFrame(ack);
-    }
-  }
-
-  void NotifyNewLocalSurfaceIdExpectedWhilePaused() override {
-    if (legacy_root_frame_sink_) {
-      legacy_root_frame_sink_->NotifyNewLocalSurfaceIdExpectedWhilePaused();
-    }
-  }
-
-  void ExportFrameTiming() override {}
+  bool UsesChromiumRoot() const { return chromium_root_ != nullptr; }
 
   std::string RunBorrowedVkImageBackingSmokeForTesting() {
     if (!HasExternalDisplay()) {
@@ -7263,94 +6075,22 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return result;
     }
 
-    if (chromium_root_) {
-      result.copy_result = chromium_root_->PrepareExternalTargetCopy(
-          result.output_size,
-          base::BindOnce(
-              &StandaloneDirectLayerTreeFrameSink::
-                  InvalidateSupersededExternalTargetCopyForResize,
-              weak_factory_.GetWeakPtr()));
-      result.ready = result.copy_result.status ==
-                     html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted;
-      if (!result.ready) {
-        return result;
-      }
+    result.copy_result = chromium_root_->PrepareExternalTargetCopy(
+        result.output_size,
+        base::BindOnce(
+            &StandaloneExternalTargetCopyAdapter::
+                InvalidateSupersededExternalTargetCopyForResize,
+            weak_factory_.GetWeakPtr()));
+    result.ready = result.copy_result.status ==
+                   html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted;
+    if (result.ready && draw_after_display_create) {
+      DrawVizDisplayNow();
+    }
+    if (result.ready) {
       result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted,
           std::string(diagnostic_label) + ": ready", result.output_size);
-      return result;
     }
-
-    if (!legacy_root_frame_sink_) {
-      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          std::string(diagnostic_label) +
-              ": failed failure=root frame sink is unavailable",
-          result.output_size);
-      return result;
-    }
-    const auto surface_result = legacy_root_frame_sink_->PrepareExternalTargetCopy(
-        result.output_size,
-        base::BindOnce(
-            &StandaloneDirectLayerTreeFrameSink::
-                InvalidateSupersededExternalTargetCopyForResize,
-            weak_factory_.GetWeakPtr()));
-    result.display_created = surface_result.display_created;
-    switch (surface_result.status) {
-      case StandaloneRootFrameSinkController::
-          ExternalTargetDisplayPrepareStatus::kReady:
-        break;
-      case StandaloneRootFrameSinkController::
-          ExternalTargetDisplayPrepareStatus::kPendingSurfaceSize:
-        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            std::string(diagnostic_label) +
-                ": pending reason=waiting for root surface LocalSurfaceId "
-                "matching external target size",
-            result.output_size);
-        return result;
-      case StandaloneRootFrameSinkController::
-          ExternalTargetDisplayPrepareStatus::kPendingSurfaceActivation:
-        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            std::string(diagnostic_label) +
-                ": pending reason=waiting for root surface activation",
-            result.output_size);
-        return result;
-      case StandaloneRootFrameSinkController::
-          ExternalTargetDisplayPrepareStatus::kPendingLocalSurfaceId:
-        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            std::string(diagnostic_label) +
-                ": pending reason=Viz Display cannot initialize without "
-                "LocalSurfaceId",
-            result.output_size);
-        return result;
-      case StandaloneRootFrameSinkController::
-          ExternalTargetDisplayPrepareStatus::kFailedOutputSurfaceLost:
-        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            std::string(diagnostic_label) +
-                ": failed failure=Viz Display output surface was lost",
-            result.output_size);
-        return result;
-      case StandaloneRootFrameSinkController::
-          ExternalTargetDisplayPrepareStatus::kFailedDisplayInitialization:
-        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            std::string(diagnostic_label) +
-                ": failed failure=Viz Display could not initialize",
-            result.output_size);
-        return result;
-    }
-    if (result.display_created && draw_after_display_create) {
-      DrawVizDisplayNow();
-    }
-    result.ready = true;
-    result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
-        html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted,
-        std::string(diagnostic_label) + ": ready",
-        result.output_size);
     return result;
   }
 
@@ -7882,7 +6622,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     if (!chromium_root_->ArmExactCopyAfterActivation(base::BindOnce(
-            &StandaloneDirectLayerTreeFrameSink::
+            &StandaloneExternalTargetCopyAdapter::
                 RequestQueuedCopyOutputFromChromiumRoot,
             weak_factory_.GetWeakPtr(), output_size))) {
       return;
@@ -7908,11 +6648,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     ReleaseAllPreparedExternalGpuTargetCopies();
-    if (!g_standalone_native_window_handle) {
-      if (legacy_root_frame_sink_) {
-        legacy_root_frame_sink_->ResetOffscreenForExternalTargetResize();
-      }
-    }
   }
 
  private:
@@ -8219,18 +6954,15 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   bool HasExternalDisplay() const {
-    return chromium_root_ ? chromium_root_->HasActiveRootSurface()
-                          : display_ != nullptr;
+    return chromium_root_->HasActiveRootSurface();
   }
 
   bool ExternalVulkanContextProviderAvailable() const {
-    return chromium_root_ ? chromium_root_->vulkan_context_provider_available()
-                          : vulkan_context_provider_available_;
+    return chromium_root_->vulkan_context_provider_available();
   }
 
   bool ExternalSharedContextStateIsVulkan() const {
-    return chromium_root_ ? chromium_root_->shared_context_state_is_vulkan()
-                          : vulkan_shared_context_state_is_vulkan_;
+    return chromium_root_->shared_context_state_is_vulkan();
   }
 
   void InvalidateSupersededExternalTargetCopyForResize() {
@@ -8247,11 +6979,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   void DrawVizDisplayNow() {
-    if (chromium_root_) {
-      chromium_root_->ForceImmediateDrawAndSwapIfPossible();
-    } else if (legacy_root_frame_sink_) {
-      legacy_root_frame_sink_->ForceImmediateDrawAndSwapIfPossible();
-    }
+    chromium_root_->ForceImmediateDrawAndSwapIfPossible();
   }
 
   void RequestQueuedCopyOutputFromChromiumRoot(const gfx::Size& output_size) {
@@ -8276,14 +7004,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   bool SubmitCopyOutputRequest(
       std::unique_ptr<viz::CopyOutputRequest> request) {
-    if (chromium_root_) {
-      return chromium_root_->RequestCopyOfOutput(std::move(request));
-    }
-    if (!legacy_root_frame_sink_) {
-      return false;
-    }
-    legacy_root_frame_sink_->RequestCopyOfOutput(std::move(request));
-    return true;
+    return chromium_root_->RequestCopyOfOutput(std::move(request));
   }
 
   void RequestCopyOutput(const gfx::Size& output_size,
@@ -8295,11 +7016,11 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                          uint64_t async_generation = 0) {
     const bool enqueued = copy_output_.Request(
         base::BindRepeating(
-            &StandaloneDirectLayerTreeFrameSink::SubmitCopyOutputRequest,
+            &StandaloneExternalTargetCopyAdapter::SubmitCopyOutputRequest,
             base::Unretained(this)),
         output_size, wants_png, wants_raw, wants_gpu,
         std::move(blit_target),
-        base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
+        base::BindOnce(&StandaloneExternalTargetCopyAdapter::OnCopyOutput,
                        weak_factory_.GetWeakPtr(), wants_png, wants_raw,
                        wants_gpu, async_generation));
     if (enqueued && async_generation != 0 &&
@@ -8347,17 +7068,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
  private:
 
   gfx::Size viewport_;
-  viz::RendererSettings renderer_settings_;
-  viz::DebugRendererSettings debug_settings_;
-  StandaloneVizFrameSinkClient viz_client_;
-  StandaloneDisplayClient display_client_;
-  std::unique_ptr<StandaloneRootFrameSinkController> legacy_root_frame_sink_;
   raw_ptr<StandaloneChromiumRootFrameSinkController> chromium_root_ =
       nullptr;
-  std::unique_ptr<viz::Display> display_;
   raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
       nullptr;
-  bool display_uses_software_output_ = false;
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
@@ -8382,13 +7096,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       stale_async_external_gpu_target_copy_terminal_status_ =
           html_css_renderer::ExternalGpuTargetCopyStatus::kNone;
   raw_ptr<std::string> failure_reason_ = nullptr;
-  raw_ptr<bool> begin_frame_source_set_ = nullptr;
-  raw_ptr<int> did_not_produce_count_ = nullptr;
-  raw_ptr<int> last_frame_skipped_reason_ = nullptr;
-  raw_ptr<int> last_did_not_produce_has_damage_ = nullptr;
-  const StandaloneDirectFrameSinkMode mode_;
   base::RepeatingClosure copy_output_completion_callback_;
-  base::WeakPtrFactory<StandaloneDirectLayerTreeFrameSink> weak_factory_{this};
+  base::WeakPtrFactory<StandaloneExternalTargetCopyAdapter> weak_factory_{this};
 };
 
 struct OriginalElementAttributeValue {
@@ -9181,12 +7890,8 @@ class StandaloneCcLayerHost final
     chromium_direct_frame_sink_ = direct_frame_sink.get();
 
     external_target_adapter_ =
-        std::make_unique<StandaloneDirectLayerTreeFrameSink>(
-            /*frame_sink_manager=*/nullptr, frame_sink_id,
-            /*gpu_thread_holder=*/nullptr,
-            /*compositor_context_provider=*/nullptr,
-            /*worker_context_provider=*/nullptr, main_task_runner,
-            initial_output_size,
+        std::make_unique<StandaloneExternalTargetCopyAdapter>(
+            main_task_runner, initial_output_size,
             &compositor_frame_submitted_, &viz_display_created_,
             &skia_gpu_reached_, &submitted_output_size_,
             &viz_display_output_size_, &copy_output_requested_,
@@ -9195,16 +7900,8 @@ class StandaloneCcLayerHost final
             &copy_output_completed_, &copy_output_succeeded_,
             &copy_output_png_, &copy_output_raw_frame_,
             &copy_output_gpu_frame_, &copy_output_failure_,
-            &frame_sink_failure_reason_,
-            /*begin_frame_source_set=*/nullptr,
-            /*did_not_produce_count=*/nullptr,
-            /*last_frame_skipped_reason=*/nullptr,
-            /*last_did_not_produce_has_damage=*/nullptr,
-            /*async_compositor_frame_ack=*/false,
-            use_vulkan_offscreen_output_, use_d3d12_offscreen_output_,
-            chromium_root_frame_sink_.get(),
-            StandaloneDirectFrameSinkMode::kChromiumExternalTargetAdapter);
-    CHECK(external_target_adapter_->IsChromiumExternalTargetAdapter());
+            &frame_sink_failure_reason_, chromium_root_frame_sink_.get());
+    CHECK(external_target_adapter_->UsesChromiumRoot());
     external_target_adapter_->SetCopyOutputCompletionCallback(
         base::BindRepeating(
             &StandaloneCcLayerHost::OnDirectRootCopyOutputCompleted,
@@ -9405,11 +8102,11 @@ class StandaloneCcLayerHost final
   std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
   std::unique_ptr<StandaloneChromiumRootFrameSinkController>
       chromium_root_frame_sink_;
-  std::unique_ptr<StandaloneDirectLayerTreeFrameSink>
+  std::unique_ptr<StandaloneExternalTargetCopyAdapter>
       external_target_adapter_;
   raw_ptr<StandaloneChromiumDirectLayerTreeFrameSink>
       chromium_direct_frame_sink_ = nullptr;
-  raw_ptr<StandaloneDirectLayerTreeFrameSink> active_frame_sink_ = nullptr;
+  raw_ptr<StandaloneExternalTargetCopyAdapter> active_frame_sink_ = nullptr;
   raw_ptr<cc::Layer> attached_root_layer_ = nullptr;
   gfx::Size logical_viewport_;
   gfx::Size physical_viewport_;
@@ -10166,382 +8863,6 @@ class StandaloneChromiumAsyncFrameSinkProbe final {
   raw_ptr<base::RunLoop> copy_run_loop_ = nullptr;
   base::WeakPtrFactory<StandaloneChromiumAsyncFrameSinkProbe> weak_factory_{
       this};
-};
-
-class StandaloneCcSchedulerParityProbe final
-    : public cc::LayerTreeHostDelegate,
-      public cc::LayerTreeHostSingleThreadDelegate,
-      public cc::LayerTreeHostSchedulingDelegate {
- public:
-  explicit StandaloneCcSchedulerParityProbe(const gfx::Size& viewport)
-      : viewport_(viewport) {
-    settings_.single_thread_proxy_scheduler = true;
-    settings_.use_layer_lists = false;
-  }
-
-  ~StandaloneCcSchedulerParityProbe() override {
-    layer_tree_host_.reset();
-    animation_host_.reset();
-    if (task_graph_runner_started_) {
-      task_graph_runner_.Shutdown();
-      task_graph_runner_started_ = false;
-    }
-  }
-
-  StandaloneCcSchedulerParityProbe(const StandaloneCcSchedulerParityProbe&) =
-      delete;
-  StandaloneCcSchedulerParityProbe& operator=(
-      const StandaloneCcSchedulerParityProbe&) = delete;
-
-  std::string Run() {
-    if (!CreateHost()) {
-      return BuildJson(false);
-    }
-
-    frame_sink_warm_run_loop_ = std::make_unique<base::RunLoop>(
-        base::RunLoop::Type::kNestableTasksAllowed);
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, frame_sink_warm_run_loop_->QuitClosure(), base::Seconds(2));
-    TraceLiveFrameProbeStage("cc scheduler probe before SetShouldWarmUp");
-    layer_tree_host_->SetShouldWarmUp();
-    frame_sink_warm_run_loop_->Run();
-    TraceLiveFrameProbeStage("cc scheduler probe after SetShouldWarmUp");
-    frame_sink_warm_run_loop_.reset();
-
-    scheduler_run_loop_ = std::make_unique<base::RunLoop>(
-        base::RunLoop::Type::kNestableTasksAllowed);
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, scheduler_run_loop_->QuitClosure(), base::Seconds(2));
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&StandaloneCcSchedulerParityProbe::PostInitCommit,
-                       base::Unretained(this)));
-    scheduler_run_loop_->Run();
-    scheduler_run_loop_.reset();
-
-    return BuildJson(compositor_frame_submitted_);
-  }
-
- private:
-  bool CreateHost() {
-    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
-        base::SingleThreadTaskRunner::GetCurrentDefault();
-    if (!main_task_runner) {
-      failure_reason_ =
-          "cc scheduler probe requires a current main-thread task runner";
-      return false;
-    }
-
-    animation_host_ = cc::AnimationHost::CreateMainInstance();
-    cc::LayerTreeHost::InitParams params;
-    params.client = this;
-    params.scheduling_delegate = this;
-    params.task_graph_runner = TaskGraphRunnerForProbe();
-    params.settings = &settings_;
-    params.main_task_runner = std::move(main_task_runner);
-    params.mutator_host = animation_host_.get();
-    layer_tree_host_ =
-        cc::LayerTreeHost::CreateSingleThreaded(this, std::move(params));
-    if (!layer_tree_host_) {
-      failure_reason_ = "cc scheduler probe failed to create LayerTreeHost";
-      return false;
-    }
-    host_created_ = true;
-    layer_tree_host_->SetVisible(true);
-    visible_ = true;
-    return true;
-  }
-
-  cc::TaskGraphRunner* TaskGraphRunnerForProbe() {
-    if (!task_graph_runner_started_) {
-      task_graph_runner_.Start("StandaloneCcSchedulerProbeTileRunner",
-                               base::SimpleThread::Options());
-      task_graph_runner_started_ = true;
-    }
-    return &task_graph_runner_;
-  }
-
-  bool CreateFrameSink() {
-    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
-        base::SingleThreadTaskRunner::GetCurrentDefault();
-    if (!main_task_runner) {
-      failure_reason_ =
-          "cc scheduler probe frame sink requires a current task runner";
-      return false;
-    }
-
-    const viz::FrameSinkId frame_sink_id(778, 1);
-    EnsureStandaloneFrameSinkManagerAndRegistration(
-        "cc scheduler probe CreateFrameSink", &frame_sink_manager_,
-        frame_sink_id, "standalone-renderer-cc-scheduler-probe",
-        &frame_sink_id_registered_);
-    EnsureStandaloneGpuThreadHolderForFrameSink(
-        "cc scheduler probe CreateFrameSink", &gpu_thread_holder_,
-        gpu::GrContextType::kGL,
-        /*install_external_vulkan_for_testing=*/false,
-        /*install_external_d3d12_for_testing=*/false);
-    StandaloneRasterContextProviderPair context_providers =
-        CreateStandaloneRasterContextProviders(
-            "cc scheduler probe CreateFrameSink", gpu_thread_holder_,
-            &gpu_context_created_, &raster_context_created_,
-            &shared_image_interface_available_, &failure_reason_);
-    const gpu::ContextResult worker_bind_result =
-        context_providers.worker->BindToCurrentSequence();
-    if (worker_bind_result != gpu::ContextResult::kSuccess) {
-      if (failure_reason_.empty()) {
-        failure_reason_ =
-            "cc scheduler probe worker raster context provider failed to bind";
-      }
-      return false;
-    }
-
-    auto layer_tree_frame_sink =
-        std::make_unique<StandaloneDirectLayerTreeFrameSink>(
-            frame_sink_manager_.get(), frame_sink_id, gpu_thread_holder_,
-            std::move(context_providers.compositor),
-            std::move(context_providers.worker), std::move(main_task_runner),
-            viewport_, &compositor_frame_submitted_, &viz_display_created_,
-            &skia_gpu_reached_, /*submitted_output_size=*/nullptr,
-            /*viz_display_output_size=*/nullptr, &copy_output_requested_,
-            /*copy_output_png_requested=*/nullptr,
-            /*copy_output_raw_requested=*/nullptr,
-            /*copy_output_gpu_requested=*/nullptr,
-            &copy_output_completed_, &copy_output_succeeded_,
-            &copy_output_png_, &copy_output_raw_frame_,
-            /*copy_output_gpu_frame=*/nullptr, &copy_output_failure_,
-            &failure_reason_,
-            &begin_frame_source_set_, &did_not_produce_count_,
-            &last_frame_skipped_reason_, &last_did_not_produce_has_damage_,
-            /*async_compositor_frame_ack=*/true,
-            /*use_vulkan_offscreen_output=*/false,
-            /*use_d3d12_offscreen_output=*/false,
-            /*chromium_root=*/nullptr,
-            StandaloneDirectFrameSinkMode::kLegacyProbe);
-    layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
-    return true;
-  }
-
-  void PostInitCommit() {
-    post_init_commit_ran_ = true;
-    if (!layer_tree_host_) {
-      failure_reason_ = "cc scheduler probe post-init commit has no host";
-      QuitSchedulerRunLoop();
-      return;
-    }
-    if (!frame_sink_bound_) {
-      failure_reason_ =
-          "cc scheduler probe post-init commit ran before frame sink bound";
-      QuitSchedulerRunLoop();
-      return;
-    }
-    if (!surface_id_allocator_.HasValidLocalSurfaceId()) {
-      surface_id_allocator_.GenerateId();
-    }
-    layer_tree_host_->SetViewportRectAndScale(
-        gfx::Rect(viewport_), /*device_scale_factor=*/1.0f,
-        surface_id_allocator_.GetCurrentLocalSurfaceId());
-    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
-        gfx::Rect(viewport_));
-    layer_tree_host_->SetVisualDeviceViewportSize(viewport_);
-
-    scoped_refptr<cc::SolidColorLayer> root_layer =
-        cc::SolidColorLayer::Create();
-    root_layer->SetBounds(viewport_);
-    root_layer->SetIsDrawable(true);
-    root_layer->SetBackgroundColor(SkColor4f{0.1f, 0.45f, 0.9f, 1.0f});
-    layer_tree_host_->SetRootLayer(root_layer);
-    root_layer_attached_ = layer_tree_host_->has_root_layer();
-    layer_tree_host_->SetNeedsCommit();
-    layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
-    set_needs_commit_posted_ = true;
-  }
-
-  void QuitSchedulerRunLoop() {
-    if (scheduler_run_loop_) {
-      scheduler_run_loop_->Quit();
-    }
-  }
-
-  std::string BuildJson(bool success) const {
-    std::ostringstream json;
-    json << "{\n";
-    json << "  \"probe\": \"cc_scheduler_parity\",\n";
-    json << "  \"success\": " << (success ? "true" : "false") << ",\n";
-    json << "  \"host_created\": " << (host_created_ ? 1 : 0) << ",\n";
-    json << "  \"visible\": " << (visible_ ? 1 : 0) << ",\n";
-    json << "  \"request_new_layer_tree_frame_sink\": "
-         << (request_new_layer_tree_frame_sink_seen_ ? 1 : 0) << ",\n";
-    json << "  \"frame_sink_bound\": " << (frame_sink_bound_ ? 1 : 0)
-         << ",\n";
-    json << "  \"begin_frame_source_set\": "
-         << (begin_frame_source_set_ ? 1 : 0) << ",\n";
-    json << "  \"post_init_commit_ran\": " << (post_init_commit_ran_ ? 1 : 0)
-         << ",\n";
-    json << "  \"set_needs_commit_posted\": "
-         << (set_needs_commit_posted_ ? 1 : 0) << ",\n";
-    json << "  \"root_layer_attached\": " << (root_layer_attached_ ? 1 : 0)
-         << ",\n";
-    json << "  \"will_begin_main_frame_count\": "
-         << will_begin_main_frame_count_ << ",\n";
-    json << "  \"begin_main_frame_count\": " << begin_main_frame_count_
-         << ",\n";
-    json << "  \"did_begin_main_frame_count\": "
-         << did_begin_main_frame_count_ << ",\n";
-    json << "  \"update_layer_tree_host_count\": "
-         << update_layer_tree_host_count_ << ",\n";
-    json << "  \"did_run_begin_main_frame_count\": "
-         << did_run_begin_main_frame_count_ << ",\n";
-    json << "  \"did_commit_count\": " << did_commit_count_ << ",\n";
-    json << "  \"did_submit_compositor_frame_count\": "
-         << did_submit_compositor_frame_count_ << ",\n";
-    json << "  \"did_not_produce_count\": " << did_not_produce_count_
-         << ",\n";
-    json << "  \"last_frame_skipped_reason\": "
-         << last_frame_skipped_reason_ << ",\n";
-    json << "  \"last_did_not_produce_has_damage\": "
-         << last_did_not_produce_has_damage_ << ",\n";
-    json << "  \"gpu_context_created\": " << (gpu_context_created_ ? 1 : 0)
-         << ",\n";
-    json << "  \"raster_context_created\": "
-         << (raster_context_created_ ? 1 : 0) << ",\n";
-    json << "  \"shared_image_interface_available\": "
-         << (shared_image_interface_available_ ? 1 : 0) << ",\n";
-    json << "  \"compositor_frame_submitted\": "
-         << (compositor_frame_submitted_ ? 1 : 0) << ",\n";
-    json << "  \"failure_reason\": "
-         << JsonStringForStandaloneRenderer(failure_reason_) << "\n";
-    json << "}\n";
-    return json.str();
-  }
-
-  void WillBeginMainFrame() override { ++will_begin_main_frame_count_; }
-  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
-    ++begin_main_frame_count_;
-  }
-  void BeginMainFrameNotExpectedSoon() override {}
-  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
-  void DidBeginMainFrame() override { ++did_begin_main_frame_count_; }
-  void WillUpdateLayers() override {}
-  void DidUpdateLayers() override {}
-  void DidObserveFirstScrollDelay(int source_frame_number,
-                                  base::TimeDelta first_scroll_delay,
-                                  base::TimeTicks first_scroll_timestamp)
-      override {}
-  void OnDeferMainFrameUpdatesChanged(bool defer_status) override {}
-  void OnDeferCommitsChanged(bool defer_status,
-                             cc::PaintHoldingReason reason) override {}
-  void OnCommitRequested() override {}
-  void UpdateLayerTreeHost() override { ++update_layer_tree_host_count_; }
-  void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override {
-  }
-  void UpdateCompositorScrollState(
-      const cc::CompositorCommitData& commit_data) override {}
-  void UpdateAnimatedImageState(
-      const cc::CompositorCommitData& commit_data) override {}
-  void RequestNewLayerTreeFrameSink() override {
-    request_new_layer_tree_frame_sink_seen_ = true;
-    frame_sink_bound_ = false;
-    if (!CreateFrameSink()) {
-      frame_sink_bound_ = false;
-    }
-  }
-  void DidInitializeLayerTreeFrameSink() override {
-    frame_sink_bound_ = true;
-    if (frame_sink_warm_run_loop_) {
-      frame_sink_warm_run_loop_->Quit();
-    }
-  }
-  void DidFailToInitializeLayerTreeFrameSink() override {
-    frame_sink_bound_ = false;
-    if (failure_reason_.empty()) {
-      failure_reason_ =
-          "cc scheduler probe LayerTreeFrameSink initialization failed";
-    }
-    if (frame_sink_warm_run_loop_) {
-      frame_sink_warm_run_loop_->Quit();
-    }
-  }
-  void WillCommit(const cc::CommitState& commit_state) override {}
-  void DidCommit(int source_frame_number,
-                 base::TimeTicks commit_start_time,
-                 base::TimeTicks commit_finish_time) override {
-    ++did_commit_count_;
-  }
-  void DidCommitAndDrawFrame(int source_frame_number) override {}
-  void DidCompletePageScaleAnimation(int source_frame_number) override {}
-  void DidPresentCompositorFrame(
-      uint32_t frame_token,
-      const viz::FrameTimingDetails& frame_timing_details) override {}
-  void RecordStartOfFrameMetrics() override {}
-  void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
-                               cc::ActiveFrameSequenceTrackers trackers)
-      override {}
-  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
-      override {
-    return nullptr;
-  }
-  void NotifyCompositorMetricsTrackerResults(
-      cc::CustomTrackerResults results) override {}
-  void DidRunBeginMainFrame() override {
-    ++did_run_begin_main_frame_count_;
-  }
-  void DidSubmitCompositorFrame() override {
-    ++did_submit_compositor_frame_count_;
-    compositor_frame_submitted_ = true;
-    QuitSchedulerRunLoop();
-  }
-  void DidLoseLayerTreeFrameSink() override {
-    frame_sink_bound_ = false;
-    failure_reason_ = "cc scheduler probe LayerTreeFrameSink was lost";
-  }
-
-  gfx::Size viewport_;
-  cc::LayerTreeSettings settings_;
-  cc::SingleThreadTaskGraphRunner task_graph_runner_;
-  bool task_graph_runner_started_ = false;
-  std::unique_ptr<cc::AnimationHost> animation_host_;
-  viz::ParentLocalSurfaceIdAllocator surface_id_allocator_;
-  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
-  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
-  std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
-  std::unique_ptr<base::RunLoop> frame_sink_warm_run_loop_;
-  std::unique_ptr<base::RunLoop> scheduler_run_loop_;
-  bool host_created_ = false;
-  bool visible_ = false;
-  bool request_new_layer_tree_frame_sink_seen_ = false;
-  bool frame_sink_bound_ = false;
-  bool frame_sink_id_registered_ = false;
-  bool begin_frame_source_set_ = false;
-  bool post_init_commit_ran_ = false;
-  bool set_needs_commit_posted_ = false;
-  bool root_layer_attached_ = false;
-  int will_begin_main_frame_count_ = 0;
-  int begin_main_frame_count_ = 0;
-  int did_begin_main_frame_count_ = 0;
-  int update_layer_tree_host_count_ = 0;
-  int did_run_begin_main_frame_count_ = 0;
-  int did_commit_count_ = 0;
-  int did_submit_compositor_frame_count_ = 0;
-  int did_not_produce_count_ = 0;
-  int last_frame_skipped_reason_ = -1;
-  int last_did_not_produce_has_damage_ = -1;
-  bool gpu_context_created_ = false;
-  bool raster_context_created_ = false;
-  bool shared_image_interface_available_ = false;
-  bool compositor_frame_submitted_ = false;
-  bool viz_display_created_ = false;
-  bool skia_gpu_reached_ = false;
-  bool copy_output_requested_ = false;
-  bool copy_output_png_requested_ = false;
-  bool copy_output_raw_requested_ = false;
-  bool copy_output_gpu_requested_ = false;
-  bool copy_output_completed_ = false;
-  bool copy_output_succeeded_ = false;
-  std::vector<uint8_t> copy_output_png_;
-  LiveRawFrameOutput copy_output_raw_frame_;
-  LiveGpuFrameOutput copy_output_gpu_frame_;
-  std::string copy_output_failure_;
-  std::string failure_reason_;
 };
 
 struct StandaloneMouseInputEventForRenderer {
@@ -21629,15 +19950,6 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   return result;
 }
 
-std::string RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(
-    int width,
-    int height) {
-  const int safe_width = std::max(1, width);
-  const int safe_height = std::max(1, height);
-  StandaloneCcSchedulerParityProbe probe(gfx::Size(safe_width, safe_height));
-  return probe.Run();
-}
-
 std::string RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(
     int width,
     int height) {
@@ -21661,16 +19973,6 @@ std::string RunStandaloneChromiumAsyncFrameSinkProbeForStandaloneRenderer(
 }
 
 }  // namespace
-
-extern "C" const char*
-StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
-    int width,
-    int height) {
-  static std::string probe_json;
-  probe_json =
-      RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(width, height);
-  return probe_json.c_str();
-}
 
 extern "C" const char*
 StandaloneBlinkLiveFrameBridgeRunChromiumRootFrameSinkProbeForStandaloneRenderer(
