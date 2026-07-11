@@ -512,6 +512,39 @@ std::string ExternalTargetInterop::PrepareBorrowedVulkanTarget(
   return {};
 }
 
+std::string ExternalTargetInterop::RenderBorrowedVulkanBackdropMask(
+    const gfx::Size& output_size,
+    const gfx::Size& css_viewport,
+    const std::vector<BackdropMaskRegion>& regions) {
+  if (!borrowed_vulkan_target_ || !borrowed_vulkan_target_->image ||
+      output_size.IsEmpty() || css_viewport.IsEmpty() || regions.empty()) {
+    return "gpu_external_vkimage_backdrop_mask: failed failure=prepared Vulkan mask target or regions unavailable";
+  }
+  auto context_state = context_.GetSharedContextState();
+  if (!context_state || !context_state->gr_context()) {
+    return "gpu_external_vkimage_backdrop_mask: failed failure=offscreen runtime has no Vulkan Ganesh SharedContextState";
+  }
+  const auto format = viz::SinglePlaneFormat::kRGBA_8888;
+  const auto color_space = gfx::ColorSpace::CreateSRGB();
+  const GrBackendTexture texture = GrBackendTextures::MakeVk(
+      output_size.width(), output_size.height(),
+      gpu::CreateGrVkImageInfo(borrowed_vulkan_target_->image.get(), format,
+                               color_space));
+  sk_sp<SkSurface> surface = SkSurfaces::WrapBackendTexture(
+      context_state->gr_context(), texture, kTopLeft_GrSurfaceOrigin, 1,
+      kRGBA_8888_SkColorType, color_space.ToSkColorSpace(), nullptr);
+  if (!surface) {
+    return "gpu_external_vkimage_backdrop_mask: failed failure=backdrop mask SkSurface wrapping failed";
+  }
+  surface->getCanvas()->clear(SkColors::kTransparent);
+  DrawBackdropMask(surface->getCanvas(), output_size, css_viewport, regions);
+  context_state->gr_context()->flush(surface.get());
+  if (!context_state->gr_context()->submit()) {
+    return "gpu_external_vkimage_backdrop_mask: failed failure=backdrop mask Skia submit failed";
+  }
+  return "gpu_external_vkimage_backdrop_mask: ok encoding=rgba8_id_coverage ownership=borrowed";
+}
+
 ExternalTargetInterop::VulkanReleaseResult
 ExternalTargetInterop::DiscardBorrowedVulkanTarget() {
   VulkanReleaseResult result;
@@ -716,6 +749,191 @@ ExternalTargetInterop::PrepareBorrowedD3D12Target(
   borrowed_d3d12_target_ = std::move(target);
   result.prepared = true;
   return result;
+}
+
+std::string ExternalTargetInterop::RenderBorrowedD3D12BackdropMask(
+    const gfx::Size& output_size,
+    const gfx::Size& css_viewport,
+    const std::vector<BackdropMaskRegion>& regions) {
+  if (!borrowed_d3d12_target_ || !borrowed_d3d12_target_->resource ||
+      output_size.IsEmpty() || css_viewport.IsEmpty() || regions.empty()) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=prepared D3D12 mask target or regions unavailable";
+  }
+  const size_t row_pitch = static_cast<size_t>(output_size.width()) * 4u;
+  std::vector<uint8_t> mask_bytes(
+      row_pitch * static_cast<size_t>(output_size.height()), 0);
+  const size_t mask_pixels = PopulateBackdropMaskRows(
+      mask_bytes.data(), row_pitch, output_size, css_viewport, regions);
+  auto context_state = context_.GetSharedContextState();
+  if (!context_state || !context_state->dawn_context_provider()) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=offscreen runtime has no D3D12 Graphite/Dawn SharedContextState";
+  }
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
+      context_state->dawn_context_provider()->GetD3D12CommandQueue();
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if (!queue || FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=Dawn D3D12 device is unavailable";
+  }
+  const D3D12_RESOURCE_DESC texture_desc =
+      borrowed_d3d12_target_->resource->GetDesc();
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+  UINT row_count = 0;
+  UINT64 row_size_bytes = 0;
+  UINT64 total_bytes = 0;
+  device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &footprint,
+                                &row_count, &row_size_bytes, &total_bytes);
+  if (!row_count || !row_size_bytes || !total_bytes) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask upload footprint invalid";
+  }
+  D3D12_HEAP_PROPERTIES upload_heap = {};
+  upload_heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+  D3D12_RESOURCE_DESC upload_desc = {};
+  upload_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  upload_desc.Width = total_bytes;
+  upload_desc.Height = 1;
+  upload_desc.DepthOrArraySize = 1;
+  upload_desc.MipLevels = 1;
+  upload_desc.SampleDesc.Count = 1;
+  upload_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  Microsoft::WRL::ComPtr<ID3D12Resource> upload;
+  if (FAILED(device->CreateCommittedResource(
+          &upload_heap, D3D12_HEAP_FLAG_NONE, &upload_desc,
+          D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload))) ||
+      !upload) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask upload resource creation failed";
+  }
+  D3D12_HEAP_PROPERTIES readback_heap = {};
+  readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+  Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+  if (FAILED(device->CreateCommittedResource(
+          &readback_heap, D3D12_HEAP_FLAG_NONE, &upload_desc,
+          D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback))) ||
+      !readback) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask readback resource creation failed";
+  }
+  void* mapped = nullptr;
+  D3D12_RANGE empty_read_range = {0, 0};
+  if (FAILED(upload->Map(0, &empty_read_range, &mapped)) || !mapped) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask upload map failed";
+  }
+  std::memset(mapped, 0, static_cast<size_t>(total_bytes));
+  for (int y = 0; y < output_size.height(); ++y) {
+    std::memcpy(static_cast<uint8_t*>(mapped) + footprint.Offset +
+                    static_cast<size_t>(y) * footprint.Footprint.RowPitch,
+                mask_bytes.data() + static_cast<size_t>(y) * row_pitch,
+                row_pitch);
+  }
+  D3D12_RANGE written_range = {0, static_cast<SIZE_T>(total_bytes)};
+  upload->Unmap(0, &written_range);
+  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+  if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                             IID_PPV_ARGS(&allocator))) ||
+      FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                       allocator.Get(), nullptr,
+                                       IID_PPV_ARGS(&command_list))) ||
+      !command_list) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask command list creation failed";
+  }
+  D3D12_RESOURCE_BARRIER to_copy_dest = {};
+  to_copy_dest.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+  to_copy_dest.Transition.pResource = borrowed_d3d12_target_->resource.Get();
+  to_copy_dest.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+  to_copy_dest.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+  to_copy_dest.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+  command_list->ResourceBarrier(1, &to_copy_dest);
+  D3D12_TEXTURE_COPY_LOCATION upload_source = {};
+  upload_source.pResource = upload.Get();
+  upload_source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+  upload_source.PlacedFootprint = footprint;
+  D3D12_TEXTURE_COPY_LOCATION target_destination = {};
+  target_destination.pResource = borrowed_d3d12_target_->resource.Get();
+  target_destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+  command_list->CopyTextureRegion(&target_destination, 0, 0, 0,
+                                  &upload_source, nullptr);
+  D3D12_RESOURCE_BARRIER to_copy_source = to_copy_dest;
+  to_copy_source.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+  to_copy_source.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+  command_list->ResourceBarrier(1, &to_copy_source);
+  D3D12_TEXTURE_COPY_LOCATION readback_destination = {};
+  readback_destination.pResource = readback.Get();
+  readback_destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+  readback_destination.PlacedFootprint = footprint;
+  D3D12_TEXTURE_COPY_LOCATION target_source = {};
+  target_source.pResource = borrowed_d3d12_target_->resource.Get();
+  target_source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+  command_list->CopyTextureRegion(&readback_destination, 0, 0, 0,
+                                  &target_source, nullptr);
+  if (FAILED(command_list->Close())) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask command list close failed";
+  }
+  ID3D12CommandList* command_lists[] = {command_list.Get()};
+  queue->ExecuteCommandLists(1, command_lists);
+  Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+  if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                                 IID_PPV_ARGS(&fence))) || !fence) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask fence creation failed";
+  }
+  HANDLE event_handle = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  if (!event_handle || FAILED(queue->Signal(fence.Get(), 1))) {
+    if (event_handle) ::CloseHandle(event_handle);
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask queue signal failed";
+  }
+  if (fence->GetCompletedValue() < 1 &&
+      (FAILED(fence->SetEventOnCompletion(1, event_handle)) ||
+       ::WaitForSingleObject(event_handle, 5000) != WAIT_OBJECT_0)) {
+    ::CloseHandle(event_handle);
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask fence wait failed";
+  }
+  ::CloseHandle(event_handle);
+  if (fence->GetCompletedValue() < 1) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask fence wait timed out";
+  }
+  void* readback_mapped = nullptr;
+  D3D12_RANGE read_range = {0, static_cast<SIZE_T>(total_bytes)};
+  if (FAILED(readback->Map(0, &read_range, &readback_mapped)) || !readback_mapped) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 mask readback map failed";
+  }
+  std::array<bool, 256> readback_ids = {};
+  size_t readback_mask_pixels = 0;
+  const uint8_t* readback_bytes = static_cast<const uint8_t*>(readback_mapped);
+  for (int y = 0; y < output_size.height(); ++y) {
+    const uint8_t* row = readback_bytes + footprint.Offset +
+        static_cast<size_t>(y) * footprint.Footprint.RowPitch;
+    for (int x = 0; x < output_size.width(); ++x) {
+      const uint8_t* pixel = row + static_cast<size_t>(x) * 4u;
+      if (pixel[0] && pixel[1]) {
+        ++readback_mask_pixels;
+        readback_ids[pixel[0]] = true;
+      }
+    }
+  }
+  D3D12_RANGE no_written_range = {0, 0};
+  readback->Unmap(0, &no_written_range);
+  size_t readback_distinct_ids = 0;
+  for (bool seen : readback_ids) readback_distinct_ids += seen;
+  if (!readback_mask_pixels || !readback_distinct_ids) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 backdrop mask target remained empty";
+  }
+  return "gpu_external_d3d12_backdrop_mask: ok encoding=rgba8_id_coverage "
+         "mask_pixels=" + std::to_string(readback_mask_pixels) +
+         " distinct_ids=" + std::to_string(readback_distinct_ids) +
+         " ownership=borrowed";
+  std::array<bool, 256> ids = {};
+  for (size_t offset = 0; offset + 3 < mask_bytes.size(); offset += 4) {
+    if (mask_bytes[offset] && mask_bytes[offset + 1]) {
+      ids[mask_bytes[offset]] = true;
+    }
+  }
+  size_t distinct_ids = 0;
+  for (bool seen : ids) distinct_ids += seen;
+  if (!mask_pixels || !distinct_ids) {
+    return "gpu_external_d3d12_backdrop_mask: failed failure=D3D12 rounded backdrop mask encoded no pixels";
+  }
+  return "gpu_external_d3d12_backdrop_mask: ok encoding=rgba8_id_coverage "
+         "mask_pixels=" + std::to_string(mask_pixels) +
+         " distinct_ids=" + std::to_string(distinct_ids) +
+         " ownership=borrowed";
 }
 #endif
 

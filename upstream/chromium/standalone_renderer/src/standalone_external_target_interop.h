@@ -168,6 +168,10 @@ struct BorrowedVkImageRenderCopyBlitTarget {
       gpu::VulkanImage* external_image,
       const html_css_renderer::ExternalVulkanImageTarget* external_target,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image);
+  std::string RenderBorrowedVulkanBackdropMask(
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport,
+      const std::vector<BackdropMaskRegion>& regions);
   VulkanReleaseResult DiscardBorrowedVulkanTarget();
 #if BUILDFLAG(IS_WIN) && defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   D3D12ReleaseResult DiscardBorrowedD3D12Target();
@@ -177,6 +181,10 @@ struct BorrowedVkImageRenderCopyBlitTarget {
       ID3D12Resource* external_resource,
       void* shared_handle,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image);
+  std::string RenderBorrowedD3D12BackdropMask(
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport,
+      const std::vector<BackdropMaskRegion>& regions);
 #endif
 
  private:
