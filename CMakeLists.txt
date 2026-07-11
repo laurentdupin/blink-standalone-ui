@@ -1276,6 +1276,8 @@ if(BLINK_STANDALONE_DAWN_D3D12)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_representation.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_representation.h
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/wrapped_sk_image_backing_factory.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_external_target_interop.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_external_target_interop.h
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/standalone_live_frame_bridge_probe.cc
   )
   list(REMOVE_ITEM BLINK_STANDALONE_LIVE_SOURCES

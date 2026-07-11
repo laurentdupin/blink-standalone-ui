@@ -141,6 +141,7 @@ struct ID3D12Resource {
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/standalone_resource_provider.h"
+#include "standalone_renderer/src/standalone_external_target_interop.h"
 #include "base/time/time.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
@@ -913,121 +914,29 @@ struct LiveBackdropFilterRegion {
   std::vector<LiveExportedFilterOperation> filter_operations;
 };
 
-bool StandaloneBackdropMaskPointInsideRegion(
-    const LiveBackdropFilterRegion& region,
-    float pixel_x,
-    float pixel_y,
-    float scale_x,
-    float scale_y) {
-  const float left = region.x * scale_x;
-  const float top = region.y * scale_y;
-  const float right = (region.x + region.width) * scale_x;
-  const float bottom = (region.y + region.height) * scale_y;
-  if (pixel_x < left || pixel_x >= right || pixel_y < top ||
-      pixel_y >= bottom) {
-    return false;
-  }
-  if ((region.flags & kStandaloneBackdropFilterRoundedRect) == 0) {
-    return true;
-  }
-
-  auto inside_corner = [](float x, float y, float center_x, float center_y,
-                          float radius_x, float radius_y) {
-    if (radius_x <= 0.0f || radius_y <= 0.0f) {
-      return true;
-    }
-    const float dx = (x - center_x) / radius_x;
-    const float dy = (y - center_y) / radius_y;
-    return dx * dx + dy * dy <= 1.0f;
-  };
-
-  const float tl_rx = region.border_radius_top_left * scale_x;
-  const float tl_ry = region.border_radius_top_left * scale_y;
-  if (tl_rx > 0.0f && tl_ry > 0.0f && pixel_x < left + tl_rx &&
-      pixel_y < top + tl_ry) {
-    return inside_corner(pixel_x, pixel_y, left + tl_rx, top + tl_ry, tl_rx,
-                         tl_ry);
-  }
-
-  const float tr_rx = region.border_radius_top_right * scale_x;
-  const float tr_ry = region.border_radius_top_right * scale_y;
-  if (tr_rx > 0.0f && tr_ry > 0.0f && pixel_x >= right - tr_rx &&
-      pixel_y < top + tr_ry) {
-    return inside_corner(pixel_x, pixel_y, right - tr_rx, top + tr_ry, tr_rx,
-                         tr_ry);
-  }
-
-  const float br_rx = region.border_radius_bottom_right * scale_x;
-  const float br_ry = region.border_radius_bottom_right * scale_y;
-  if (br_rx > 0.0f && br_ry > 0.0f && pixel_x >= right - br_rx &&
-      pixel_y >= bottom - br_ry) {
-    return inside_corner(pixel_x, pixel_y, right - br_rx, bottom - br_ry,
-                         br_rx, br_ry);
-  }
-
-  const float bl_rx = region.border_radius_bottom_left * scale_x;
-  const float bl_ry = region.border_radius_bottom_left * scale_y;
-  if (bl_rx > 0.0f && bl_ry > 0.0f && pixel_x < left + bl_rx &&
-      pixel_y >= bottom - bl_ry) {
-    return inside_corner(pixel_x, pixel_y, left + bl_rx, bottom - bl_ry,
-                         bl_rx, bl_ry);
-  }
-  return true;
-}
-
-size_t PopulateStandaloneBackdropMaskRows(
-    uint8_t* dst,
-    size_t row_pitch,
-    const gfx::Size& output_size,
-    const gfx::Size& css_viewport,
+std::vector<html_css_renderer::standalone_interop::BackdropMaskRegion>
+ToStandaloneBackdropMaskRegions(
     const std::vector<LiveBackdropFilterRegion>& regions) {
-  if (!dst || output_size.IsEmpty() || css_viewport.IsEmpty()) {
-    return 0;
-  }
-  const float scale_x = static_cast<float>(output_size.width()) /
-                        static_cast<float>(css_viewport.width());
-  const float scale_y = static_cast<float>(output_size.height()) /
-                        static_cast<float>(css_viewport.height());
-  size_t mask_pixels = 0;
-  const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
-  for (size_t i = 0; i < encoded_region_count; ++i) {
-    const LiveBackdropFilterRegion& region = regions[i];
-    int left = static_cast<int>(std::floor(region.x * scale_x));
-    int top = static_cast<int>(std::floor(region.y * scale_y));
-    int right =
-        static_cast<int>(std::ceil((region.x + region.width) * scale_x));
-    int bottom =
-        static_cast<int>(std::ceil((region.y + region.height) * scale_y));
-    left = std::clamp(left, 0, output_size.width());
-    top = std::clamp(top, 0, output_size.height());
-    right = std::clamp(right, 0, output_size.width());
-    bottom = std::clamp(bottom, 0, output_size.height());
-    if (right <= left || bottom <= top) {
-      continue;
+  using html_css_renderer::standalone_interop::BackdropMaskRegion;
+  std::vector<BackdropMaskRegion> result;
+  result.reserve(regions.size());
+  for (const LiveBackdropFilterRegion& region : regions) {
+    BackdropMaskRegion converted;
+    converted.x = region.x;
+    converted.y = region.y;
+    converted.width = region.width;
+    converted.height = region.height;
+    converted.border_radius_top_left = region.border_radius_top_left;
+    converted.border_radius_top_right = region.border_radius_top_right;
+    converted.border_radius_bottom_right = region.border_radius_bottom_right;
+    converted.border_radius_bottom_left = region.border_radius_bottom_left;
+    if ((region.flags & kStandaloneBackdropFilterRoundedRect) != 0) {
+      converted.flags |= html_css_renderer::standalone_interop::
+          kBackdropMaskRegionRoundedRect;
     }
-    const uint8_t region_id = static_cast<uint8_t>(i + 1u);
-    for (int y = top; y < bottom; ++y) {
-      uint8_t* row = dst + static_cast<size_t>(y) * row_pitch;
-      for (int x = left; x < right; ++x) {
-        const float center_x = static_cast<float>(x) + 0.5f;
-        const float center_y = static_cast<float>(y) + 0.5f;
-        if (!StandaloneBackdropMaskPointInsideRegion(region, center_x,
-                                                     center_y, scale_x,
-                                                     scale_y)) {
-          continue;
-        }
-        uint8_t* pixel = row + static_cast<size_t>(x) * 4u;
-        if (pixel[0] == 0 || pixel[1] == 0) {
-          ++mask_pixels;
-        }
-        pixel[0] = region_id;
-        pixel[1] = 255;
-        pixel[2] = 0;
-        pixel[3] = 255;
-      }
-    }
+    result.push_back(converted);
   }
-  return mask_pixels;
+  return result;
 }
 
 struct LiveScrollableElementEntry {
@@ -1324,166 +1233,6 @@ bool StandaloneColorClose(SkColor observed, SkColor expected) {
          close_channel(SkColorGetB(observed), SkColorGetB(expected));
 }
 
-class StandaloneBorrowedVkImageBacking final
-    : public gpu::ClearTrackingSharedImageBacking {
- public:
-  StandaloneBorrowedVkImageBacking(
-      const gpu::Mailbox& mailbox,
-      const gpu::SharedImageInfo& si_info,
-      scoped_refptr<gpu::SharedContextState> context_state,
-      const GrBackendTexture& backend_texture)
-      : gpu::ClearTrackingSharedImageBacking(
-            mailbox,
-            si_info,
-            /*estimated_size=*/
-            static_cast<size_t>(std::max(0, si_info.size.width())) *
-                static_cast<size_t>(std::max(0, si_info.size.height())) * 4u,
-            /*is_thread_safe=*/false),
-        context_state_(std::move(context_state)),
-        backend_texture_(backend_texture),
-        promise_texture_(GrPromiseImageTexture::Make(backend_texture_)) {}
-
-  StandaloneBorrowedVkImageBacking(
-      const StandaloneBorrowedVkImageBacking&) = delete;
-  StandaloneBorrowedVkImageBacking& operator=(
-      const StandaloneBorrowedVkImageBacking&) = delete;
-
-  ~StandaloneBorrowedVkImageBacking() override {
-    DCHECK(!is_write_);
-    DCHECK_EQ(read_count_, 0);
-    // The VkImage is embedder-owned in the product design. This proof backing
-    // intentionally drops only its Skia wrappers and never destroys the image.
-    promise_texture_.reset();
-  }
-
-  gpu::SharedImageBackingType GetType() const override {
-    return gpu::SharedImageBackingType::kStandaloneBorrowedVkImage;
-  }
-
-  void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
-
- protected:
-  std::unique_ptr<gpu::SkiaGaneshImageRepresentation> ProduceSkiaGanesh(
-      gpu::SharedImageManager* manager,
-      gpu::MemoryTypeTracker* tracker,
-      scoped_refptr<gpu::SharedContextState> context_state) override;
-
- private:
-  class SkiaRepresentation final : public gpu::SkiaGaneshImageRepresentation {
-   public:
-    SkiaRepresentation(GrDirectContext* gr_context,
-                       gpu::SharedImageManager* manager,
-                       StandaloneBorrowedVkImageBacking* backing,
-                       gpu::MemoryTypeTracker* tracker)
-        : gpu::SkiaGaneshImageRepresentation(gr_context,
-                                             manager,
-                                             backing,
-                                             tracker) {}
-
-    bool SupportsMultipleConcurrentReadAccess() override { return true; }
-
-    std::vector<sk_sp<SkSurface>> BeginWriteAccess(
-        int final_msaa_count,
-        const SkSurfaceProps& surface_props,
-        const gfx::Rect& update_rect,
-        std::vector<GrBackendSemaphore>* begin_semaphores,
-        std::vector<GrBackendSemaphore>* end_semaphores,
-        std::unique_ptr<skgpu::MutableTextureState>* end_state) override {
-      return borrowed_backing()->BeginSkiaWriteAccess(final_msaa_count,
-                                                      surface_props);
-    }
-
-    std::vector<sk_sp<GrPromiseImageTexture>> BeginWriteAccess(
-        std::vector<GrBackendSemaphore>* begin_semaphores,
-        std::vector<GrBackendSemaphore>* end_semaphores,
-        std::unique_ptr<skgpu::MutableTextureState>* end_state) override {
-      return borrowed_backing()->BeginSkiaWriteAccessAsPromiseTexture();
-    }
-
-    void EndWriteAccess() override { borrowed_backing()->EndSkiaWriteAccess(); }
-
-    std::vector<sk_sp<GrPromiseImageTexture>> BeginReadAccess(
-        std::vector<GrBackendSemaphore>* begin_semaphores,
-        std::vector<GrBackendSemaphore>* end_semaphores,
-        std::unique_ptr<skgpu::MutableTextureState>* end_state) override {
-      return borrowed_backing()->BeginSkiaReadAccess();
-    }
-
-    void EndReadAccess() override { borrowed_backing()->EndSkiaReadAccess(); }
-
-   private:
-    StandaloneBorrowedVkImageBacking* borrowed_backing() {
-      return static_cast<StandaloneBorrowedVkImageBacking*>(backing());
-    }
-  };
-
-  std::vector<sk_sp<SkSurface>> BeginSkiaWriteAccess(
-      int final_msaa_count,
-      const SkSurfaceProps& surface_props) {
-    if (is_write_ || read_count_ > 0 || !context_state_ ||
-        !context_state_->gr_context() || !backend_texture_.isValid()) {
-      return {};
-    }
-    is_write_ = true;
-    const SkColorType sk_color_type = viz::ToClosestSkColorType(format());
-    sk_sp<SkSurface> surface = SkSurfaces::WrapBackendTexture(
-        context_state_->gr_context(), backend_texture_, surface_origin(),
-        final_msaa_count, sk_color_type, color_space().ToSkColorSpace(),
-        &surface_props);
-    if (!surface) {
-      is_write_ = false;
-      return {};
-    }
-    return {std::move(surface)};
-  }
-
-  std::vector<sk_sp<GrPromiseImageTexture>>
-  BeginSkiaWriteAccessAsPromiseTexture() {
-    if (is_write_ || read_count_ > 0 || !promise_texture_) {
-      return {};
-    }
-    is_write_ = true;
-    return {promise_texture_};
-  }
-
-  void EndSkiaWriteAccess() {
-    DCHECK(is_write_);
-    is_write_ = false;
-    SetCleared();
-  }
-
-  std::vector<sk_sp<GrPromiseImageTexture>> BeginSkiaReadAccess() {
-    if (is_write_ || !promise_texture_) {
-      return {};
-    }
-    ++read_count_;
-    return {promise_texture_};
-  }
-
-  void EndSkiaReadAccess() {
-    DCHECK_GT(read_count_, 0);
-    --read_count_;
-  }
-
-  scoped_refptr<gpu::SharedContextState> context_state_;
-  GrBackendTexture backend_texture_;
-  sk_sp<GrPromiseImageTexture> promise_texture_;
-  bool is_write_ = false;
-  int read_count_ = 0;
-};
-
-std::unique_ptr<gpu::SkiaGaneshImageRepresentation>
-StandaloneBorrowedVkImageBacking::ProduceSkiaGanesh(
-    gpu::SharedImageManager* manager,
-    gpu::MemoryTypeTracker* tracker,
-    scoped_refptr<gpu::SharedContextState> context_state) {
-  if (context_state != context_state_) {
-    return nullptr;
-  }
-  return std::make_unique<SkiaRepresentation>(
-      context_state_->gr_context(), manager, this, tracker);
-}
-
 #if BUILDFLAG(IS_WIN) && \
     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 std::string HResultHex(HRESULT hr) {
@@ -1536,326 +1285,6 @@ std::string D3D12DeviceLuidString(ID3D12Device* device) {
   return LuidString(device->GetAdapterLuid());
 }
 
-class StandaloneBorrowedD3D12TextureBacking final
-    : public gpu::ClearTrackingSharedImageBacking {
- public:
-  StandaloneBorrowedD3D12TextureBacking(
-      const gpu::Mailbox& mailbox,
-      const gpu::SharedImageInfo& si_info,
-      scoped_refptr<gpu::SharedContextState> context_state,
-      Microsoft::WRL::ComPtr<ID3D12Resource> resource)
-      : gpu::ClearTrackingSharedImageBacking(
-            mailbox,
-            si_info,
-            /*estimated_size=*/
-            static_cast<size_t>(std::max(0, si_info.size.width())) *
-                static_cast<size_t>(std::max(0, si_info.size.height())) * 4u,
-            /*is_thread_safe=*/false),
-        context_state_(std::move(context_state)),
-        resource_(std::move(resource)) {}
-
-  StandaloneBorrowedD3D12TextureBacking(
-      const StandaloneBorrowedD3D12TextureBacking&) = delete;
-  StandaloneBorrowedD3D12TextureBacking& operator=(
-      const StandaloneBorrowedD3D12TextureBacking&) = delete;
-
-  ~StandaloneBorrowedD3D12TextureBacking() override {
-    DCHECK(!access_open_);
-    texture_ = nullptr;
-    shared_texture_memory_ = nullptr;
-  }
-
-  gpu::SharedImageBackingType GetType() const override {
-    return gpu::SharedImageBackingType::kStandaloneBorrowedD3D12Texture;
-  }
-
-  void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
-
-  bool shared_texture_memory_created() const {
-    return shared_texture_memory_ != nullptr;
-  }
-
-  bool ReadbackToPixels(std::vector<uint32_t>* pixels) {
-    if (!pixels || !context_state_ || !context_state_->dawn_context_provider() ||
-        !resource_) {
-      return false;
-    }
-    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
-        context_state_->dawn_context_provider()->GetD3D12CommandQueue();
-    if (!queue) {
-      return false;
-    }
-    Microsoft::WRL::ComPtr<ID3D12Device> device;
-    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
-      return false;
-    }
-    D3D12_RESOURCE_DESC texture_desc = resource_->GetDesc();
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-    UINT row_count = 0;
-    UINT64 row_size_bytes = 0;
-    UINT64 total_bytes = 0;
-    device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &footprint,
-                                  &row_count, &row_size_bytes, &total_bytes);
-    if (row_count == 0 || row_size_bytes == 0 || total_bytes == 0) {
-      return false;
-    }
-    D3D12_HEAP_PROPERTIES readback_heap = {};
-    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
-    readback_heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    readback_heap.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-    readback_heap.CreationNodeMask = 1;
-    readback_heap.VisibleNodeMask = 1;
-    D3D12_RESOURCE_DESC buffer_desc = {};
-    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    buffer_desc.Alignment = 0;
-    buffer_desc.Width = total_bytes;
-    buffer_desc.Height = 1;
-    buffer_desc.DepthOrArraySize = 1;
-    buffer_desc.MipLevels = 1;
-    buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
-    buffer_desc.SampleDesc.Count = 1;
-    buffer_desc.SampleDesc.Quality = 0;
-    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    buffer_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-    Microsoft::WRL::ComPtr<ID3D12Resource> readback;
-    if (FAILED(device->CreateCommittedResource(
-            &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
-            D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
-            IID_PPV_ARGS(&readback))) ||
-        !readback) {
-      return false;
-    }
-    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
-    if (FAILED(device->CreateCommandAllocator(
-            D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))) ||
-        !allocator) {
-      return false;
-    }
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
-    if (FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                         allocator.Get(), nullptr,
-                                         IID_PPV_ARGS(&command_list))) ||
-        !command_list) {
-      return false;
-    }
-
-    D3D12_TEXTURE_COPY_LOCATION src = {};
-    src.pResource = resource_.Get();
-    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    src.SubresourceIndex = 0;
-    D3D12_TEXTURE_COPY_LOCATION dst = {};
-    dst.pResource = readback.Get();
-    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    dst.PlacedFootprint = footprint;
-    command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
-    if (FAILED(command_list->Close())) {
-      return false;
-    }
-    ID3D12CommandList* command_lists[] = {command_list.Get()};
-    queue->ExecuteCommandLists(1, command_lists);
-
-    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-    if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
-                                   IID_PPV_ARGS(&fence))) ||
-        !fence) {
-      return false;
-    }
-    HANDLE event_handle = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!event_handle) {
-      return false;
-    }
-    constexpr UINT64 kFenceValue = 1;
-    if (FAILED(queue->Signal(fence.Get(), kFenceValue))) {
-      ::CloseHandle(event_handle);
-      return false;
-    }
-    if (fence->GetCompletedValue() < kFenceValue) {
-      if (FAILED(fence->SetEventOnCompletion(kFenceValue, event_handle))) {
-        ::CloseHandle(event_handle);
-        return false;
-      }
-      ::WaitForSingleObject(event_handle, 5000);
-    }
-    ::CloseHandle(event_handle);
-    if (fence->GetCompletedValue() < kFenceValue) {
-      return false;
-    }
-
-    void* mapped = nullptr;
-    D3D12_RANGE read_range = {0, static_cast<SIZE_T>(total_bytes)};
-    if (FAILED(readback->Map(0, &read_range, &mapped)) || !mapped) {
-      return false;
-    }
-    const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
-    const uint32_t width = static_cast<uint32_t>(size().width());
-    const uint32_t height = static_cast<uint32_t>(size().height());
-    constexpr uint32_t kBytesPerPixel = 4;
-    pixels->assign(static_cast<size_t>(width) * static_cast<size_t>(height), 0);
-    for (uint32_t y = 0; y < height; ++y) {
-      const uint8_t* row =
-          mapped_bytes + footprint.Offset +
-          static_cast<size_t>(y) * footprint.Footprint.RowPitch;
-      for (uint32_t x = 0; x < width; ++x) {
-        const uint8_t* p = row + static_cast<size_t>(x) * kBytesPerPixel;
-        (*pixels)[static_cast<size_t>(y) * width + x] =
-            SkColorSetARGB(p[3], p[0], p[1], p[2]);
-      }
-    }
-    D3D12_RANGE written_range = {0, 0};
-    readback->Unmap(0, &written_range);
-    return true;
-  }
-
- protected:
-  std::unique_ptr<gpu::DawnImageRepresentation> ProduceDawn(
-      gpu::SharedImageManager* manager,
-      gpu::MemoryTypeTracker* tracker,
-      const wgpu::Device& device,
-      wgpu::BackendType backend_type,
-      std::vector<wgpu::TextureFormat> view_formats,
-      scoped_refptr<gpu::SharedContextState> context_state) override;
-
-  std::unique_ptr<gpu::SkiaGraphiteImageRepresentation> ProduceSkiaGraphite(
-      gpu::SharedImageManager* manager,
-      gpu::MemoryTypeTracker* tracker,
-      scoped_refptr<gpu::SharedContextState> context_state) override;
-
- private:
-  class DawnRepresentation final : public gpu::DawnImageRepresentation {
-   public:
-    DawnRepresentation(gpu::SharedImageManager* manager,
-                       StandaloneBorrowedD3D12TextureBacking* backing,
-                       gpu::MemoryTypeTracker* tracker,
-                       wgpu::Device device,
-                       wgpu::BackendType backend_type)
-        : gpu::DawnImageRepresentation(manager, backing, tracker),
-          device_(std::move(device)),
-          backend_type_(backend_type) {}
-
-    ~DawnRepresentation() override { EndAccess(); }
-
-   private:
-    wgpu::Texture BeginAccess(wgpu::TextureUsage usage,
-                              wgpu::TextureUsage internal_usage) override {
-      return borrowed_backing()->BeginDawnAccess(device_, backend_type_, usage,
-                                                 internal_usage);
-    }
-
-    void EndAccess() override {
-      if (device_) {
-        borrowed_backing()->EndDawnAccess();
-      }
-    }
-
-    StandaloneBorrowedD3D12TextureBacking* borrowed_backing() {
-      return static_cast<StandaloneBorrowedD3D12TextureBacking*>(backing());
-    }
-
-    wgpu::Device device_;
-    wgpu::BackendType backend_type_;
-  };
-
-  wgpu::SharedTextureMemory EnsureSharedTextureMemory(
-      const wgpu::Device& device) {
-    if (!shared_texture_memory_) {
-      shared_texture_memory_ =
-          gpu::CreateDawnSharedTextureMemory(device, resource_);
-    }
-    return shared_texture_memory_;
-  }
-
-  wgpu::Texture BeginDawnAccess(wgpu::Device device,
-                                wgpu::BackendType backend_type,
-                                wgpu::TextureUsage usage,
-                                wgpu::TextureUsage internal_usage) {
-    if (backend_type != wgpu::BackendType::D3D12 || access_open_ ||
-        !resource_) {
-      return nullptr;
-    }
-    wgpu::SharedTextureMemory shared_texture_memory =
-        EnsureSharedTextureMemory(device);
-    if (!shared_texture_memory) {
-      return nullptr;
-    }
-    texture_ = gpu::CreateDawnSharedTexture(
-        shared_texture_memory, usage, internal_usage,
-        base::span<const wgpu::TextureFormat>());
-    if (!texture_) {
-      return nullptr;
-    }
-
-    write_access_ = (usage & gpu::DawnImageRepresentation::kWriteUsage) !=
-                    wgpu::TextureUsage::None;
-    wgpu::SharedTextureMemoryBeginAccessDescriptor begin_desc = {};
-    begin_desc.initialized = IsCleared();
-    begin_desc.concurrentRead = !write_access_ && IsCleared();
-    if (shared_texture_memory.BeginAccess(texture_, &begin_desc) !=
-        wgpu::Status::Success) {
-      texture_ = nullptr;
-      return nullptr;
-    }
-    access_open_ = true;
-    return texture_;
-  }
-
-  void EndDawnAccess() {
-    if (!access_open_ || !shared_texture_memory_ || !texture_) {
-      return;
-    }
-    wgpu::SharedTextureMemoryEndAccessState end_state = {};
-    shared_texture_memory_.EndAccess(texture_.Get(), &end_state);
-    if (write_access_) {
-      SetCleared();
-    }
-    texture_ = nullptr;
-    access_open_ = false;
-    write_access_ = false;
-  }
-
-  scoped_refptr<gpu::SharedContextState> context_state_;
-  Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
-  wgpu::SharedTextureMemory shared_texture_memory_;
-  wgpu::Texture texture_;
-  bool access_open_ = false;
-  bool write_access_ = false;
-};
-
-std::unique_ptr<gpu::DawnImageRepresentation>
-StandaloneBorrowedD3D12TextureBacking::ProduceDawn(
-    gpu::SharedImageManager* manager,
-    gpu::MemoryTypeTracker* tracker,
-    const wgpu::Device& device,
-    wgpu::BackendType backend_type,
-    std::vector<wgpu::TextureFormat> view_formats,
-    scoped_refptr<gpu::SharedContextState> context_state) {
-  if (context_state != context_state_ || backend_type != wgpu::BackendType::D3D12) {
-    return nullptr;
-  }
-  return std::make_unique<DawnRepresentation>(manager, this, tracker, device,
-                                              backend_type);
-}
-
-std::unique_ptr<gpu::SkiaGraphiteImageRepresentation>
-StandaloneBorrowedD3D12TextureBacking::ProduceSkiaGraphite(
-    gpu::SharedImageManager* manager,
-    gpu::MemoryTypeTracker* tracker,
-    scoped_refptr<gpu::SharedContextState> context_state) {
-  if (context_state != context_state_ ||
-      !context_state_->dawn_context_provider()) {
-    return nullptr;
-  }
-  wgpu::Device device = context_state_->dawn_context_provider()->GetDevice();
-  wgpu::BackendType backend_type =
-      context_state_->dawn_context_provider()->backend_type();
-  auto dawn_representation = ProduceDawn(
-      manager, tracker, device, backend_type, {}, context_state);
-  if (!dawn_representation) {
-    return nullptr;
-  }
-  return std::make_unique<gpu::SkiaGraphiteDawnImageRepresentation>(
-      std::move(dawn_representation), context_state,
-      context_state->gpu_main_graphite_recorder(), manager, this, tracker);
-}
 #endif  // BUILDFLAG(IS_WIN) &&
         // BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER
 
@@ -1877,7 +1306,11 @@ class StandaloneSkiaOutputSurfaceDependency final
         use_d3d12_offscreen_(use_d3d12_offscreen),
         vulkan_context_provider_available_(vulkan_context_provider_available),
         shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
-        client_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
+        client_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
+        interop_context_(this),
+        interop_(std::make_unique<
+                 html_css_renderer::standalone_interop::ExternalTargetInterop>(
+            interop_context_)) {
     vulkan_gpu_preferences_ = gpu_thread_holder_
                                   ? gpu_thread_holder_->gpu_preferences()
                                   : gpu::GpuPreferences();
@@ -2197,7 +1630,7 @@ class StandaloneSkiaOutputSurfaceDependency final
     memory_type_tracker =
         std::make_unique<gpu::MemoryTypeTracker>(memory_tracker);
     factory_ref = manager->Register(
-        std::make_unique<StandaloneBorrowedVkImageBacking>(
+        html_css_renderer::standalone_interop::CreateBorrowedVulkanImageBacking(
             mailbox, si_info, context_state, backend_texture),
         memory_type_tracker.get());
     if (!factory_ref) {
@@ -2345,40 +1778,11 @@ class StandaloneSkiaOutputSurfaceDependency final
 
     SkCanvas* canvas = surface->getCanvas();
     canvas->clear(SkColors::kTransparent);
-    SkPaint paint;
-    paint.setStyle(SkPaint::kFill_Style);
-    paint.setAntiAlias(true);
-
-    const float scale_x = static_cast<float>(output_size.width()) /
-                          static_cast<float>(css_viewport.width());
-    const float scale_y = static_cast<float>(output_size.height()) /
-                          static_cast<float>(css_viewport.height());
+    const std::vector<html_css_renderer::standalone_interop::BackdropMaskRegion>
+        mask_regions = ToStandaloneBackdropMaskRegions(regions);
     const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
-    for (size_t i = 0; i < encoded_region_count; ++i) {
-      const LiveBackdropFilterRegion& region = regions[i];
-      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
-      paint.setColor(SkColorSetARGB(255, region_id, 255, 0));
-      const SkRect rect = SkRect::MakeXYWH(
-          region.x * scale_x, region.y * scale_y, region.width * scale_x,
-          region.height * scale_y);
-      if ((region.flags & kStandaloneBackdropFilterRoundedRect) != 0) {
-        SkVector radii[4] = {
-            {region.border_radius_top_left * scale_x,
-             region.border_radius_top_left * scale_y},
-            {region.border_radius_top_right * scale_x,
-             region.border_radius_top_right * scale_y},
-            {region.border_radius_bottom_right * scale_x,
-             region.border_radius_bottom_right * scale_y},
-            {region.border_radius_bottom_left * scale_x,
-             region.border_radius_bottom_left * scale_y},
-        };
-        SkRRect rrect;
-        rrect.setRectRadii(rect, radii);
-        canvas->drawRRect(rrect, paint);
-      } else {
-        canvas->drawRect(rect, paint);
-      }
-    }
+    html_css_renderer::standalone_interop::DrawBackdropMask(
+        canvas, output_size, css_viewport, mask_regions);
 
     context_state->gr_context()->flush(surface.get());
     if (!context_state->gr_context()->submit()) {
@@ -2502,7 +1906,7 @@ class StandaloneSkiaOutputSurfaceDependency final
     if (!prepare_result.empty()) {
       return finish_with_failure(prepare_result);
     }
-    if (!borrowed_blit_target_ || !borrowed_blit_target_->image) {
+    if (!interop_->borrowed_vulkan_target() || !interop_->borrowed_vulkan_target()->image) {
       return finish_with_failure(
           "external Vulkan mask target wrapper is unavailable");
     }
@@ -2517,7 +1921,7 @@ class StandaloneSkiaOutputSurfaceDependency final
     const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
     const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
     const GrVkImageInfo vk_image_info =
-        gpu::CreateGrVkImageInfo(borrowed_blit_target_->image.get(), format,
+        gpu::CreateGrVkImageInfo(interop_->borrowed_vulkan_target()->image.get(), format,
                                  color_space);
     const GrBackendTexture backend_texture =
         GrBackendTextures::MakeVk(output_size.width(), output_size.height(),
@@ -2535,40 +1939,11 @@ class StandaloneSkiaOutputSurfaceDependency final
 
     SkCanvas* canvas = surface->getCanvas();
     canvas->clear(SkColors::kTransparent);
-    SkPaint paint;
-    paint.setStyle(SkPaint::kFill_Style);
-    paint.setAntiAlias(true);
-
-    const float scale_x = static_cast<float>(output_size.width()) /
-                          static_cast<float>(css_viewport.width());
-    const float scale_y = static_cast<float>(output_size.height()) /
-                          static_cast<float>(css_viewport.height());
+    const std::vector<html_css_renderer::standalone_interop::BackdropMaskRegion>
+        mask_regions = ToStandaloneBackdropMaskRegions(regions);
     const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
-    for (size_t i = 0; i < encoded_region_count; ++i) {
-      const LiveBackdropFilterRegion& region = regions[i];
-      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
-      paint.setColor(SkColorSetARGB(255, region_id, 255, 0));
-      const SkRect rect = SkRect::MakeXYWH(
-          region.x * scale_x, region.y * scale_y, region.width * scale_x,
-          region.height * scale_y);
-      if ((region.flags & kStandaloneBackdropFilterRoundedRect) != 0) {
-        SkVector radii[4] = {
-            {region.border_radius_top_left * scale_x,
-             region.border_radius_top_left * scale_y},
-            {region.border_radius_top_right * scale_x,
-             region.border_radius_top_right * scale_y},
-            {region.border_radius_bottom_right * scale_x,
-             region.border_radius_bottom_right * scale_y},
-            {region.border_radius_bottom_left * scale_x,
-             region.border_radius_bottom_left * scale_y},
-        };
-        SkRRect rrect;
-        rrect.setRectRadii(rect, radii);
-        canvas->drawRRect(rrect, paint);
-      } else {
-        canvas->drawRect(rect, paint);
-      }
-    }
+    html_css_renderer::standalone_interop::DrawBackdropMask(
+        canvas, output_size, css_viewport, mask_regions);
 
     context_state->gr_context()->flush(surface.get());
     if (!context_state->gr_context()->submit()) {
@@ -2736,10 +2111,11 @@ class StandaloneSkiaOutputSurfaceDependency final
       return finish_with_failure("D3D12 mask upload map failed");
     }
     std::memset(upload_mapped, 0, static_cast<size_t>(total_bytes));
-    const size_t encoded_pixels = PopulateStandaloneBackdropMaskRows(
+    const size_t encoded_pixels =
+        html_css_renderer::standalone_interop::PopulateBackdropMaskRows(
         static_cast<uint8_t*>(upload_mapped),
         static_cast<size_t>(footprint.Footprint.RowPitch), output_size,
-        css_viewport, regions);
+        css_viewport, ToStandaloneBackdropMaskRegions(regions));
     D3D12_RANGE upload_written_range = {0, static_cast<SIZE_T>(total_bytes)};
     upload->Unmap(0, &upload_written_range);
     if (encoded_pixels == 0) {
@@ -2977,8 +2353,8 @@ class StandaloneSkiaOutputSurfaceDependency final
     if (!prepare_result.empty()) {
       return finish_with_failure(prepare_result);
     }
-    if (!borrowed_d3d12_blit_target_ ||
-        !borrowed_d3d12_blit_target_->resource) {
+    if (!interop_->borrowed_d3d12_target() ||
+        !interop_->borrowed_d3d12_target()->resource) {
       return finish_with_failure(
           "external D3D12 mask target wrapper is unavailable");
     }
@@ -2999,7 +2375,7 @@ class StandaloneSkiaOutputSurfaceDependency final
       return finish_with_failure("Dawn D3D12 device is unavailable");
     }
 
-    ID3D12Resource* target = borrowed_d3d12_blit_target_->resource.Get();
+    ID3D12Resource* target = interop_->borrowed_d3d12_target()->resource.Get();
     D3D12_RESOURCE_DESC texture_desc = target->GetDesc();
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
     UINT row_count = 0;
@@ -3038,10 +2414,11 @@ class StandaloneSkiaOutputSurfaceDependency final
       return finish_with_failure("D3D12 mask upload map failed");
     }
     std::memset(upload_mapped, 0, static_cast<size_t>(total_bytes));
-    const size_t encoded_pixels = PopulateStandaloneBackdropMaskRows(
+    const size_t encoded_pixels =
+        html_css_renderer::standalone_interop::PopulateBackdropMaskRows(
         static_cast<uint8_t*>(upload_mapped),
         static_cast<size_t>(footprint.Footprint.RowPitch), output_size,
-        css_viewport, regions);
+        css_viewport, ToStandaloneBackdropMaskRegions(regions));
     D3D12_RANGE upload_written_range = {0, static_cast<SIZE_T>(total_bytes)};
     upload->Unmap(0, &upload_written_range);
     if (encoded_pixels == 0) {
@@ -3469,7 +2846,7 @@ class StandaloneSkiaOutputSurfaceDependency final
     registration_memory_type_tracker =
         std::make_unique<gpu::MemoryTypeTracker>(registration_memory_tracker);
     factory_ref = manager->Register(
-        std::make_unique<StandaloneBorrowedVkImageBacking>(
+        html_css_renderer::standalone_interop::CreateBorrowedVulkanImageBacking(
             target_mailbox, si_info, context_state, backend_texture),
         registration_memory_type_tracker.get());
     if (!factory_ref) {
@@ -3875,19 +3252,37 @@ class StandaloneSkiaOutputSurfaceDependency final
   }
 
  private:
-  struct BorrowedVkImageRenderCopyBlitTarget {
-    gfx::Size size;
-    std::string format = "RGBA_8888";
-    gpu::Mailbox mailbox;
-    std::unique_ptr<gpu::VulkanImage> image;
-    raw_ptr<gpu::VulkanImage> external_image = nullptr;
-    raw_ptr<gpu::MemoryTypeTracker> registration_tracker = nullptr;
-    std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
-    scoped_refptr<gpu::ClientSharedImage> client_shared_image;
-    bool target_created = false;
-    bool external_resource = false;
-    bool backend_texture_valid = false;
-    bool registered = false;
+  class DependencyInteropContext final
+      : public html_css_renderer::standalone_interop::
+            ExternalTargetInteropContext {
+   public:
+    explicit DependencyInteropContext(StandaloneSkiaOutputSurfaceDependency* owner)
+        : owner_(owner) {}
+
+    gpu::SharedImageManager* GetSharedImageManager() override {
+      return owner_->GetSharedImageManager();
+    }
+
+    scoped_refptr<gpu::SharedContextState> GetSharedContextState() override {
+      return owner_->GetSharedContextState();
+    }
+
+    bool UsesOffscreenVulkan() const override {
+      return owner_->UsesOffscreenVulkanDisplay();
+    }
+
+    bool UsesOffscreenD3D12() const override {
+      return owner_->UsesOffscreenD3D12Display();
+    }
+
+    bool IsOffscreen() const override { return owner_->IsOffscreen(); }
+
+    scoped_refptr<base::SingleThreadTaskRunner> GetGpuTaskRunner() override {
+      return owner_->GetCompositorGpuTaskRunnerLikeChromium();
+    }
+
+   private:
+    raw_ptr<StandaloneSkiaOutputSurfaceDependency> owner_;
   };
 
   std::string PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
@@ -3895,310 +3290,19 @@ class StandaloneSkiaOutputSurfaceDependency final
       gpu::VulkanImage* external_image,
       const html_css_renderer::ExternalVulkanImageTarget* external_target,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
-    DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
-    StandaloneBorrowedVkImageRenderCopySmokeResult result;
-    result.path = "viz_blit_request";
-    result.viz_blit_request = true;
-    result.width = target_size.width();
-    result.height = target_size.height();
-
-    auto finish_with_failure = [&](std::string failure) {
-      result.failure = std::move(failure);
-      DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
-      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
-    };
-
-    if (!target_shared_image) {
-      return finish_with_failure("borrowed blit target output pointer is null");
-    }
-    if (target_size.IsEmpty()) {
-      return finish_with_failure("borrowed blit target size is empty");
-    }
-    if (!use_vulkan_offscreen_ || !IsOffscreen()) {
-      return finish_with_failure(
-          "borrowed blit target requires offscreen Vulkan output");
-    }
-    gpu::SharedImageManager* manager = GetSharedImageManager();
-    if (!manager) {
-      return finish_with_failure("SharedImageManager is unavailable");
-    }
-    scoped_refptr<gpu::SharedContextState> context_state =
-        GetSharedContextState();
-    if (!context_state || !context_state->GrContextIsVulkan() ||
-        !context_state->vk_context_provider() ||
-        !context_state->gr_context()) {
-      return finish_with_failure(
-          "offscreen runtime has no Vulkan Ganesh SharedContextState");
-    }
-    viz::VulkanContextProvider* vulkan_provider =
-        context_state->vk_context_provider();
-    gpu::VulkanDeviceQueue* device_queue = vulkan_provider->GetDeviceQueue();
-    if (!device_queue) {
-      return finish_with_failure("Vulkan context provider has no device queue");
-    }
-    result.context_available = true;
-
-    auto target = std::make_unique<BorrowedVkImageRenderCopyBlitTarget>();
-    target->size = target_size;
-    gpu::VulkanImage* target_image = external_image;
-    if (external_target) {
-      if (!external_target->vk_image || !external_target->vk_device_memory ||
-          external_target->width != target_size.width() ||
-          external_target->height != target_size.height() ||
-          external_target->vk_format != VK_FORMAT_R8G8B8A8_UNORM ||
-          external_target->allocation_size == 0) {
-        return finish_with_failure(
-            "raw external Vulkan target metadata is incomplete or does not "
-            "match the active renderer size/format");
-      }
-      target->image = gpu::VulkanImage::CreateBorrowed(
-          device_queue, static_cast<VkImage>(external_target->vk_image),
-          static_cast<VkDeviceMemory>(external_target->vk_device_memory),
-          target_size, static_cast<VkFormat>(external_target->vk_format),
-          static_cast<VkImageTiling>(external_target->image_tiling),
-          static_cast<VkDeviceSize>(external_target->allocation_size),
-          external_target->memory_type_index,
-          static_cast<VkImageUsageFlags>(external_target->image_usage_flags),
-          static_cast<VkImageCreateFlags>(external_target->image_create_flags),
-          external_target->queue_family_index);
-      target_image = target->image.get();
-      if (!target_image || target_image->image() == VK_NULL_HANDLE) {
-        return finish_with_failure(
-            "raw external Vulkan target wrapper creation failed");
-      }
-      target->external_resource = true;
-    } else if (external_image) {
-      if (external_image->image() == VK_NULL_HANDLE ||
-          !external_image->device_queue() ||
-          external_image->device_queue()->GetVulkanDevice() !=
-              device_queue->GetVulkanDevice() ||
-          external_image->size() != target_size ||
-          external_image->format() != VK_FORMAT_R8G8B8A8_UNORM) {
-        return finish_with_failure(
-            "borrowed external Vulkan target metadata does not match the "
-            "active renderer Vulkan device/size/format");
-      }
-      target->external_image = external_image;
-      target->external_resource = true;
-    } else {
-      target->image = gpu::VulkanImage::Create(
-          device_queue, target_size, VK_FORMAT_R8G8B8A8_UNORM,
-          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-              VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-              VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-      target_image = target->image.get();
-      if (!target_image || target_image->image() == VK_NULL_HANDLE) {
-        return finish_with_failure(
-            "stand-in blit target VkImage creation failed");
-      }
-    }
-    target->target_created = true;
-    result.target_created = true;
-
-    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
-    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
-    const GrVkImageInfo vk_image_info =
-        gpu::CreateGrVkImageInfo(target_image, format, color_space);
-    const GrBackendTexture backend_texture =
-        GrBackendTextures::MakeVk(target_size.width(), target_size.height(),
-                                  vk_image_info);
-    if (!backend_texture.isValid()) {
-      if (target->image) {
-        target->image->Destroy();
-      }
-      return finish_with_failure("Skia backend texture wrapping failed");
-    }
-    target->backend_texture_valid = true;
-    result.backend_texture_valid = true;
-
-    target->mailbox = gpu::Mailbox::Generate();
-    const gpu::SharedImageUsageSet usage =
-        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE;
-    gpu::SharedImageInfo si_info(format, target_size, color_space,
-                                 kTopLeft_GrSurfaceOrigin,
-                                 kPremul_SkAlphaType, usage,
-                                 "StandaloneBorrowedVkImageBlitTargetSmoke");
-    target->registration_tracker = context_state->memory_type_tracker();
-    target->factory_ref = manager->Register(
-        std::make_unique<StandaloneBorrowedVkImageBacking>(
-            target->mailbox, si_info, context_state, backend_texture),
-        target->registration_tracker);
-    if (!target->factory_ref) {
-      if (target->image) {
-        target->image->Destroy();
-      }
-      return finish_with_failure("borrowed blit target registration failed");
-    }
-    target->registered = true;
-    result.registered = true;
-
-    gpu::SharedImageMetadata metadata;
-    metadata.format = format;
-    metadata.size = target_size;
-    metadata.color_space = color_space;
-    metadata.surface_origin = kTopLeft_GrSurfaceOrigin;
-    metadata.alpha_type = kPremul_SkAlphaType;
-    metadata.usage = usage;
-    target->client_shared_image = gpu::ClientSharedImage::CreateForTesting(
-        target->mailbox, metadata, gpu::SyncToken(), /*texture_target=*/3553u,
-        /*is_software=*/false);
-    if (!target->client_shared_image) {
-      target->factory_ref.reset();
-      if (target->image) {
-        target->image->Destroy();
-      }
-      return finish_with_failure("borrowed blit target ClientSharedImage failed");
-    }
-
-    *target_shared_image = target->client_shared_image;
-    borrowed_blit_target_ = std::move(target);
-    return "";
+    return interop_->PrepareBorrowedVulkanTarget(
+        target_size, external_image, external_target, target_shared_image);
   }
-
   std::string VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence() {
-    StandaloneBorrowedVkImageRenderCopySmokeResult result;
-    result.path = "viz_blit_request";
-    result.viz_blit_request = true;
-    if (borrowed_blit_target_) {
-      result.width = borrowed_blit_target_->size.width();
-      result.height = borrowed_blit_target_->size.height();
-      result.format = borrowed_blit_target_->format;
-      result.target_created = borrowed_blit_target_->target_created;
-      result.backend_texture_valid =
-          borrowed_blit_target_->backend_texture_valid;
-      result.registered = borrowed_blit_target_->registered;
-    }
-
-    auto finish_with_failure = [&](std::string failure) {
-      result.failure = std::move(failure);
-      DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
-      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
-    };
-    auto finish_with_blocker = [&](std::string reason) {
-      result.blocked = true;
-      result.failure = std::move(reason);
-      DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
-      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
-    };
-
-    if (!borrowed_blit_target_) {
-      return finish_with_failure("borrowed blit target is not prepared");
-    }
-    gpu::SharedImageManager* manager = GetSharedImageManager();
-    if (!manager) {
-      return finish_with_failure("SharedImageManager is unavailable");
-    }
-    scoped_refptr<gpu::SharedContextState> context_state =
-        GetSharedContextState();
-    if (!context_state || !context_state->GrContextIsVulkan() ||
-        !context_state->vk_context_provider() ||
-        !context_state->gr_context()) {
-      return finish_with_failure(
-          "offscreen runtime has no Vulkan Ganesh SharedContextState");
-    }
-    result.context_available = true;
-
-    auto read_representation = manager->ProduceSkia(
-        borrowed_blit_target_->mailbox,
-        borrowed_blit_target_->registration_tracker, context_state,
-        gpu::SharedImageUsageSet(gpu::SHARED_IMAGE_USAGE_DISPLAY_READ));
-    if (!read_representation) {
-      return finish_with_failure(
-          "borrowed blit target Skia read representation failed");
-    }
-    std::vector<GrBackendSemaphore> read_begin_semaphores;
-    std::vector<GrBackendSemaphore> read_end_semaphores;
-    auto read_access = read_representation->BeginScopedReadAccess(
-        &read_begin_semaphores, &read_end_semaphores);
-    if (!read_begin_semaphores.empty() &&
-        !context_state->gr_context()->wait(read_begin_semaphores.size(),
-                                           read_begin_semaphores.data(),
-                                           /*deleteSemaphoresAfterWait=*/false)) {
-      return finish_with_failure("borrowed blit target read semaphore wait failed");
-    }
-    if (!read_access) {
-      return finish_with_failure("borrowed blit target Skia read access failed");
-    }
-    sk_sp<SkImage> image = read_access->CreateSkImage(context_state.get());
-    if (!image) {
-      return finish_with_failure("borrowed blit target image creation failed");
-    }
-
-    const SkImageInfo readback_info =
-        SkImageInfo::MakeN32Premul(result.width, result.height);
-    std::vector<uint32_t> readback_pixels(
-        static_cast<size_t>(result.width) * static_cast<size_t>(result.height));
-    const size_t row_bytes =
-        static_cast<size_t>(result.width) * sizeof(uint32_t);
-    if (!image->readPixels(context_state->gr_context(), readback_info,
-                           readback_pixels.data(), row_bytes, 0, 0)) {
-      return finish_with_failure("borrowed blit target readback failed");
-    }
-    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
-    for (uint32_t pixel : readback_pixels) {
-      if (SkColorGetA(pixel) != 0) {
-        ++result.nontransparent_pixels;
-      }
-    }
-    const SkColor expected_background = SkColorSetARGB(255, 0x12, 0x34, 0x56);
-    const SkColor expected_box = SkColorSetARGB(255, 0xd0, 0x63, 0x29);
-    const SkColor observed_background = pixmap.getColor(4, 4);
-    const SkColor observed_box =
-        pixmap.getColor(std::min(result.width - 1, 24),
-                        std::min(result.height - 1, 24));
-    result.observed_background = StandaloneFormatColor(observed_background);
-    result.observed_box = StandaloneFormatColor(observed_box);
-    if (result.nontransparent_pixels == 0) {
-      return finish_with_blocker(
-          "offscreen Vulkan BlitRequest populated a transparent borrowed target");
-    }
-    if (!StandaloneColorClose(observed_background, expected_background) ||
-        !StandaloneColorClose(observed_box, expected_box)) {
-      return finish_with_failure("borrowed blit target pixel verification failed");
-    }
-    result.readback_verified = true;
-
-    read_access.reset();
-    read_representation.reset();
-    context_state->gr_context()->flushAndSubmit(GrSyncCpu::kYes);
-    context_state->gr_context()->performDeferredCleanup(
-        std::chrono::milliseconds(0));
-    if (context_state && context_state->vk_context_provider() &&
-        context_state->vk_context_provider()->GetDeviceQueue()) {
-      vkDeviceWaitIdle(
-          context_state->vk_context_provider()->GetDeviceQueue()
-              ->GetVulkanDevice());
-    }
-    DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
-    if (context_state && context_state->vk_context_provider() &&
-        context_state->vk_context_provider()->GetDeviceQueue()) {
-      vkDeviceWaitIdle(
-          context_state->vk_context_provider()->GetDeviceQueue()
-              ->GetVulkanDevice());
-    }
-    return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+    return interop_->VerifyBorrowedVulkanTarget();
   }
-
   void DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
       StandaloneBorrowedVkImageRenderCopySmokeResult* result = nullptr) {
-    if (!borrowed_blit_target_) {
-      return;
+    const auto release = interop_->DiscardBorrowedVulkanTarget();
+    if (result) {
+      result->backing_released = release.backing_released;
+      result->target_destroyed = release.target_destroyed;
     }
-    borrowed_blit_target_->client_shared_image.reset();
-    if (borrowed_blit_target_->factory_ref) {
-      borrowed_blit_target_->factory_ref.reset();
-      if (result) {
-        result->backing_released = true;
-      }
-    }
-    if (borrowed_blit_target_->image) {
-      borrowed_blit_target_->image->Destroy();
-      if (result) {
-        result->target_destroyed = true;
-      }
-    }
-    borrowed_blit_target_.reset();
   }
 
   void WaitForBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence() {
@@ -4348,357 +3452,48 @@ class StandaloneSkiaOutputSurfaceDependency final
   raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
   raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
-  std::unique_ptr<BorrowedVkImageRenderCopyBlitTarget>
-      borrowed_blit_target_;
+  DependencyInteropContext interop_context_;
+  std::unique_ptr<html_css_renderer::standalone_interop::ExternalTargetInterop>
+      interop_;
 
 #if BUILDFLAG(IS_WIN) && \
     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
-  struct BorrowedD3D12RenderCopyBlitTarget {
-    gfx::Size size;
-    std::string format = "RGBA_8888";
-    gpu::Mailbox mailbox;
-    Microsoft::WRL::ComPtr<ID3D12Resource> resource;
-    raw_ptr<StandaloneBorrowedD3D12TextureBacking> backing = nullptr;
-    raw_ptr<gpu::MemoryTypeTracker> registration_tracker = nullptr;
-    std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
-    scoped_refptr<gpu::ClientSharedImage> client_shared_image;
-    bool target_created = false;
-    bool external_resource = false;
-    bool shared_texture_memory_created = false;
-    bool registered = false;
-  };
-
   std::string PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
-      const gfx::Size& target_size,
-      ID3D12Resource* external_resource,
+      const gfx::Size& target_size, ID3D12Resource* external_resource,
       void* shared_handle,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
-    DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+    const auto preparation = interop_->PrepareBorrowedD3D12Target(
+        target_size, external_resource, shared_handle, target_shared_image);
+    if (preparation.prepared) return {};
     StandaloneBorrowedD3D12RenderCopySmokeResult result;
     result.viz_blit_request = true;
     result.width = target_size.width();
     result.height = target_size.height();
-
-    auto finish_with_failure = [&](std::string failure) {
-      result.failure = std::move(failure);
-      DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
-      return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
-    };
-
-    if (!target_shared_image) {
-      return finish_with_failure("borrowed D3D12 target output pointer is null");
-    }
-    if (target_size.IsEmpty()) {
-      return finish_with_failure("borrowed D3D12 target size is empty");
-    }
-    if (!use_d3d12_offscreen_ || !IsOffscreen()) {
-      return finish_with_failure(
-          "borrowed D3D12 target requires offscreen D3D12 output");
-    }
-    gpu::SharedImageManager* manager = GetSharedImageManager();
-    if (!manager) {
-      return finish_with_failure("SharedImageManager is unavailable");
-    }
-    scoped_refptr<gpu::SharedContextState> context_state =
-        GetSharedContextState();
-    if (!context_state || !context_state->IsGraphiteDawnD3D() ||
-        !context_state->dawn_context_provider()) {
-      return finish_with_failure(
-          "offscreen runtime has no D3D12 Graphite/Dawn SharedContextState");
-    }
-    if (context_state->dawn_context_provider()->backend_type() !=
-        wgpu::BackendType::D3D12) {
-      return finish_with_failure("Dawn context provider is not D3D12");
-    }
-    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
-        context_state->dawn_context_provider()->GetD3D12CommandQueue();
-    if (!queue) {
-      return finish_with_failure("Dawn D3D12 command queue is unavailable");
-    }
-    Microsoft::WRL::ComPtr<ID3D12Device> device;
-    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
-      return finish_with_failure("Dawn D3D12 device is unavailable");
-    }
-    result.context_available = true;
-
-    D3D12_RESOURCE_DESC resource_desc = {};
-    auto target = std::make_unique<BorrowedD3D12RenderCopyBlitTarget>();
-    target->size = target_size;
-    Microsoft::WRL::ComPtr<ID3D12Resource> opened_shared_resource;
-    Microsoft::WRL::ComPtr<IUnknown> external_resource_identity =
-        D3D12ResourceIdentity(external_resource);
-    bool can_use_external_resource_directly = false;
-    Microsoft::WRL::ComPtr<ID3D12Device> external_resource_device;
-    if (external_resource) {
-      can_use_external_resource_directly =
-          SUCCEEDED(external_resource->GetDevice(
-              IID_PPV_ARGS(&external_resource_device))) &&
-          external_resource_device &&
-          SameD3D12Device(external_resource_device.Get(), device.Get());
-    }
-    if (shared_handle && !can_use_external_resource_directly) {
-      const bool cache_handle_hit =
-          shared_handle == cached_external_d3d12_shared_handle_;
-      const bool cache_resource_hit =
-          external_resource &&
-          external_resource == cached_external_d3d12_resource_hint_;
-      const bool cache_resource_identity_hit =
-          external_resource_identity &&
-          cached_external_d3d12_resource_identity_ &&
-          external_resource_identity.Get() ==
-              cached_external_d3d12_resource_identity_.Get();
-      if ((cache_handle_hit || cache_resource_hit ||
-           cache_resource_identity_hit) &&
-          cached_external_d3d12_opened_resource_) {
-        opened_shared_resource = cached_external_d3d12_opened_resource_;
-      } else {
-        HRESULT hr = device->OpenSharedHandle(
-            static_cast<HANDLE>(shared_handle),
-            IID_PPV_ARGS(&opened_shared_resource));
-        if (FAILED(hr) || !opened_shared_resource) {
-          std::ostringstream failure;
-          failure << "borrowed external D3D12 shared handle open failed hr="
-                  << HResultHex(hr)
-                  << " cache_handle_hit=" << (cache_handle_hit ? 1 : 0)
-                  << " cache_resource_hit=" << (cache_resource_hit ? 1 : 0)
-                  << " cache_resource_identity_hit="
-                  << (cache_resource_identity_hit ? 1 : 0)
-                  << " has_resource=" << (external_resource ? 1 : 0)
-                  << " resource_ptr=" << PointerHex(external_resource)
-                  << " cached_resource_ptr="
-                  << PointerHex(cached_external_d3d12_resource_hint_.get())
-                  << " resource_identity="
-                  << PointerHex(external_resource_identity.Get())
-                  << " cached_resource_identity="
-                  << PointerHex(cached_external_d3d12_resource_identity_.Get())
-                  << " direct_resource_compatible="
-                  << (can_use_external_resource_directly ? 1 : 0)
-                  << " active_device_luid="
-                  << D3D12DeviceLuidString(device.Get())
-                  << " resource_device_luid="
-                  << D3D12DeviceLuidString(external_resource_device.Get());
-          return finish_with_failure(failure.str());
-        }
-        cached_external_d3d12_shared_handle_ = shared_handle;
-        cached_external_d3d12_resource_hint_ = external_resource;
-        cached_external_d3d12_resource_identity_ = external_resource_identity;
-        cached_external_d3d12_opened_resource_ = opened_shared_resource;
-      }
-      external_resource = opened_shared_resource.Get();
-    }
-    if (external_resource) {
-      resource_desc = external_resource->GetDesc();
-      if (resource_desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
-          resource_desc.Width != static_cast<UINT64>(target_size.width()) ||
-          resource_desc.Height != static_cast<UINT>(target_size.height()) ||
-          resource_desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM) {
-        return finish_with_failure(
-            "borrowed external D3D12 target resource metadata mismatch");
-      }
-      Microsoft::WRL::ComPtr<ID3D12Device> resource_device;
-      if (!shared_handle) {
-        if (FAILED(external_resource->GetDevice(
-                IID_PPV_ARGS(&resource_device))) ||
-            !resource_device ||
-            !SameD3D12Device(resource_device.Get(), device.Get())) {
-          return finish_with_failure(
-              "borrowed external D3D12 target is not owned by the active "
-              "renderer D3D12 device");
-        }
-      }
-      target->resource =
-          opened_shared_resource ? opened_shared_resource : external_resource;
-      target->external_resource = true;
-      if (!opened_shared_resource && can_use_external_resource_directly) {
-        cached_external_d3d12_shared_handle_ = shared_handle;
-        cached_external_d3d12_resource_hint_ = external_resource;
-        cached_external_d3d12_resource_identity_ = external_resource_identity;
-        cached_external_d3d12_opened_resource_ = external_resource;
-      }
-    } else {
-      D3D12_HEAP_PROPERTIES heap_properties = {};
-      heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
-      heap_properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-      heap_properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-      heap_properties.CreationNodeMask = 1;
-      heap_properties.VisibleNodeMask = 1;
-
-      resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-      resource_desc.Alignment = 0;
-      resource_desc.Width = static_cast<UINT64>(target_size.width());
-      resource_desc.Height = static_cast<UINT>(target_size.height());
-      resource_desc.DepthOrArraySize = 1;
-      resource_desc.MipLevels = 1;
-      resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-      resource_desc.SampleDesc.Count = 1;
-      resource_desc.SampleDesc.Quality = 0;
-      resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-      resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
-                            D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
-
-      HRESULT hr = device->CreateCommittedResource(
-          &heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc,
-          D3D12_RESOURCE_STATE_COMMON, nullptr,
-          IID_PPV_ARGS(&target->resource));
-      if (FAILED(hr) || !target->resource) {
-        return finish_with_failure(
-            "stand-in D3D12 target resource creation failed");
-      }
-    }
-    target->target_created = true;
-    result.target_created = true;
-
-    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
-    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
-    const gpu::SharedImageUsageSet usage =
-        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE;
-    gpu::SharedImageInfo si_info(format, target_size, color_space,
-                                 kTopLeft_GrSurfaceOrigin,
-                                 kPremul_SkAlphaType, usage,
-                                 "StandaloneBorrowedD3D12BlitTargetSmoke");
-    target->mailbox = gpu::Mailbox::Generate();
-    target->registration_tracker = context_state->memory_type_tracker();
-    auto backing = std::make_unique<StandaloneBorrowedD3D12TextureBacking>(
-        target->mailbox, si_info, context_state, target->resource);
-    target->backing = backing.get();
-    target->factory_ref =
-        manager->Register(std::move(backing), target->registration_tracker);
-    if (!target->factory_ref) {
-      return finish_with_failure("borrowed D3D12 target registration failed");
-    }
-    target->registered = true;
-    result.registered = true;
-
-    gpu::SharedImageMetadata metadata;
-    metadata.format = format;
-    metadata.size = target_size;
-    metadata.color_space = color_space;
-    metadata.surface_origin = kTopLeft_GrSurfaceOrigin;
-    metadata.alpha_type = kPremul_SkAlphaType;
-    metadata.usage = usage;
-    target->client_shared_image = gpu::ClientSharedImage::CreateForTesting(
-        target->mailbox, metadata, gpu::SyncToken(), /*texture_target=*/3553u,
-        /*is_software=*/false);
-    if (!target->client_shared_image) {
-      return finish_with_failure(
-          "borrowed D3D12 target ClientSharedImage failed");
-    }
-
-    *target_shared_image = target->client_shared_image;
-    borrowed_d3d12_blit_target_ = std::move(target);
-    return "";
+    result.failure = preparation.failure;
+    return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
   }
-
   std::string VerifyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence() {
+    const auto verification = interop_->VerifyBorrowedD3D12Target();
     StandaloneBorrowedD3D12RenderCopySmokeResult result;
     result.viz_blit_request = true;
-    if (borrowed_d3d12_blit_target_) {
-      result.width = borrowed_d3d12_blit_target_->size.width();
-      result.height = borrowed_d3d12_blit_target_->size.height();
-      result.format = borrowed_d3d12_blit_target_->format;
-      result.target_created = borrowed_d3d12_blit_target_->target_created;
-      result.registered = borrowed_d3d12_blit_target_->registered;
-      result.shared_texture_memory =
-          borrowed_d3d12_blit_target_->backing &&
-          borrowed_d3d12_blit_target_->backing
-              ->shared_texture_memory_created();
-    }
-
-    auto finish_with_failure = [&](std::string failure) {
-      result.failure = std::move(failure);
-      DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(&result);
-      return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
-    };
-
-    if (!borrowed_d3d12_blit_target_ || !borrowed_d3d12_blit_target_->backing) {
-      return finish_with_failure("borrowed D3D12 target is not prepared");
-    }
-    scoped_refptr<gpu::SharedContextState> context_state =
-        GetSharedContextState();
-    if (!context_state || !context_state->IsGraphiteDawnD3D() ||
-        !context_state->dawn_context_provider()) {
-      return finish_with_failure(
-          "offscreen runtime has no D3D12 Graphite/Dawn SharedContextState");
-    }
-    result.context_available = true;
-
-    std::vector<uint32_t> readback_pixels;
-    if (!borrowed_d3d12_blit_target_->backing->ReadbackToPixels(
-            &readback_pixels)) {
-      return finish_with_failure("borrowed D3D12 target readback failed");
-    }
-    const int width = result.width;
-    const int height = result.height;
-    if (width <= 0 || height <= 0 ||
-        readback_pixels.size() !=
-            static_cast<size_t>(width) * static_cast<size_t>(height)) {
-      return finish_with_failure("borrowed D3D12 readback dimensions invalid");
-    }
-    for (uint32_t pixel : readback_pixels) {
-      if (SkColorGetA(pixel) != 0) {
-        ++result.nontransparent_pixels;
-      }
-    }
-    auto pixel_at = [&](int x, int y) {
-      return readback_pixels[static_cast<size_t>(y) *
-                                 static_cast<size_t>(width) +
-                             static_cast<size_t>(x)];
-    };
-    const SkColor expected_background = SkColorSetARGB(255, 0x12, 0x34, 0x56);
-    const SkColor expected_box = SkColorSetARGB(255, 0xd0, 0x63, 0x29);
-    const SkColor observed_background = pixel_at(4, 4);
-    const SkColor observed_box =
-        pixel_at(std::min(width - 1, 24), std::min(height - 1, 24));
-    result.observed_background = StandaloneFormatColor(observed_background);
-    result.observed_box = StandaloneFormatColor(observed_box);
-    if (result.nontransparent_pixels == 0) {
-      return finish_with_failure(
-          "offscreen D3D12 BlitRequest populated a transparent target");
-    }
-    if (!StandaloneColorClose(observed_background, expected_background) ||
-        !StandaloneColorClose(observed_box, expected_box)) {
-      return finish_with_failure(
-          "borrowed D3D12 target pixel verification failed");
-    }
-    result.readback_verified = true;
-    result.shared_texture_memory =
-        borrowed_d3d12_blit_target_->backing->shared_texture_memory_created();
+    result.width = verification.width;
+    result.height = verification.height;
+    result.shared_texture_memory = verification.shared_texture_memory;
+    result.readback_verified = verification.readback_verified;
+    result.nontransparent_pixels = verification.nontransparent ? 1 : 0;
+    result.failure = verification.failure;
     DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(&result);
     return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
   }
-
   void DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
       StandaloneBorrowedD3D12RenderCopySmokeResult* result = nullptr) {
-    if (!borrowed_d3d12_blit_target_) {
-      return;
+    const auto release = interop_->DiscardBorrowedD3D12Target();
+    if (result) {
+      result->backing_released = release.backing_released;
+      result->target_destroyed = release.target_destroyed;
     }
-    borrowed_d3d12_blit_target_->client_shared_image.reset();
-    borrowed_d3d12_blit_target_->backing = nullptr;
-    if (borrowed_d3d12_blit_target_->factory_ref) {
-      borrowed_d3d12_blit_target_->factory_ref.reset();
-      if (result) {
-        result->backing_released = true;
-      }
-    }
-    if (borrowed_d3d12_blit_target_->resource) {
-      const bool external_resource =
-          borrowed_d3d12_blit_target_->external_resource;
-      borrowed_d3d12_blit_target_->resource.Reset();
-      if (result && !external_resource) {
-        result->target_destroyed = true;
-      }
-    }
-    borrowed_d3d12_blit_target_.reset();
   }
 
-  std::unique_ptr<BorrowedD3D12RenderCopyBlitTarget>
-      borrowed_d3d12_blit_target_;
-  void* cached_external_d3d12_shared_handle_ = nullptr;
-  raw_ptr<ID3D12Resource> cached_external_d3d12_resource_hint_ = nullptr;
-  Microsoft::WRL::ComPtr<IUnknown> cached_external_d3d12_resource_identity_;
-  Microsoft::WRL::ComPtr<ID3D12Resource>
-      cached_external_d3d12_opened_resource_;
 #endif
 };
 
