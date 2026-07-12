@@ -3699,6 +3699,7 @@ set(BLINK_STANDALONE_VIZ_GPU_SUPPORT_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/external_vk_image_skia_representation.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/command_buffer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/context_url.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/dcomp_texture_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gles2_command_buffer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_channel.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_channel_manager.cc

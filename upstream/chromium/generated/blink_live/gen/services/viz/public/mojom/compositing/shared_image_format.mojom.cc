@@ -162,18 +162,6 @@ void SharedImageFormat::DestroyActive() {
       break;
   }
 }
-size_t SharedImageFormat::Hash(size_t seed) const {
-  seed = mojo::internal::HashCombine(seed, static_cast<uint32_t>(tag_));
-  switch (tag_) {
-
-    case Tag::kSingleplanarFormat:
-      return mojo::internal::Hash(seed, data_.singleplanar_format);
-    case Tag::kMultiplanarFormat:
-      return mojo::internal::Hash(seed, data_.multiplanar_format);
-    default:
-      NOTREACHED();
-  }
-}
 
 bool SharedImageFormat::Validate(
     const void* data,

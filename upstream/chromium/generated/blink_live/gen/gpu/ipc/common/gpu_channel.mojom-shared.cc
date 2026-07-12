@@ -14,18 +14,6 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "gpu/ipc/common/gpu_channel.mojom-params-data.h"
-#include "gpu/ipc/common/sync_token_mojom_traits.h"
-#include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
-#include "mojo/public/cpp/base/time_mojom_traits.h"
-#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
-#include "skia/public/mojom/image_info_mojom_traits.h"
-#include "skia/public/mojom/surface_origin_mojom_traits.h"
-#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
-#include "ui/gfx/mojom/buffer_types_mojom_traits.h"
-#include "ui/gfx/mojom/color_space_mojom_traits.h"
-#include "ui/gfx/mojom/gpu_fence_handle_mojom_traits.h"
-#include "ui/gfx/mojom/native_handle_types_mojom_traits.h"
-#include "url/mojom/url_gurl_mojom_traits.h"
 namespace gpu {
 namespace mojom {
 

@@ -23,9 +23,6 @@
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/command_buffer_id.h"
 #include "gpu/ipc/common/gpu_peak_memory.h"
-#include "gpu/ipc/common/mailbox_mojom_traits.h"
-#include "gpu/ipc/common/shared_image_metadata_mojom_traits.h"
-#include "gpu/ipc/common/shared_image_pool_id_mojom_traits.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_shared_image_interface.h"
@@ -34,7 +31,7 @@
 #include "ui/gfx/native_pixmap_handle.h"
 #include "ui/gl/gl_context.h"
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 #include "ui/gfx/win/d3d_shared_fence.h"
 #endif
 
@@ -42,47 +39,6 @@ namespace {
 
 constexpr char kSICreationFailureError[] =
     "SharedImageStub: Unable to create shared image";
-
-template <typename MojomStruct, typename NativeType>
-bool ReadMojomStructPtr(const mojo::StructPtr<MojomStruct>& input,
-                        NativeType* output) {
-  if (!input) {
-    return false;
-  }
-  auto clone = input->Clone();
-  return MojomStruct::DeserializeFromMessage(
-      MojomStruct::SerializeAsMessage(&clone), output);
-}
-
-bool ReadMailbox(const gpu::mojom::MailboxPtr& input, gpu::Mailbox* output) {
-  return ReadMojomStructPtr(input, output);
-}
-
-bool ReadSharedImageMetadata(
-    const gpu::mojom::SharedImageMetadataPtr& input,
-    gpu::SharedImageMetadata* output) {
-  return ReadMojomStructPtr(input, output);
-}
-
-bool ReadSharedImagePoolId(const gpu::mojom::SharedImagePoolIdPtr& input,
-                           gpu::SharedImagePoolId* output) {
-  return ReadMojomStructPtr(input, output);
-}
-
-bool ReadOptionalSharedImagePoolId(
-    const gpu::mojom::SharedImagePoolIdPtr& input,
-    std::optional<gpu::SharedImagePoolId>* output) {
-  output->reset();
-  if (!input) {
-    return true;
-  }
-  gpu::SharedImagePoolId pool_id;
-  if (!ReadSharedImagePoolId(input, &pool_id)) {
-    return false;
-  }
-  *output = pool_id;
-  return true;
-}
 
 }  // namespace
 
@@ -169,48 +125,23 @@ void SharedImageStub::ExecuteDeferredRequest(
 
     case mojom::DeferredSharedImageRequest::Tag::kUpdateSharedImage: {
       auto& update = *request->get_update_shared_image();
-      Mailbox mailbox;
-      if (!ReadMailbox(update.mailbox, &mailbox)) {
-        OnError();
-        return;
-      }
-      gfx::GpuFenceHandle in_fence_handle;
-      if (update.in_fence_handle) {
-        in_fence_handle = std::move(*update.in_fence_handle);
-      }
-      OnUpdateSharedImage(mailbox, std::move(in_fence_handle));
+      OnUpdateSharedImage(update.mailbox, std::move(update.in_fence_handle));
       break;
     }
 
     case mojom::DeferredSharedImageRequest::Tag::kAddReferenceToSharedImage: {
       const auto& add_ref = *request->get_add_reference_to_shared_image();
-      Mailbox mailbox;
-      if (!ReadMailbox(add_ref.mailbox, &mailbox)) {
-        OnError();
-        return;
-      }
-      OnAddReference(mailbox);
+      OnAddReference(add_ref.mailbox);
       break;
     }
 
-    case mojom::DeferredSharedImageRequest::Tag::kDestroySharedImage: {
-      Mailbox mailbox;
-      if (!ReadMailbox(request->get_destroy_shared_image(), &mailbox)) {
-        OnError();
-        return;
-      }
-      OnDestroySharedImage(mailbox);
+    case mojom::DeferredSharedImageRequest::Tag::kDestroySharedImage:
+      OnDestroySharedImage(request->get_destroy_shared_image());
       break;
-    }
 
     case mojom::DeferredSharedImageRequest::Tag::kCopyToGpuMemoryBuffer: {
       auto& params = *request->get_copy_to_gpu_memory_buffer();
-      Mailbox mailbox;
-      if (!ReadMailbox(params.mailbox, &mailbox)) {
-        OnError();
-        return;
-      }
-      OnCopyToGpuMemoryBuffer(mailbox);
+      OnCopyToGpuMemoryBuffer(params.mailbox);
       break;
     }
 
@@ -224,7 +155,7 @@ void SharedImageStub::ExecuteDeferredRequest(
           std::move(request->get_destroy_shared_image_pool()));
       break;
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
     case mojom::DeferredSharedImageRequest::Tag::kRegisterDxgiFence: {
       auto& reg = *request->get_register_dxgi_fence();
       OnRegisterDxgiFence(reg.mailbox, reg.dxgi_token,
@@ -252,15 +183,10 @@ void SharedImageStub::SetGpuExtraInfo(const gfx::GpuExtraInfo& gpu_extra_info) {
 
 void SharedImageStub::OnCreateSharedImagePool(
     mojom::CreateSharedImagePoolParamsPtr params) {
-  SharedImagePoolId pool_id;
-  if (!ReadSharedImagePoolId(params->pool_id, &pool_id)) {
-    OnError();
-    return;
-  }
   TRACE_EVENT1("gpu", "SharedImageStub::OnCreateSharedImagePool", "pool_id",
-               pool_id.ToString());
+               params->pool_id.ToString());
 
-  if (!factory_->CreateSharedImagePool(pool_id,
+  if (!factory_->CreateSharedImagePool(params->pool_id,
                                        std::move(params->client_remote))) {
     LOG(ERROR) << "Unable to create SharedImagePool.";
     OnError();
@@ -270,15 +196,10 @@ void SharedImageStub::OnCreateSharedImagePool(
 
 void SharedImageStub::OnDestroySharedImagePool(
     mojom::DestroySharedImagePoolParamsPtr params) {
-  SharedImagePoolId pool_id;
-  if (!ReadSharedImagePoolId(params->pool_id, &pool_id)) {
-    OnError();
-    return;
-  }
   TRACE_EVENT1("gpu", "SharedImageStub::OnDestroySharedImagePool", "pool_id",
-               pool_id.ToString());
+               params->pool_id.ToString());
 
-  if (!factory_->DestroySharedImagePool(pool_id)) {
+  if (!factory_->DestroySharedImagePool(params->pool_id)) {
     LOG(ERROR) << "Unable to destroy SharedImagePool.";
     OnError();
     return;
@@ -287,28 +208,20 @@ void SharedImageStub::OnDestroySharedImagePool(
 
 void SharedImageStub::OnCreateSharedImage(
     mojom::CreateSharedImageParamsPtr params) {
-  Mailbox mailbox;
-  SharedImageMetadata metadata;
-  std::optional<SharedImagePoolId> pool_id;
-  if (!ReadMailbox(params->mailbox, &mailbox) ||
-      !ReadSharedImageMetadata(params->si_info->meta, &metadata) ||
-      !ReadOptionalSharedImagePoolId(params->pool_id, &pool_id)) {
-    OnError();
-    return;
-  }
-
   TRACE_EVENT2("gpu", "SharedImageStub::OnCreateSharedImage", "width",
-               metadata.size.width(), "height", metadata.size.height());
-  bool needs_gl = HasGLES2ReadOrWriteUsage(metadata.usage);
+               params->si_info->meta.size.width(), "height",
+               params->si_info->meta.size.height());
+  bool needs_gl = HasGLES2ReadOrWriteUsage(params->si_info->meta.usage);
   if (!MakeContextCurrent(needs_gl)) {
     OnError();
     return;
   }
 
   if (!factory_->CreateSharedImage(
-          mailbox,
-          SharedImageInfo(metadata, GetLabel(params->si_info->debug_label)),
-          gpu::kNullSurfaceHandle, std::move(pool_id))) {
+          params->mailbox,
+          SharedImageInfo(params->si_info->meta,
+                          GetLabel(params->si_info->debug_label)),
+          gpu::kNullSurfaceHandle, std::move(params->pool_id))) {
     LOG(ERROR) << kSICreationFailureError;
     OnError();
     return;
@@ -317,16 +230,11 @@ void SharedImageStub::OnCreateSharedImage(
 
 void SharedImageStub::OnCreateSharedImageWithData(
     mojom::CreateSharedImageWithDataParamsPtr params) {
-  Mailbox mailbox;
-  SharedImageMetadata metadata;
-  if (!ReadMailbox(params->mailbox, &mailbox) ||
-      !ReadSharedImageMetadata(params->si_info->meta, &metadata)) {
-    OnError();
-    return;
-  }
-
   TRACE_EVENT2("gpu", "SharedImageStub::OnCreateSharedImageWithData", "width",
-               metadata.size.width(), "height", metadata.size.height());
+               params->si_info->meta.size.width(), "height",
+               params->si_info->meta.size.height());
+
+  auto& metadata = params->si_info->meta;
 
   bool needs_gl = HasGLES2ReadOrWriteUsage(metadata.usage);
   if (!MakeContextCurrent(needs_gl)) {
@@ -364,7 +272,7 @@ void SharedImageStub::OnCreateSharedImageWithData(
       memory.subspan(params->pixel_data_offset, params->pixel_data_size);
 
   if (!factory_->CreateSharedImage(
-          mailbox,
+          params->mailbox,
           SharedImageInfo(metadata, GetLabel(params->si_info->debug_label)),
           subspan)) {
     LOG(ERROR) << kSICreationFailureError;
@@ -381,30 +289,21 @@ void SharedImageStub::OnCreateSharedImageWithData(
 
 void SharedImageStub::OnCreateSharedImageWithBuffer(
     mojom::CreateSharedImageWithBufferParamsPtr params) {
-  Mailbox mailbox;
-  SharedImageMetadata metadata;
-  std::optional<SharedImagePoolId> pool_id;
-  if (!ReadMailbox(params->mailbox, &mailbox) ||
-      !ReadSharedImageMetadata(params->si_info->meta, &metadata) ||
-      !ReadOptionalSharedImagePoolId(params->pool_id, &pool_id)) {
-    OnError();
-    return;
-  }
-
   TRACE_EVENT2("gpu", "SharedImageStub::OnCreateSharedImageWithBuffer", "width",
-               metadata.size.width(), "height", metadata.size.height());
+               params->si_info->meta.size.width(), "height",
+               params->si_info->meta.size.height());
   gfx::GpuMemoryBufferHandle buffer_handle = std::move(params->buffer_handle);
 
 #if BUILDFLAG(IS_OZONE)
   if (channel_->enable_extra_handles_validation() &&
       buffer_handle.type == gfx::NATIVE_PIXMAP) {
     const auto& pixmap_handle = buffer_handle.native_pixmap_handle();
-    auto format = metadata.format;
+    auto format = params->si_info->meta.format;
     // Video Buffer may be packed to have a tighter stride than shared memory
     // row, examples are NV15 or MT2T, where there's no padding bits within the
     // component.
     if (!gfx::CanFitImageForSizeAndFormat(pixmap_handle,
-                                          metadata.size, format,
+                                          params->si_info->meta.size, format,
                                           /*assume_single_memory_object=*/false,
                                           /*maybe_packed=*/true)) {
       LOG(ERROR)
@@ -422,9 +321,10 @@ void SharedImageStub::OnCreateSharedImageWithBuffer(
 #endif  // BUILDFLAG(IS_OZONE)
 
   if (!CreateSharedImage(
-          mailbox,
-          SharedImageInfo(metadata, GetLabel(params->si_info->debug_label)),
-          std::move(buffer_handle), std::move(pool_id))) {
+          params->mailbox,
+          SharedImageInfo(params->si_info->meta,
+                          GetLabel(params->si_info->debug_label)),
+          std::move(buffer_handle), std::move(params->pool_id))) {
     return;
   }
 }
@@ -510,7 +410,7 @@ void SharedImageStub::OnDestroySharedImage(const Mailbox& mailbox) {
     return;
   }
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   registered_dxgi_fences_.erase(mailbox);
 #endif
 }
@@ -543,7 +443,6 @@ void SharedImageStub::CopyToGpuMemoryBufferAsync(
   }
 }
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
 void SharedImageStub::OnRegisterDxgiFence(const Mailbox& mailbox,
                                           gfx::DXGIHandleToken dxgi_token,
                                           gfx::GpuFenceHandle fence_handle) {
@@ -631,7 +530,6 @@ void SharedImageStub::OnUnregisterDxgiFence(const Mailbox& mailbox,
   }
 }
 
-#endif  // !defined(HTML_CSS_RENDERER_STANDALONE)
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_FUCHSIA)

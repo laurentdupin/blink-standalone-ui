@@ -22,7 +22,6 @@
 
 
 #include "gpu/ipc/common/context_type.mojom-data-view.h"  // IWYU pragma: export
-#include "gpu/gpu_export.h"
 
 
 
@@ -95,7 +94,7 @@ namespace gpu::mojom {
 namespace perfetto {
 
 template <>
-struct GPU_EXPORT TraceFormatTraits<::gpu::mojom::ContextType> {
+struct  TraceFormatTraits<::gpu::mojom::ContextType> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::gpu::mojom::ContextType value);
 };
 

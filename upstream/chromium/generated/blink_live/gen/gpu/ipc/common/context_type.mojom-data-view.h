@@ -53,7 +53,7 @@ enum class ContextType : int32_t {
   kMaxValue = 3,
 };
 
-GPU_EXPORT std::ostream& operator<<(std::ostream& os, ContextType value);
+ std::ostream& operator<<(std::ostream& os, ContextType value);
 inline bool IsKnownEnumValue(ContextType value) {
   return internal::ContextType_Data::IsKnownValue(
       static_cast<int32_t>(value));

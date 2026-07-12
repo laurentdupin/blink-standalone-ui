@@ -26,6 +26,7 @@
 
 
 
+#include "ui/gl/mojom/gpu_preference_mojom_traits.h"
 
 
 

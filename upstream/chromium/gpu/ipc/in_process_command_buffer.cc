@@ -51,12 +51,13 @@
 #include "gpu/command_buffer/service/shared_image_interface_in_process.h"
 #include "gpu/command_buffer/service/single_task_sequence.h"
 #include "gpu/command_buffer/service/task_graph.h"
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
 #include "gpu/command_buffer/service/webgpu_decoder.h"
+#endif
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
-#include "gpu/ipc/common/context_type_mojom_traits.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
@@ -68,7 +69,6 @@
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/init/create_gr_gl_interface.h"
 #include "ui/gl/init/gl_factory.h"
-#include "ui/gl/mojom/gpu_preference_mojom_traits.h"
 
 namespace gpu {
 
@@ -153,7 +153,11 @@ int InProcessCommandBuffer::GetRasterDecoderIdForTest() const {
 }
 
 webgpu::WebGPUDecoder* InProcessCommandBuffer::GetWebGPUDecoderForTest() const {
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
   return static_cast<webgpu::WebGPUDecoder*>(decoder_.get());
+#else
+  return nullptr;
+#endif
 }
 
 gpu::SharedImageInterface* InProcessCommandBuffer::GetSharedImageInterface()
@@ -322,11 +326,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
 
   switch (params.attribs->which()) {
     case mojom::ContextCreationAttribs::Tag::kWebgpu: {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-      LOG(ERROR) << "WebGPU command-buffer contexts are disabled in the "
-                    "standalone Vulkan compositor runtime.";
-      return gpu::ContextResult::kFatalFailure;
-#else
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
       if (!task_executor_->gpu_preferences().enable_webgpu) {
         DLOG(ERROR) << "ContextResult::kFatalFailure: WebGPU not enabled";
         return gpu::ContextResult::kFatalFailure;
@@ -346,6 +346,9 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       }
 
       decoder_ = std::move(webgpu_decoder);
+#else
+      DLOG(ERROR) << "ContextResult::kFatalFailure: WebGPU not built";
+      return gpu::ContextResult::kFatalFailure;
 #endif
     } break;
     case mojom::ContextCreationAttribs::Tag::kRaster: {
@@ -382,14 +385,6 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
     } break;
     case mojom::ContextCreationAttribs::Tag::kGles: {
       const auto& attribs = params.attribs->get_gles();
-      const gpu::ContextType context_type =
-          mojo::EnumTraits<gpu::mojom::ContextType,
-                           gpu::ContextType>::FromMojom(
-              attribs->context_type);
-      const gl::GpuPreference gpu_preference =
-          mojo::EnumTraits<gl::mojom::GpuPreference,
-                           gl::GpuPreference>::FromMojom(
-              attribs->gpu_preference);
       // TODO(khushalsagar): A lot of this initialization code is duplicated in
       // GpuChannelManager. Pull it into a common util method.
       scoped_refptr<gl::GLContext> real_context =
@@ -403,8 +398,9 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       if (!real_context) {
         real_context = gl::init::CreateGLContext(
             gl_share_group_.get(), surface.get(),
-            gles2::GenerateGLContextAttribsForDecoder(
-                context_type, gpu_preference, context_group_.get()));
+            GenerateGLContextAttribsForDecoder(attribs->context_type,
+                                               attribs->gpu_preference,
+                                               context_group_.get()));
         if (!real_context) {
           // TODO(piman): This might not be fatal, we could recurse into
           // CreateGLContext to get more info, tho it should be exceedingly
@@ -440,8 +436,9 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
             gles2_decoder->AsWeakPtr());
         if (!context_->Initialize(
                 surface.get(),
-                gles2::GenerateGLContextAttribsForDecoder(
-                    context_type, gpu_preference, context_group_.get()))) {
+                GenerateGLContextAttribsForDecoder(attribs->context_type,
+                                                   attribs->gpu_preference,
+                                                   context_group_.get()))) {
           // TODO(piman): This might not be fatal, we could recurse into
           // CreateGLContext to get more info, tho it should be exceedingly
           // rare and may not be recoverable anyway.
@@ -463,7 +460,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
         DCHECK(context_->IsCurrent(surface.get()));
       }
       auto result = gles2_decoder->Initialize(
-          surface, context_, /*offscreen=*/true, context_type,
+          surface, context_, /*offscreen=*/true, attribs->context_type,
           /*lose_context_when_out_of_memory=*/true);
       if (result != gpu::ContextResult::kSuccess) {
         DestroyOnGpuThread();

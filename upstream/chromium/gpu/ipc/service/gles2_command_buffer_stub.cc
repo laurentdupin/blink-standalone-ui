@@ -36,8 +36,6 @@
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/image_transport_surface.h"
-#include "gpu/ipc/common/context_type_mojom_traits.h"
-#include "mojo/public/cpp/bindings/enum_traits.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/switches.h"
@@ -49,7 +47,6 @@
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
-#include "ui/gl/mojom/gpu_preference_mojom_traits.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/win_util.h"
@@ -81,13 +78,6 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
   UpdateActiveUrl();
 
   const auto& attribs = *init_params.attribs->get_gles();
-  const gpu::ContextType native_context_type =
-      mojo::EnumTraits<gpu::mojom::ContextType, gpu::ContextType>::FromMojom(
-          attribs.context_type);
-  const gl::GpuPreference requested_gpu_preference =
-      mojo::EnumTraits<gl::mojom::GpuPreference, gl::GpuPreference>::FromMojom(
-          attribs.gpu_preference);
-
   GpuChannelManager* manager = channel_->gpu_channel_manager();
   DCHECK(manager);
   memory_tracker_ = CreateMemoryTracker();
@@ -125,7 +115,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
   // Virtualize GpuPreference::kLowPower contexts by default on OS X to prevent
   // performance regressions when enabling FCM.
   // http://crbug.com/180463
-  if (requested_gpu_preference == gl::GpuPreference::kLowPower) {
+  if (attribs.gpu_preference == gl::GpuPreference::kLowPower) {
     use_virtualized_gl_context_ = true;
   }
 #endif
@@ -152,7 +142,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
       features::SupportsEGLDualGPURendering()) {
     force_default_display = false;
   }
-  gl::GpuPreference gpu_preference = requested_gpu_preference;
+  gl::GpuPreference gpu_preference = attribs.gpu_preference;
   // If the user queries a low-power context, it's better to use whatever the
   // default GPU used by Chrome is, which may be different than the low-power
   // GPU determined by GLDisplayManager.
@@ -224,8 +214,8 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
     if (!context) {
       context = gl::init::CreateGLContext(
           share_group_.get(), surface_.get(),
-          GenerateGLContextAttribsForDecoder(native_context_type,
-                                             requested_gpu_preference,
+          GenerateGLContextAttribsForDecoder(attribs.context_type,
+                                             attribs.gpu_preference,
                                              context_group_.get()));
       if (!context) {
         // TODO(piman): This might not be fatal, we could recurse into
@@ -254,7 +244,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
         share_group_.get(), context.get(), gles2_decoder_->AsWeakPtr());
     if (!context->Initialize(surface_.get(),
                              GenerateGLContextAttribsForDecoder(
-                                 native_context_type, requested_gpu_preference,
+                                 attribs.context_type, attribs.gpu_preference,
                                  context_group_.get()))) {
       // The real context created above for the default offscreen surface
       // might not be compatible with this surface.
@@ -269,8 +259,8 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
   } else {
     context = gl::init::CreateGLContext(
         share_group_.get(), surface_.get(),
-        GenerateGLContextAttribsForDecoder(native_context_type,
-                                           requested_gpu_preference,
+        GenerateGLContextAttribsForDecoder(attribs.context_type,
+                                           attribs.gpu_preference,
                                            context_group_.get()));
     if (!context) {
       // TODO(piman): This might not be fatal, we could recurse into
@@ -305,7 +295,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
 
   // Initialize the decoder with either the view or pbuffer GLContext.
   auto result = gles2_decoder_->Initialize(
-      surface_, context, /*offscreen=*/true, native_context_type,
+      surface_, context, /*offscreen=*/true, attribs.context_type,
       /*lose_context_when_out_of_memory=*/true);
   if (result != gpu::ContextResult::kSuccess) {
     DLOG(ERROR) << "Failed to initialize decoder.";
@@ -347,7 +337,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
     }
   }
 
-  if (IsWebGLContextType(native_context_type)) {
+  if (IsWebGLContextType(attribs.context_type)) {
     gl::GLDisplayEGL* display_egl = display->GetAs<gl::GLDisplayEGL>();
     if (display_egl) {
       UMA_HISTOGRAM_ENUMERATION("GPU.WebGLDisplayType",

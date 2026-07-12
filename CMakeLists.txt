@@ -1206,6 +1206,44 @@ if(NOT BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc")
 endif()
 
 set(BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES)
+set(BLINK_STANDALONE_VIZ_RASTER_CONTEXT_CHANNEL_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/gpu/command_buffer_metrics.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/gpu/command_buffer_metrics.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/gpu/context_provider_command_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/gpu/context_provider_command_buffer.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/client_shared_image_interface.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/client_shared_image_interface.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/command_buffer_proxy_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/command_buffer_proxy_impl.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/gpu_channel_host.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/gpu_channel_host.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/shared_image_interface_proxy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/shared_image_interface_proxy.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/command_buffer_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/command_buffer_mojom_traits.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/gpu_feature_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/gpu_feature_info_mojom_traits.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/gpu_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/gpu_info_mojom_traits.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/shared_image_capabilities_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/shared_image_capabilities_mojom_traits.h
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/shared_image_pool_id_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/shared_image_pool_id_mojom_traits.h
+)
+set_source_files_properties(
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/client_shared_image_interface.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/command_buffer_proxy_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/gpu_channel_host.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/client/shared_image_interface_proxy.cc
+  PROPERTIES COMPILE_DEFINITIONS GPU_IPC_CLIENT_IMPLEMENTATION
+)
+if(BLINK_STANDALONE_DAWN_D3D12 AND
+   BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR)
+  set_property(SOURCE ${BLINK_STANDALONE_VIZ_RASTER_CONTEXT_CHANNEL_SOURCES}
+    APPEND PROPERTY INCLUDE_DIRECTORIES
+      ${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}
+  )
+endif()
 set(BLINK_STANDALONE_VIZ_NATIVE_GPU_SERVICE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/gl/gpu_service_impl.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/gl/gpu_service_impl.h
@@ -1219,6 +1257,9 @@ set(BLINK_STANDALONE_VIZ_NATIVE_GPU_SERVICE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/software_output_surface.h
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display/display_compositor_memory_and_task_controller.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display/display_compositor_memory_and_task_controller.h
+)
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_VIZ_RASTER_CONTEXT_CHANNEL_SOURCES}
 )
 if(BLINK_STANDALONE_DAWN_D3D12)
   set(BLINK_STANDALONE_DAWN_D3D12_ADDED_SOURCES

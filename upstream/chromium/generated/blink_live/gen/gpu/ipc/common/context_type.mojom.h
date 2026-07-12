@@ -26,7 +26,7 @@
 
 
 
-#include "gpu/gpu_export.h"
+#include "gpu/ipc/common/context_type_mojom_traits.h"
 
 
 

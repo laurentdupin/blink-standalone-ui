@@ -20,6 +20,7 @@
 #include "gpu/ipc/common/gpu_info.mojom-import-headers.h"
 #include "gpu/ipc/common/mailbox.mojom.h"
 #include "gpu/ipc/common/mailbox.mojom-import-headers.h"
+#include "gpu/ipc/common/mailbox_mojom_traits.h"
 #include "gpu/ipc/common/shared_image_capabilities.mojom.h"
 #include "gpu/ipc/common/shared_image_capabilities.mojom-import-headers.h"
 #include "gpu/ipc/common/shared_image_metadata.mojom.h"

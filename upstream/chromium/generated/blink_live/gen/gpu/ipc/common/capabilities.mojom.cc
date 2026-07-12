@@ -617,59 +617,6 @@ GLCapabilities::GLCapabilities(
       sync_query(std::move(sync_query_in)) {}
 
 GLCapabilities::~GLCapabilities() = default;
-size_t GLCapabilities::Hash(size_t seed) const {
-  seed = mojo::internal::Hash(seed, this->vertex_shader_precisions);
-  seed = mojo::internal::Hash(seed, this->fragment_shader_precisions);
-  seed = mojo::internal::Hash(seed, this->major_version);
-  seed = mojo::internal::Hash(seed, this->minor_version);
-  seed = mojo::internal::Hash(seed, this->max_combined_texture_image_units);
-  seed = mojo::internal::Hash(seed, this->max_cube_map_texture_size);
-  seed = mojo::internal::Hash(seed, this->max_fragment_uniform_vectors);
-  seed = mojo::internal::Hash(seed, this->max_renderbuffer_size);
-  seed = mojo::internal::Hash(seed, this->max_texture_image_units);
-  seed = mojo::internal::Hash(seed, this->max_varying_vectors);
-  seed = mojo::internal::Hash(seed, this->max_vertex_attribs);
-  seed = mojo::internal::Hash(seed, this->max_vertex_texture_image_units);
-  seed = mojo::internal::Hash(seed, this->max_vertex_uniform_vectors);
-  seed = mojo::internal::Hash(seed, this->max_viewport_width);
-  seed = mojo::internal::Hash(seed, this->max_viewport_height);
-  seed = mojo::internal::Hash(seed, this->num_compressed_texture_formats);
-  seed = mojo::internal::Hash(seed, this->num_shader_binary_formats);
-  seed = mojo::internal::Hash(seed, this->max_3d_texture_size);
-  seed = mojo::internal::Hash(seed, this->max_array_texture_layers);
-  seed = mojo::internal::Hash(seed, this->max_color_attachments);
-  seed = mojo::internal::Hash(seed, this->max_combined_fragment_uniform_components);
-  seed = mojo::internal::Hash(seed, this->max_combined_uniform_blocks);
-  seed = mojo::internal::Hash(seed, this->max_combined_vertex_uniform_components);
-  seed = mojo::internal::Hash(seed, this->max_draw_buffers);
-  seed = mojo::internal::Hash(seed, this->max_element_index);
-  seed = mojo::internal::Hash(seed, this->max_elements_indices);
-  seed = mojo::internal::Hash(seed, this->max_elements_vertices);
-  seed = mojo::internal::Hash(seed, this->max_fragment_input_components);
-  seed = mojo::internal::Hash(seed, this->max_fragment_uniform_blocks);
-  seed = mojo::internal::Hash(seed, this->max_fragment_uniform_components);
-  seed = mojo::internal::Hash(seed, this->max_program_texel_offset);
-  seed = mojo::internal::Hash(seed, this->max_samples);
-  seed = mojo::internal::Hash(seed, this->max_server_wait_timeout);
-  seed = mojo::internal::Hash(seed, this->max_texture_lod_bias);
-  seed = mojo::internal::Hash(seed, this->max_transform_feedback_interleaved_components);
-  seed = mojo::internal::Hash(seed, this->max_transform_feedback_separate_attribs);
-  seed = mojo::internal::Hash(seed, this->max_transform_feedback_separate_components);
-  seed = mojo::internal::Hash(seed, this->max_uniform_block_size);
-  seed = mojo::internal::Hash(seed, this->max_uniform_buffer_bindings);
-  seed = mojo::internal::Hash(seed, this->max_varying_components);
-  seed = mojo::internal::Hash(seed, this->max_vertex_output_components);
-  seed = mojo::internal::Hash(seed, this->max_vertex_uniform_blocks);
-  seed = mojo::internal::Hash(seed, this->max_vertex_uniform_components);
-  seed = mojo::internal::Hash(seed, this->min_program_texel_offset);
-  seed = mojo::internal::Hash(seed, this->num_program_binary_formats);
-  seed = mojo::internal::Hash(seed, this->uniform_buffer_offset_alignment);
-  seed = mojo::internal::Hash(seed, this->occlusion_query_boolean);
-  seed = mojo::internal::Hash(seed, this->timer_queries);
-  seed = mojo::internal::Hash(seed, this->max_texture_size);
-  seed = mojo::internal::Hash(seed, this->sync_query);
-  return seed;
-}
 
 void GLCapabilities::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

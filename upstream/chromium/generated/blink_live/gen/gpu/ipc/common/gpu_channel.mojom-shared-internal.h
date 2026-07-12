@@ -41,6 +41,7 @@
 #include "url/mojom/url.mojom-shared-internal.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
+#include "gpu/gpu_export.h"
 
 
 
@@ -107,7 +108,7 @@ struct SchedulingPriority_Data {
 #pragma pack(push, 1)
 
 
-class  ContextCreationAttribs_Data {
+class GPU_EXPORT ContextCreationAttribs_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -162,7 +163,7 @@ static_assert(sizeof(ContextCreationAttribs_Data) == mojo::internal::kUnionDataS
               "Bad sizeof(ContextCreationAttribs_Data)");
 
 
-class  DeferredRequestParams_Data {
+class GPU_EXPORT DeferredRequestParams_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -217,7 +218,7 @@ static_assert(sizeof(DeferredRequestParams_Data) == mojo::internal::kUnionDataSi
               "Bad sizeof(DeferredRequestParams_Data)");
 
 
-class  DeferredCommandBufferRequestParams_Data {
+class GPU_EXPORT DeferredCommandBufferRequestParams_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -269,7 +270,7 @@ static_assert(sizeof(DeferredCommandBufferRequestParams_Data) == mojo::internal:
               "Bad sizeof(DeferredCommandBufferRequestParams_Data)");
 
 
-class  DeferredSharedImageRequest_Data {
+class GPU_EXPORT DeferredSharedImageRequest_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -355,7 +356,7 @@ class  DeferredSharedImageRequest_Data {
 };
 static_assert(sizeof(DeferredSharedImageRequest_Data) == mojo::internal::kUnionDataSize,
               "Bad sizeof(DeferredSharedImageRequest_Data)");
-class  RasterCreationAttribs_Data {
+class GPU_EXPORT RasterCreationAttribs_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -402,7 +403,7 @@ struct RasterCreationAttribs_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     RasterCreationAttribs_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  GLESCreationAttribs_Data {
+class GPU_EXPORT GLESCreationAttribs_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -454,7 +455,7 @@ struct GLESCreationAttribs_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     GLESCreationAttribs_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  WebGPUCreationAttribs_Data {
+class GPU_EXPORT WebGPUCreationAttribs_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -501,7 +502,7 @@ struct WebGPUCreationAttribs_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     WebGPUCreationAttribs_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CreateCommandBufferParams_Data {
+class GPU_EXPORT CreateCommandBufferParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -553,7 +554,7 @@ struct CreateCommandBufferParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CreateCommandBufferParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CommandBufferState_Data {
+class GPU_EXPORT CommandBufferState_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -607,7 +608,7 @@ struct CommandBufferState_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CommandBufferState_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  DeferredRequest_Data {
+class GPU_EXPORT DeferredRequest_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -657,7 +658,7 @@ struct DeferredRequest_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     DeferredRequest_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  DeferredCommandBufferRequest_Data {
+class GPU_EXPORT DeferredCommandBufferRequest_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -707,7 +708,7 @@ struct DeferredCommandBufferRequest_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     DeferredCommandBufferRequest_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  AsyncFlushParams_Data {
+class GPU_EXPORT AsyncFlushParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -757,7 +758,7 @@ struct AsyncFlushParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     AsyncFlushParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  SharedImageInfo_Data {
+class GPU_EXPORT SharedImageInfo_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -806,7 +807,7 @@ struct SharedImageInfo_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     SharedImageInfo_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CreateSharedImageParams_Data {
+class GPU_EXPORT CreateSharedImageParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -856,7 +857,7 @@ struct CreateSharedImageParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CreateSharedImageParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CreateSharedImageWithDataParams_Data {
+class GPU_EXPORT CreateSharedImageWithDataParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -909,7 +910,7 @@ struct CreateSharedImageWithDataParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CreateSharedImageWithDataParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CreateSharedImageWithBufferParams_Data {
+class GPU_EXPORT CreateSharedImageWithBufferParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -960,7 +961,7 @@ struct CreateSharedImageWithBufferParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CreateSharedImageWithBufferParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  UpdateSharedImageParams_Data {
+class GPU_EXPORT UpdateSharedImageParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1009,7 +1010,7 @@ struct UpdateSharedImageParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     UpdateSharedImageParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  AddReferenceToSharedImageParams_Data {
+class GPU_EXPORT AddReferenceToSharedImageParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1057,7 +1058,7 @@ struct AddReferenceToSharedImageParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     AddReferenceToSharedImageParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CopyToGpuMemoryBufferParams_Data {
+class GPU_EXPORT CopyToGpuMemoryBufferParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1105,7 +1106,7 @@ struct CopyToGpuMemoryBufferParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CopyToGpuMemoryBufferParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  RegisterDxgiFenceParams_Data {
+class GPU_EXPORT RegisterDxgiFenceParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1155,7 +1156,7 @@ struct RegisterDxgiFenceParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     RegisterDxgiFenceParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  UpdateDxgiFenceParams_Data {
+class GPU_EXPORT UpdateDxgiFenceParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1205,7 +1206,7 @@ struct UpdateDxgiFenceParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     UpdateDxgiFenceParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  UnregisterDxgiFenceParams_Data {
+class GPU_EXPORT UnregisterDxgiFenceParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1254,7 +1255,7 @@ struct UnregisterDxgiFenceParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     UnregisterDxgiFenceParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  CreateSharedImagePoolParams_Data {
+class GPU_EXPORT CreateSharedImagePoolParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1303,7 +1304,7 @@ struct CreateSharedImagePoolParams_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     CreateSharedImagePoolParams_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class  DestroySharedImagePoolParams_Data {
+class GPU_EXPORT DestroySharedImagePoolParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

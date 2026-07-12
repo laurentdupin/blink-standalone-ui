@@ -24,11 +24,11 @@ class  GpuChannelInterceptorForTesting : public GpuChannel {
   void CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, CreateCommandBufferCallback callback) override;
   void DestroyCommandBuffer(int32_t routing_id, DestroyCommandBufferCallback callback) override;
   void FlushDeferredRequests(std::vector<DeferredRequestPtr> requests, uint32_t flushed_deferred_message_id) override;
-  void CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) override;
+  void CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) override;
   void CreateDCOMPTexture(int32_t route_id, ::mojo::PendingAssociatedReceiver<DCOMPTexture> receiver, CreateDCOMPTextureCallback callback) override;
   void WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, WaitForTokenInRangeCallback callback) override;
   void WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, WaitForGetOffsetInRangeCallback callback) override;
-  void CopyToGpuMemoryBufferAsync(::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) override;
+  void CopyToGpuMemoryBufferAsync(const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) override;
   void CopyNativeGmbToSharedMemoryAsync(::gfx::GpuMemoryBufferHandle buffer_handle, ::base::UnsafeSharedMemoryRegion shared_memory, CopyNativeGmbToSharedMemoryAsyncCallback callback) override;
 };
 class  GpuChannelAsyncWaiter {
@@ -40,10 +40,10 @@ class  GpuChannelAsyncWaiter {
 
   ~GpuChannelAsyncWaiter();
   void GetChannelToken(
-      ::base::UnguessableToken* out_token);
-  ::base::UnguessableToken GetChannelToken();
+      ::mojo_base::mojom::UnguessableTokenPtr* out_token);
+  ::mojo_base::mojom::UnguessableTokenPtr GetChannelToken();
   void GetGPUInfo(
-      ::gpu::mojom::GpuInfoPtr* out_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities);
+      ::gpu::GPUInfo* out_gpu_info, ::gpu::GpuFeatureInfo* out_gpu_feature_info, ::gpu::SharedImageCapabilities* out_shared_image_capabilities);
   
   void Flush(
       );
@@ -52,26 +52,26 @@ class  GpuChannelAsyncWaiter {
       ::base::ReadOnlySharedMemoryRegion* out_version_buffer);
   ::base::ReadOnlySharedMemoryRegion GetSharedMemoryForFlushId();
   void CreateCommandBuffer(
-      CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::mojom::ContextResult* out_result, ::gpu::mojom::CapabilitiesPtr* out_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities);
+      CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::ContextResult* out_result, ::gpu::Capabilities* out_capabilties, ::gpu::GLCapabilities* out_gl_capabilities);
   
   void DestroyCommandBuffer(
       int32_t routing_id);
   
   void CreateGpuMemoryBuffer(
-      const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle);
-  ::gfx::GpuMemoryBufferHandle CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage);
+      const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle);
+  ::gfx::GpuMemoryBufferHandle CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage);
   void CreateDCOMPTexture(
       int32_t route_id, ::mojo::PendingAssociatedReceiver<DCOMPTexture> receiver, bool* out_success);
   bool CreateDCOMPTexture(int32_t route_id, ::mojo::PendingAssociatedReceiver<DCOMPTexture> receiver);
   void WaitForTokenInRange(
-      int32_t routing_id, int32_t start, int32_t end, CommandBufferStatePtr* out_state);
-  CommandBufferStatePtr WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end);
+      int32_t routing_id, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state);
+  ::gpu::CommandBuffer::State WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end);
   void WaitForGetOffsetInRange(
-      int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, CommandBufferStatePtr* out_state);
-  CommandBufferStatePtr WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end);
+      int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state);
+  ::gpu::CommandBuffer::State WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end);
   void CopyToGpuMemoryBufferAsync(
-      ::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, bool* out_success);
-  bool CopyToGpuMemoryBufferAsync(::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count);
+      const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, bool* out_success);
+  bool CopyToGpuMemoryBufferAsync(const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count);
   void CopyNativeGmbToSharedMemoryAsync(
       ::gfx::GpuMemoryBufferHandle buffer_handle, ::base::UnsafeSharedMemoryRegion shared_memory, bool* out_success);
   bool CopyNativeGmbToSharedMemoryAsync(::gfx::GpuMemoryBufferHandle buffer_handle, ::base::UnsafeSharedMemoryRegion shared_memory);
@@ -99,8 +99,8 @@ class  CommandBufferAsyncWaiter {
 
   ~CommandBufferAsyncWaiter();
   void GetGpuFenceHandle(
-      uint32_t id, std::optional<::gfx::GpuFenceHandle>* out_fence_handle);
-  std::optional<::gfx::GpuFenceHandle> GetGpuFenceHandle(uint32_t id);
+      uint32_t id, ::gfx::GpuFenceHandle* out_fence_handle);
+  ::gfx::GpuFenceHandle GetGpuFenceHandle(uint32_t id);
 
  private:
   CommandBuffer* const proxy_;
@@ -111,9 +111,9 @@ class  CommandBufferClientInterceptorForTesting : public CommandBufferClient {
   virtual CommandBufferClient* GetForwardingInterface() = 0;
   void OnConsoleMessage(const std::string& message) override;
   void OnGpuSwitched() override;
-  void OnDestroyed(::gpu::mojom::ContextLostReason reason, ::gpu::mojom::Error error) override;
+  void OnDestroyed(::gpu::error::ContextLostReason reason, ::gpu::error::Error error) override;
   void OnReturnData(const std::vector<uint8_t>& data) override;
-  void OnSignalAck(uint32_t signal_id, CommandBufferStatePtr state) override;
+  void OnSignalAck(uint32_t signal_id, const ::gpu::CommandBuffer::State& state) override;
 };
 class  CommandBufferClientAsyncWaiter {
  public:
@@ -133,7 +133,7 @@ class  DCOMPTextureInterceptorForTesting : public DCOMPTexture {
   virtual DCOMPTexture* GetForwardingInterface() = 0;
   void StartListening(::mojo::PendingAssociatedRemote<DCOMPTextureClient> client) override;
   void SetTextureSize(const ::gfx::Size& size) override;
-  void SetDCOMPSurfaceHandle(const ::base::UnguessableToken& token, SetDCOMPSurfaceHandleCallback callback) override;
+  void SetDCOMPSurfaceHandle(::mojo_base::mojom::UnguessableTokenPtr token, SetDCOMPSurfaceHandleCallback callback) override;
 };
 class  DCOMPTextureAsyncWaiter {
  public:
@@ -144,8 +144,8 @@ class  DCOMPTextureAsyncWaiter {
 
   ~DCOMPTextureAsyncWaiter();
   void SetDCOMPSurfaceHandle(
-      const ::base::UnguessableToken& token, bool* out_success);
-  bool SetDCOMPSurfaceHandle(const ::base::UnguessableToken& token);
+      ::mojo_base::mojom::UnguessableTokenPtr token, bool* out_success);
+  bool SetDCOMPSurfaceHandle(::mojo_base::mojom::UnguessableTokenPtr token);
 
  private:
   DCOMPTexture* const proxy_;
@@ -154,8 +154,8 @@ class  DCOMPTextureAsyncWaiter {
 
 class  DCOMPTextureClientInterceptorForTesting : public DCOMPTextureClient {
   virtual DCOMPTextureClient* GetForwardingInterface() = 0;
-  void OnSharedImageMailboxBound(::gpu::mojom::MailboxPtr mailbox) override;
-  void OnOutputRectChange(const ::gfx::Rect& output_rect) override;
+  void OnSharedImageMailboxBound(const ::gpu::Mailbox& mailbox) override;
+  void OnOutputRectChange(::gfx::mojom::RectPtr output_rect) override;
 };
 class  DCOMPTextureClientAsyncWaiter {
  public:

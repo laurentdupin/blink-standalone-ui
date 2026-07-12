@@ -32,7 +32,7 @@
 
 
 
-#include "gpu/gpu_export.h"
+#include "gpu/ipc/common/capabilities_mojom_traits.h"
 
 
 
@@ -44,7 +44,7 @@ namespace gpu::mojom {
 
 
 
-class GPU_EXPORT ShaderPrecision {
+class  ShaderPrecision {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ShaderPrecision, T>::value>;
@@ -202,7 +202,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class GPU_EXPORT Capabilities {
+class  Capabilities {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Capabilities, T>::value>;
@@ -413,7 +413,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class GPU_EXPORT PerStagePrecisions {
+class  PerStagePrecisions {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<PerStagePrecisions, T>::value>;
@@ -578,7 +578,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class GPU_EXPORT GLCapabilities {
+class  GLCapabilities {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<GLCapabilities, T>::value>;
@@ -678,7 +678,6 @@ GLCapabilities& operator=(const GLCapabilities&) = delete;
 
   template <typename T, GLCapabilities::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
-  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -1506,7 +1505,7 @@ namespace mojo {
 
 
 template <>
-struct GPU_EXPORT StructTraits<::gpu::mojom::Capabilities::DataView,
+struct  StructTraits<::gpu::mojom::Capabilities::DataView,
                                          ::gpu::mojom::CapabilitiesPtr> {
   static bool IsNull(const ::gpu::mojom::CapabilitiesPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CapabilitiesPtr* output) { output->reset(); }
@@ -1626,7 +1625,7 @@ struct GPU_EXPORT StructTraits<::gpu::mojom::Capabilities::DataView,
 
 
 template <>
-struct GPU_EXPORT StructTraits<::gpu::mojom::ShaderPrecision::DataView,
+struct  StructTraits<::gpu::mojom::ShaderPrecision::DataView,
                                          ::gpu::mojom::ShaderPrecisionPtr> {
   static bool IsNull(const ::gpu::mojom::ShaderPrecisionPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::ShaderPrecisionPtr* output) { output->reset(); }
@@ -1651,7 +1650,7 @@ struct GPU_EXPORT StructTraits<::gpu::mojom::ShaderPrecision::DataView,
 
 
 template <>
-struct GPU_EXPORT StructTraits<::gpu::mojom::PerStagePrecisions::DataView,
+struct  StructTraits<::gpu::mojom::PerStagePrecisions::DataView,
                                          ::gpu::mojom::PerStagePrecisionsPtr> {
   static bool IsNull(const ::gpu::mojom::PerStagePrecisionsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::PerStagePrecisionsPtr* output) { output->reset(); }
@@ -1691,7 +1690,7 @@ struct GPU_EXPORT StructTraits<::gpu::mojom::PerStagePrecisions::DataView,
 
 
 template <>
-struct GPU_EXPORT StructTraits<::gpu::mojom::GLCapabilities::DataView,
+struct  StructTraits<::gpu::mojom::GLCapabilities::DataView,
                                          ::gpu::mojom::GLCapabilitiesPtr> {
   static bool IsNull(const ::gpu::mojom::GLCapabilitiesPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::GLCapabilitiesPtr* output) { output->reset(); }

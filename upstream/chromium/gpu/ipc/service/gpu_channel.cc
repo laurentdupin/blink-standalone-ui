@@ -52,36 +52,20 @@
 #include "gpu/command_buffer/service/task_graph.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/command_buffer_id.h"
-#include "gpu/ipc/common/capabilities.mojom.h"
-#include "gpu/ipc/common/capabilities_mojom_traits.h"
-#include "gpu/ipc/common/command_buffer_mojom_traits.h"
-#include "gpu/ipc/common/context_result_mojom_traits.h"
-#include "gpu/ipc/common/gpu_feature_info.mojom.h"
-#include "gpu/ipc/common/gpu_feature_info_mojom_traits.h"
 #include "gpu/ipc/common/gpu_channel.mojom.h"
-#include "gpu/ipc/common/gpu_info.mojom.h"
-#include "gpu/ipc/common/gpu_info_mojom_traits.h"
-#include "gpu/ipc/common/mailbox_mojom_traits.h"
-#include "gpu/ipc/common/scheduling_priority_mojom_traits.h"
-#include "gpu/ipc/common/shared_image_capabilities.mojom.h"
-#include "gpu/ipc/common/shared_image_capabilities_mojom_traits.h"
 #include "gpu/ipc/service/gles2_command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/raster_command_buffer_stub.h"
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
 #include "gpu/ipc/service/webgpu_command_buffer_stub.h"
 #endif
 #include "ipc/constants.mojom.h"
 #include "ipc/ipc_channel.h"
 #include "mojo/public/cpp/base/shared_memory_version.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
-#include "mojo/public/cpp/bindings/enum_traits.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "services/viz/public/cpp/compositing/shared_image_format_mojom_traits.h"
-#include "services/viz/public/mojom/compositing/shared_image_format.mojom.h"
 #include "ui/base/ozone_buildflags.h"
-#include "ui/gfx/mojom/buffer_types_mojom_traits.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
@@ -90,7 +74,7 @@
 #include "gpu/ipc/service/dcomp_texture_win.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
 #endif  // BUILDFLAG(IS_OZONE)
 
@@ -98,75 +82,7 @@ namespace gpu {
 
 namespace {
 
-template <typename MojomType, typename NativeType>
-bool ReadMojomValue(const mojo::StructPtr<MojomType>& input,
-                    NativeType* output) {
-  if (!input) {
-    return false;
-  }
-  return MojomType::DeserializeFromMessage(MojomType::SerializeAsMessage(&input),
-                                           output);
-}
-
-template <typename MojomType, typename NativeType>
-bool ReadMojomValue(const mojo::InlinedStructPtr<MojomType>& input,
-                    NativeType* output) {
-  return MojomType::DeserializeFromMessage(MojomType::SerializeAsMessage(&input),
-                                           output);
-}
-
-gpu::mojom::GpuInfoPtr ToMojomGpuInfo(const gpu::GPUInfo& gpu_info) {
-  gpu::mojom::GpuInfoPtr output;
-  CHECK(gpu::mojom::GpuInfo::DeserializeFromMessage(
-      gpu::mojom::GpuInfo::SerializeAsMessage(&gpu_info), &output));
-  return output;
-}
-
-gpu::mojom::GpuFeatureInfoPtr ToMojomGpuFeatureInfo(
-    const gpu::GpuFeatureInfo& gpu_feature_info) {
-  gpu::mojom::GpuFeatureInfoPtr output;
-  CHECK(gpu::mojom::GpuFeatureInfo::DeserializeFromMessage(
-      gpu::mojom::GpuFeatureInfo::SerializeAsMessage(&gpu_feature_info),
-      &output));
-  return output;
-}
-
-gpu::mojom::SharedImageCapabilitiesPtr ToMojomSharedImageCapabilities(
-    const gpu::SharedImageCapabilities& shared_image_capabilities) {
-  gpu::mojom::SharedImageCapabilitiesPtr output;
-  CHECK(gpu::mojom::SharedImageCapabilities::DeserializeFromMessage(
-      gpu::mojom::SharedImageCapabilities::SerializeAsMessage(
-          &shared_image_capabilities),
-      &output));
-  return output;
-}
-
-gpu::mojom::CapabilitiesPtr ToMojomCapabilities(
-    const gpu::Capabilities& capabilities) {
-  gpu::mojom::CapabilitiesPtr output;
-  CHECK(gpu::mojom::Capabilities::DeserializeFromMessage(
-      gpu::mojom::Capabilities::SerializeAsMessage(&capabilities), &output));
-  return output;
-}
-
-gpu::mojom::GLCapabilitiesPtr ToMojomGLCapabilities(
-    const gpu::GLCapabilities& gl_capabilities) {
-  gpu::mojom::GLCapabilitiesPtr output;
-  CHECK(gpu::mojom::GLCapabilities::DeserializeFromMessage(
-      gpu::mojom::GLCapabilities::SerializeAsMessage(&gl_capabilities),
-      &output));
-  return output;
-}
-
-gpu::mojom::CommandBufferStatePtr ToMojomCommandBufferState(
-    const gpu::CommandBuffer::State& state) {
-  gpu::mojom::CommandBufferStatePtr output;
-  CHECK(gpu::mojom::CommandBufferState::DeserializeFromMessage(
-      gpu::mojom::CommandBufferState::SerializeAsMessage(&state), &output));
-  return output;
-}
-
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 bool TryCreateDCOMPTexture(
     base::WeakPtr<GpuChannel> channel,
     int32_t route_id,
@@ -175,7 +91,7 @@ bool TryCreateDCOMPTexture(
     return false;
   return channel->CreateDCOMPTexture(route_id, std::move(receiver));
 }
-#endif  // BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace
 
@@ -251,28 +167,26 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
                              uint32_t flushed_deferred_message_id) override;
 
   void CreateGpuMemoryBuffer(const gfx::Size& size,
-                             viz::mojom::SharedImageFormatPtr format,
-                             gfx::mojom::BufferUsage buffer_usage,
+                             const viz::SharedImageFormat& format,
+                             gfx::BufferUsage buffer_usage,
                              CreateGpuMemoryBufferCallback callback) override;
-#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   void CreateDCOMPTexture(
       int32_t route_id,
       mojo::PendingAssociatedReceiver<mojom::DCOMPTexture> receiver,
       CreateDCOMPTextureCallback callback) override;
   void CopyToGpuMemoryBufferAsync(
-      gpu::mojom::MailboxPtr mailbox,
+      const gpu::Mailbox& mailbox,
       const std::vector<gpu::SyncToken>& sync_token_dependencies,
       uint64_t release_count,
       CopyToGpuMemoryBufferAsyncCallback callback) override;
-#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
-    defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
   void CopyNativeGmbToSharedMemoryAsync(
       gfx::GpuMemoryBufferHandle buffer_handle,
       base::UnsafeSharedMemoryRegion shared_memory,
       CopyNativeGmbToSharedMemoryAsyncCallback callback) override;
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) ||
-        // defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
   void WaitForTokenInRange(int32_t routing_id,
                            int32_t start,
                            int32_t end,
@@ -513,21 +427,11 @@ void GpuChannelMessageFilter::FlushDeferredRequests(
 
 void GpuChannelMessageFilter::CreateGpuMemoryBuffer(
     const gfx::Size& size,
-    viz::mojom::SharedImageFormatPtr format,
-    gfx::mojom::BufferUsage buffer_usage,
+    const viz::SharedImageFormat& format,
+    gfx::BufferUsage buffer_usage,
     CreateGpuMemoryBufferCallback callback) {
-  viz::SharedImageFormat native_format;
-  if (!ReadMojomValue<viz::mojom::SharedImageFormat>(format, &native_format)) {
-    std::move(callback).Run(gfx::GpuMemoryBufferHandle());
-    return;
-  }
-  const gfx::BufferUsage native_buffer_usage =
-      mojo::EnumTraits<gfx::mojom::BufferUsage, gfx::BufferUsage>::FromMojom(
-          buffer_usage);
-
   gfx::GpuMemoryBufferHandle handle;
-  if (SharedImageFactory::IsNativeBufferSupported(native_format,
-                                                  native_buffer_usage,
+  if (SharedImageFactory::IsNativeBufferSupported(format, buffer_usage,
                                                   gpu_extra_info_)) {
 #if BUILDFLAG(IS_ANDROID)
     // Creation of native buffer handles is not supported on Android (the
@@ -544,16 +448,13 @@ void GpuChannelMessageFilter::CreateGpuMemoryBuffer(
     handle =
         gpu_channel_->shared_image_stub()
             ->factory()
-            ->CreateNativeGpuMemoryBufferHandle(size, native_format,
-                                                native_buffer_usage);
+            ->CreateNativeGpuMemoryBufferHandle(size, format, buffer_usage);
 #endif
   } else {
-    if (SharedMemoryImageBackingFactory::IsBufferUsageSupported(
-            native_buffer_usage) &&
-        SharedMemoryImageBackingFactory::IsSizeValidForFormat(size,
-                                                              native_format)) {
+    if (SharedMemoryImageBackingFactory::IsBufferUsageSupported(buffer_usage) &&
+        SharedMemoryImageBackingFactory::IsSizeValidForFormat(size, format)) {
       handle = SharedMemoryImageBackingFactory::CreateGpuMemoryBufferHandle(
-          size, native_format);
+          size, format);
     }
   }
   if (handle.is_null()) {
@@ -589,24 +490,22 @@ void GpuChannelMessageFilter::TerminateForTesting() {
 
 void GpuChannelMessageFilter::GetChannelToken(
     GetChannelTokenCallback callback) {
-  std::move(callback).Run(channel_token_);
+  std::move(callback).Run(mojo_base::mojom::UnguessableToken::New(
+      channel_token_.GetHighForSerialization(),
+      channel_token_.GetLowForSerialization()));
 }
 
 void GpuChannelMessageFilter::GetGPUInfo(GetGPUInfoCallback callback) {
   CHECK(base::FeatureList::IsEnabled(features::kSendGPUChannelEarly));
   base::AutoLock auto_lock(gpu_channel_lock_);
   if (!gpu_channel_) {
-    std::move(callback).Run(ToMojomGpuInfo(gpu::GPUInfo()),
-                            ToMojomGpuFeatureInfo(gpu::GpuFeatureInfo()),
-                            ToMojomSharedImageCapabilities(
-                                gpu::SharedImageCapabilities()));
+    std::move(callback).Run(gpu::GPUInfo(), gpu::GpuFeatureInfo(),
+                            gpu::SharedImageCapabilities());
     return;
   }
-  std::move(callback).Run(
-      ToMojomGpuInfo(gpu_channel_->gpu_info()),
-      ToMojomGpuFeatureInfo(gpu_channel_->gpu_feature_info()),
-      ToMojomSharedImageCapabilities(
-          gpu_channel_->shared_image_capabilities()));
+  std::move(callback).Run(gpu_channel_->gpu_info(),
+                          gpu_channel_->gpu_feature_info(),
+                          gpu_channel_->shared_image_capabilities());
 }
 
 void GpuChannelMessageFilter::GetSharedMemoryForFlushId(
@@ -658,14 +557,11 @@ void GpuChannelMessageFilter::DestroyCommandBuffer(
       std::move(callback));
 }
 
-#if BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 void GpuChannelMessageFilter::CreateDCOMPTexture(
     int32_t route_id,
     mojo::PendingAssociatedReceiver<mojom::DCOMPTexture> receiver,
     CreateDCOMPTextureCallback callback) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::move(callback).Run(false);
-#else
   base::AutoLock auto_lock(gpu_channel_lock_);
   if (!gpu_channel_) {
     std::visit([](auto& receiver) { receiver.reset(); }, receiver_);
@@ -676,24 +572,14 @@ void GpuChannelMessageFilter::CreateDCOMPTexture(
       base::BindOnce(&TryCreateDCOMPTexture, gpu_channel_->AsWeakPtr(),
                      route_id, std::move(receiver)),
       std::move(callback));
-#endif
 }
 
 void GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync(
-    gpu::mojom::MailboxPtr mailbox,
+    const gpu::Mailbox& mailbox,
     const std::vector<gpu::SyncToken>& sync_token_dependencies,
     uint64_t release_count,
     CopyToGpuMemoryBufferAsyncCallback callback) {
   TRACE_EVENT0("gpu", "GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync");
-#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN)
-  std::move(callback).Run(false);
-  return;
-#else
-  gpu::Mailbox native_mailbox;
-  if (!ReadMojomValue<gpu::mojom::Mailbox>(mailbox, &native_mailbox)) {
-    std::move(callback).Run(false);
-    return;
-  }
   base::AutoLock auto_lock(gpu_channel_lock_);
   if (!gpu_channel_) {
     std::move(callback).Run(false);
@@ -725,25 +611,19 @@ void GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync(
         channel->shared_image_stub()->CopyToGpuMemoryBufferAsync(
             mailbox, std::move(callback));
       },
-      gpu_channel_->AsWeakPtr(), native_mailbox,
+      gpu_channel_->AsWeakPtr(), mailbox,
       base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
                          std::move(callback)));
   scheduler_->ScheduleTask(Scheduler::Task(it->second, std::move(run_on_main),
                                            sync_token_dependencies, release));
-#endif
 }
-#endif  // BUILDFLAG(IS_WIN) || defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
-    defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 void GpuChannelMessageFilter::CopyNativeGmbToSharedMemoryAsync(
     gfx::GpuMemoryBufferHandle buffer_handle,
     base::UnsafeSharedMemoryRegion shared_memory,
     CopyNativeGmbToSharedMemoryAsyncCallback callback) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && !BUILDFLAG(IS_WIN) && \
-    !BUILDFLAG(IS_ANDROID)
-  std::move(callback).Run(false);
-#else
   base::AutoLock auto_lock(gpu_channel_lock_);
   if (!gpu_channel_) {
     std::move(callback).Run(false);
@@ -755,10 +635,8 @@ void GpuChannelMessageFilter::CopyNativeGmbToSharedMemoryAsync(
           ->factory()
           ->CopyNativeBufferToSharedMemoryAsync(std::move(buffer_handle),
                                                 std::move(shared_memory)));
-#endif
 }
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) ||
-        // defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 
 void GpuChannelMessageFilter::WaitForTokenInRange(
     int32_t routing_id,
@@ -842,13 +720,13 @@ GpuChannel::~GpuChannel() {
   // Clear stubs first because of dependencies.
   stubs_.clear();
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   // Release any references to this channel held by DCOMPTexture.
   for (auto& dcomp_texture : dcomp_textures_) {
     dcomp_texture.second->ReleaseChannel();
   }
   dcomp_textures_.clear();
-#endif  // BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
 
   // Stop receiving messages, and scheduling tasks.
   filter_->Stop();
@@ -964,11 +842,7 @@ void GpuChannel::ExecuteDeferredRequest(
   switch (params->which()) {
 #if BUILDFLAG(IS_WIN)
     case mojom::DeferredRequestParams::Tag::kDestroyDcompTexture:
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-      DLOG(ERROR) << "DCOMPTexture deferred destroy unsupported";
-#else
       DestroyDCOMPTexture(params->get_destroy_dcomp_texture());
-#endif
       break;
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -1013,18 +887,11 @@ void GpuChannel::WaitForTokenInRange(
     mojom::GpuChannel::WaitForTokenInRangeCallback callback) {
   CommandBufferStub* stub = LookupCommandBuffer(routing_id);
   if (!stub) {
-    std::move(callback).Run(ToMojomCommandBufferState(CommandBuffer::State()));
+    std::move(callback).Run(CommandBuffer::State());
     return;
   }
 
-  stub->WaitForTokenInRange(
-      start, end,
-      base::BindOnce(
-          [](mojom::GpuChannel::WaitForTokenInRangeCallback callback,
-             const gpu::CommandBuffer::State& state) {
-            std::move(callback).Run(ToMojomCommandBufferState(state));
-          },
-          std::move(callback)));
+  stub->WaitForTokenInRange(start, end, std::move(callback));
 }
 
 void GpuChannel::WaitForGetOffsetInRange(
@@ -1035,18 +902,12 @@ void GpuChannel::WaitForGetOffsetInRange(
     mojom::GpuChannel::WaitForGetOffsetInRangeCallback callback) {
   CommandBufferStub* stub = LookupCommandBuffer(routing_id);
   if (!stub) {
-    std::move(callback).Run(ToMojomCommandBufferState(CommandBuffer::State()));
+    std::move(callback).Run(CommandBuffer::State());
     return;
   }
 
-  stub->WaitForGetOffsetInRange(
-      set_get_buffer_count, start, end,
-      base::BindOnce(
-          [](mojom::GpuChannel::WaitForGetOffsetInRangeCallback callback,
-             const gpu::CommandBuffer::State& state) {
-            std::move(callback).Run(ToMojomCommandBufferState(state));
-          },
-          std::move(callback)));
+  stub->WaitForGetOffsetInRange(set_get_buffer_count, start, end,
+                                std::move(callback));
 }
 
 mojom::GpuChannel& GpuChannel::GetGpuChannelForTesting() {
@@ -1082,7 +943,7 @@ const CommandBufferStub* GpuChannel::GetOneStub() const {
 
 #endif
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 void GpuChannel::DestroyDCOMPTexture(int32_t route_id) {
   auto found = dcomp_textures_.find(route_id);
   if (found == dcomp_textures_.end()) {
@@ -1092,7 +953,7 @@ void GpuChannel::DestroyDCOMPTexture(int32_t route_id) {
   found->second->ReleaseChannel();
   dcomp_textures_.erase(route_id);
 }
-#endif  // BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
 
 // Helper to ensure CreateCommandBuffer below always invokes its response
 // callback.
@@ -1102,11 +963,7 @@ class ScopedCreateCommandBufferResponder {
       mojom::GpuChannel::CreateCommandBufferCallback callback)
       : callback_(std::move(callback)) {}
   ~ScopedCreateCommandBufferResponder() {
-    std::move(callback_).Run(
-        mojo::EnumTraits<gpu::mojom::ContextResult, gpu::ContextResult>::
-            ToMojom(result_),
-        ToMojomCapabilities(capabilities_),
-        ToMojomGLCapabilities(gl_capabilities_));
+    std::move(callback_).Run(result_, capabilities_, gl_capabilities_);
   }
 
   void set_result(ContextResult result) { result_ = result; }
@@ -1152,12 +1009,8 @@ void GpuChannel::CreateCommandBuffer(
 
   SequenceId sequence_id = stream_sequences_[stream_id];
   if (sequence_id.is_null()) {
-    sequence_id =
-        scheduler_->CreateSequence(
-            mojo::EnumTraits<gpu::mojom::SchedulingPriority,
-                             gpu::SchedulingPriority>::
-                FromMojom(init_params->stream_priority),
-            task_runner_);
+    sequence_id = scheduler_->CreateSequence(init_params->stream_priority,
+                                             task_runner_);
     stream_sequences_[stream_id] = sequence_id;
   }
 
@@ -1174,10 +1027,7 @@ void GpuChannel::CreateCommandBuffer(
           route_id);
       break;
     case mojom::ContextCreationAttribs::Tag::kWebgpu:
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-      DLOG(ERROR) << "ContextResult::kFatalFailure: WebGPU unsupported";
-      return;
-#else
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
       if (!gpu_channel_manager_->gpu_preferences().enable_webgpu) {
         DLOG(ERROR) << "ContextResult::kFatalFailure: WebGPU not enabled";
         return;
@@ -1187,6 +1037,9 @@ void GpuChannel::CreateCommandBuffer(
           this, *init_params, command_buffer_id, sequence_id, stream_id,
           route_id);
       break;
+#else
+      DLOG(ERROR) << "ContextResult::kFatalFailure: WebGPU not built";
+      return;
 #endif
   }
 
@@ -1236,7 +1089,7 @@ void GpuChannel::DestroyCommandBuffer(int32_t route_id) {
   RemoveRoute(route_id);
 }
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 bool GpuChannel::CreateDCOMPTexture(
     int32_t route_id,
     mojo::PendingAssociatedReceiver<mojom::DCOMPTexture> receiver) {
@@ -1253,7 +1106,7 @@ bool GpuChannel::CreateDCOMPTexture(
   dcomp_textures_.emplace(route_id, std::move(dcomp_texture));
   return true;
 }
-#endif  // BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_FUCHSIA)
 void GpuChannel::RegisterSysmemBufferCollection(

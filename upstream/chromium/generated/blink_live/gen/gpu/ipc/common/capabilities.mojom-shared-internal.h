@@ -13,7 +13,6 @@
 #include "services/viz/public/mojom/compositing/shared_image_format.mojom-shared-internal.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "gpu/gpu_export.h"
 
 
 
@@ -32,7 +31,7 @@ class PerStagePrecisions_Data;
 class GLCapabilities_Data;
 
 #pragma pack(push, 1)
-class GPU_EXPORT Capabilities_Data {
+class  Capabilities_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -102,7 +101,7 @@ struct Capabilities_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     Capabilities_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class GPU_EXPORT ShaderPrecision_Data {
+class  ShaderPrecision_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -153,7 +152,7 @@ struct ShaderPrecision_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     ShaderPrecision_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class GPU_EXPORT PerStagePrecisions_Data {
+class  PerStagePrecisions_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -206,7 +205,7 @@ struct PerStagePrecisions_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     PerStagePrecisions_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class GPU_EXPORT GLCapabilities_Data {
+class  GLCapabilities_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

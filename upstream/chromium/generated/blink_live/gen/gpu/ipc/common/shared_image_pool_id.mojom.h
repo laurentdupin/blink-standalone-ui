@@ -36,6 +36,7 @@
 
 
 
+#include "gpu/ipc/common/shared_image_pool_id_mojom_traits.h"
 
 namespace gpu::mojom {
 

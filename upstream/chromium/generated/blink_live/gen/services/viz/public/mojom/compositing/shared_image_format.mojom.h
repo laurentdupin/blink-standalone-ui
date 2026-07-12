@@ -32,6 +32,7 @@
 
 
 
+#include "services/viz/public/cpp/compositing/shared_image_format_mojom_traits.h"
 
 
 
@@ -254,7 +255,6 @@ class  SharedImageFormat {
             typename std::enable_if<std::is_same<
                 T, SharedImageFormat>::value>::type* = nullptr>
   bool operator==(const T& rhs) const { return Equals(rhs); }
-  size_t Hash(size_t seed) const;
 
   Tag which() const {
     return tag_;

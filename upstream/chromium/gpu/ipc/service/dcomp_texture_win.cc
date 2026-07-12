@@ -4,6 +4,7 @@
 
 #include "gpu/ipc/service/dcomp_texture_win.h"
 
+#include <optional>
 #include <string.h>
 
 #include "base/functional/bind.h"
@@ -221,14 +222,27 @@ HANDLE DCOMPTexture::GetSurfaceHandle() {
 }
 
 void DCOMPTexture::SetDCOMPSurfaceHandle(
-    const base::UnguessableToken& token,
+    mojo_base::mojom::UnguessableTokenPtr token,
     SetDCOMPSurfaceHandleCallback callback) {
   DVLOG(1) << __func__;
 
+  if (!token) {
+    std::move(callback).Run(false);
+    return;
+  }
+  const std::optional<base::UnguessableToken> native_token =
+      base::UnguessableToken::Deserialize(token->high, token->low);
+  if (!native_token) {
+    std::move(callback).Run(false);
+    return;
+  }
+
   base::win::ScopedHandle surface_handle =
-      gl::DCOMPSurfaceRegistry::GetInstance()->TakeDCOMPSurfaceHandle(token);
+      gl::DCOMPSurfaceRegistry::GetInstance()->TakeDCOMPSurfaceHandle(
+          *native_token);
   if (!surface_handle.is_valid()) {
-    DLOG(ERROR) << __func__ << ": No surface registered for token " << token;
+    DLOG(ERROR) << __func__ << ": No surface registered for token "
+                << *native_token;
     std::move(callback).Run(false);
     return;
   }
@@ -311,7 +325,9 @@ void DCOMPTexture::SendOutputRect() {
       // rectangle. Otherwise, the next `EnableWindowlessSwapchainMode()` call
       // to MFMediaEngine will skip the creation of the DCOMP surface handle.
       // Then, the next `GetVideoSwapchainHandle()` call returns S_FALSE.
-      client_->OnOutputRectChange(output_rect);
+      client_->OnOutputRectChange(gfx::mojom::Rect::New(
+          output_rect.x(), output_rect.y(), output_rect.width(),
+          output_rect.height()));
     }
     last_output_rect_ = output_rect;
   }

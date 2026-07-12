@@ -22,7 +22,7 @@ class ValidationContext;
 
 namespace gpu::mojom {
 namespace internal {
-class  GpuChannel_CrashForTesting_Params_Data {
+class GPU_EXPORT GpuChannel_CrashForTesting_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -37,7 +37,7 @@ class  GpuChannel_CrashForTesting_Params_Data {
 };
 static_assert(sizeof(GpuChannel_CrashForTesting_Params_Data) == 8,
               "Bad sizeof(GpuChannel_CrashForTesting_Params_Data)");
-class  GpuChannel_TerminateForTesting_Params_Data {
+class GPU_EXPORT GpuChannel_TerminateForTesting_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -52,7 +52,7 @@ class  GpuChannel_TerminateForTesting_Params_Data {
 };
 static_assert(sizeof(GpuChannel_TerminateForTesting_Params_Data) == 8,
               "Bad sizeof(GpuChannel_TerminateForTesting_Params_Data)");
-class  GpuChannel_GetChannelToken_Params_Data {
+class GPU_EXPORT GpuChannel_GetChannelToken_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -67,7 +67,7 @@ class  GpuChannel_GetChannelToken_Params_Data {
 };
 static_assert(sizeof(GpuChannel_GetChannelToken_Params_Data) == 8,
               "Bad sizeof(GpuChannel_GetChannelToken_Params_Data)");
-class  GpuChannel_GetChannelToken_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_GetChannelToken_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -83,7 +83,7 @@ class  GpuChannel_GetChannelToken_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_GetChannelToken_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_GetChannelToken_ResponseParams_Data)");
-class  GpuChannel_GetGPUInfo_Params_Data {
+class GPU_EXPORT GpuChannel_GetGPUInfo_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -98,7 +98,7 @@ class  GpuChannel_GetGPUInfo_Params_Data {
 };
 static_assert(sizeof(GpuChannel_GetGPUInfo_Params_Data) == 8,
               "Bad sizeof(GpuChannel_GetGPUInfo_Params_Data)");
-class  GpuChannel_GetGPUInfo_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_GetGPUInfo_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -116,7 +116,7 @@ class  GpuChannel_GetGPUInfo_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_GetGPUInfo_ResponseParams_Data) == 32,
               "Bad sizeof(GpuChannel_GetGPUInfo_ResponseParams_Data)");
-class  GpuChannel_Flush_Params_Data {
+class GPU_EXPORT GpuChannel_Flush_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -131,7 +131,7 @@ class  GpuChannel_Flush_Params_Data {
 };
 static_assert(sizeof(GpuChannel_Flush_Params_Data) == 8,
               "Bad sizeof(GpuChannel_Flush_Params_Data)");
-class  GpuChannel_Flush_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_Flush_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -146,7 +146,7 @@ class  GpuChannel_Flush_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_Flush_ResponseParams_Data) == 8,
               "Bad sizeof(GpuChannel_Flush_ResponseParams_Data)");
-class  GpuChannel_GetSharedMemoryForFlushId_Params_Data {
+class GPU_EXPORT GpuChannel_GetSharedMemoryForFlushId_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -161,7 +161,7 @@ class  GpuChannel_GetSharedMemoryForFlushId_Params_Data {
 };
 static_assert(sizeof(GpuChannel_GetSharedMemoryForFlushId_Params_Data) == 8,
               "Bad sizeof(GpuChannel_GetSharedMemoryForFlushId_Params_Data)");
-class  GpuChannel_GetSharedMemoryForFlushId_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_GetSharedMemoryForFlushId_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -177,7 +177,7 @@ class  GpuChannel_GetSharedMemoryForFlushId_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_GetSharedMemoryForFlushId_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_GetSharedMemoryForFlushId_ResponseParams_Data)");
-class  GpuChannel_CreateCommandBuffer_Params_Data {
+class GPU_EXPORT GpuChannel_CreateCommandBuffer_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -197,7 +197,7 @@ class  GpuChannel_CreateCommandBuffer_Params_Data {
 };
 static_assert(sizeof(GpuChannel_CreateCommandBuffer_Params_Data) == 40,
               "Bad sizeof(GpuChannel_CreateCommandBuffer_Params_Data)");
-class  GpuChannel_CreateCommandBuffer_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_CreateCommandBuffer_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -216,7 +216,7 @@ class  GpuChannel_CreateCommandBuffer_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_CreateCommandBuffer_ResponseParams_Data) == 32,
               "Bad sizeof(GpuChannel_CreateCommandBuffer_ResponseParams_Data)");
-class  GpuChannel_DestroyCommandBuffer_Params_Data {
+class GPU_EXPORT GpuChannel_DestroyCommandBuffer_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -233,7 +233,7 @@ class  GpuChannel_DestroyCommandBuffer_Params_Data {
 };
 static_assert(sizeof(GpuChannel_DestroyCommandBuffer_Params_Data) == 16,
               "Bad sizeof(GpuChannel_DestroyCommandBuffer_Params_Data)");
-class  GpuChannel_DestroyCommandBuffer_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_DestroyCommandBuffer_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -248,7 +248,7 @@ class  GpuChannel_DestroyCommandBuffer_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_DestroyCommandBuffer_ResponseParams_Data) == 8,
               "Bad sizeof(GpuChannel_DestroyCommandBuffer_ResponseParams_Data)");
-class  GpuChannel_FlushDeferredRequests_Params_Data {
+class GPU_EXPORT GpuChannel_FlushDeferredRequests_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -266,7 +266,7 @@ class  GpuChannel_FlushDeferredRequests_Params_Data {
 };
 static_assert(sizeof(GpuChannel_FlushDeferredRequests_Params_Data) == 24,
               "Bad sizeof(GpuChannel_FlushDeferredRequests_Params_Data)");
-class  GpuChannel_CreateGpuMemoryBuffer_Params_Data {
+class GPU_EXPORT GpuChannel_CreateGpuMemoryBuffer_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -285,7 +285,7 @@ class  GpuChannel_CreateGpuMemoryBuffer_Params_Data {
 };
 static_assert(sizeof(GpuChannel_CreateGpuMemoryBuffer_Params_Data) == 40,
               "Bad sizeof(GpuChannel_CreateGpuMemoryBuffer_Params_Data)");
-class  GpuChannel_CreateGpuMemoryBuffer_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_CreateGpuMemoryBuffer_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -301,7 +301,7 @@ class  GpuChannel_CreateGpuMemoryBuffer_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_CreateGpuMemoryBuffer_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_CreateGpuMemoryBuffer_ResponseParams_Data)");
-class  GpuChannel_CreateDCOMPTexture_Params_Data {
+class GPU_EXPORT GpuChannel_CreateDCOMPTexture_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -318,7 +318,7 @@ class  GpuChannel_CreateDCOMPTexture_Params_Data {
 };
 static_assert(sizeof(GpuChannel_CreateDCOMPTexture_Params_Data) == 16,
               "Bad sizeof(GpuChannel_CreateDCOMPTexture_Params_Data)");
-class  GpuChannel_CreateDCOMPTexture_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_CreateDCOMPTexture_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -335,7 +335,7 @@ class  GpuChannel_CreateDCOMPTexture_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_CreateDCOMPTexture_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_CreateDCOMPTexture_ResponseParams_Data)");
-class  GpuChannel_WaitForTokenInRange_Params_Data {
+class GPU_EXPORT GpuChannel_WaitForTokenInRange_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -354,7 +354,7 @@ class  GpuChannel_WaitForTokenInRange_Params_Data {
 };
 static_assert(sizeof(GpuChannel_WaitForTokenInRange_Params_Data) == 24,
               "Bad sizeof(GpuChannel_WaitForTokenInRange_Params_Data)");
-class  GpuChannel_WaitForTokenInRange_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_WaitForTokenInRange_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -370,7 +370,7 @@ class  GpuChannel_WaitForTokenInRange_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_WaitForTokenInRange_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_WaitForTokenInRange_ResponseParams_Data)");
-class  GpuChannel_WaitForGetOffsetInRange_Params_Data {
+class GPU_EXPORT GpuChannel_WaitForGetOffsetInRange_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -389,7 +389,7 @@ class  GpuChannel_WaitForGetOffsetInRange_Params_Data {
 };
 static_assert(sizeof(GpuChannel_WaitForGetOffsetInRange_Params_Data) == 24,
               "Bad sizeof(GpuChannel_WaitForGetOffsetInRange_Params_Data)");
-class  GpuChannel_WaitForGetOffsetInRange_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_WaitForGetOffsetInRange_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -405,7 +405,7 @@ class  GpuChannel_WaitForGetOffsetInRange_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_WaitForGetOffsetInRange_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_WaitForGetOffsetInRange_ResponseParams_Data)");
-class  GpuChannel_CopyToGpuMemoryBufferAsync_Params_Data {
+class GPU_EXPORT GpuChannel_CopyToGpuMemoryBufferAsync_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -423,7 +423,7 @@ class  GpuChannel_CopyToGpuMemoryBufferAsync_Params_Data {
 };
 static_assert(sizeof(GpuChannel_CopyToGpuMemoryBufferAsync_Params_Data) == 32,
               "Bad sizeof(GpuChannel_CopyToGpuMemoryBufferAsync_Params_Data)");
-class  GpuChannel_CopyToGpuMemoryBufferAsync_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_CopyToGpuMemoryBufferAsync_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -440,7 +440,7 @@ class  GpuChannel_CopyToGpuMemoryBufferAsync_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_CopyToGpuMemoryBufferAsync_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_CopyToGpuMemoryBufferAsync_ResponseParams_Data)");
-class  GpuChannel_CopyNativeGmbToSharedMemoryAsync_Params_Data {
+class GPU_EXPORT GpuChannel_CopyNativeGmbToSharedMemoryAsync_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -457,7 +457,7 @@ class  GpuChannel_CopyNativeGmbToSharedMemoryAsync_Params_Data {
 };
 static_assert(sizeof(GpuChannel_CopyNativeGmbToSharedMemoryAsync_Params_Data) == 24,
               "Bad sizeof(GpuChannel_CopyNativeGmbToSharedMemoryAsync_Params_Data)");
-class  GpuChannel_CopyNativeGmbToSharedMemoryAsync_ResponseParams_Data {
+class GPU_EXPORT GpuChannel_CopyNativeGmbToSharedMemoryAsync_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -474,7 +474,7 @@ class  GpuChannel_CopyNativeGmbToSharedMemoryAsync_ResponseParams_Data {
 };
 static_assert(sizeof(GpuChannel_CopyNativeGmbToSharedMemoryAsync_ResponseParams_Data) == 16,
               "Bad sizeof(GpuChannel_CopyNativeGmbToSharedMemoryAsync_ResponseParams_Data)");
-class  CommandBuffer_SetGetBuffer_Params_Data {
+class GPU_EXPORT CommandBuffer_SetGetBuffer_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -491,7 +491,7 @@ class  CommandBuffer_SetGetBuffer_Params_Data {
 };
 static_assert(sizeof(CommandBuffer_SetGetBuffer_Params_Data) == 16,
               "Bad sizeof(CommandBuffer_SetGetBuffer_Params_Data)");
-class  CommandBuffer_RegisterTransferBuffer_Params_Data {
+class GPU_EXPORT CommandBuffer_RegisterTransferBuffer_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -509,7 +509,7 @@ class  CommandBuffer_RegisterTransferBuffer_Params_Data {
 };
 static_assert(sizeof(CommandBuffer_RegisterTransferBuffer_Params_Data) == 24,
               "Bad sizeof(CommandBuffer_RegisterTransferBuffer_Params_Data)");
-class  CommandBuffer_CreateGpuFenceFromHandle_Params_Data {
+class GPU_EXPORT CommandBuffer_CreateGpuFenceFromHandle_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -527,7 +527,7 @@ class  CommandBuffer_CreateGpuFenceFromHandle_Params_Data {
 };
 static_assert(sizeof(CommandBuffer_CreateGpuFenceFromHandle_Params_Data) == 24,
               "Bad sizeof(CommandBuffer_CreateGpuFenceFromHandle_Params_Data)");
-class  CommandBuffer_GetGpuFenceHandle_Params_Data {
+class GPU_EXPORT CommandBuffer_GetGpuFenceHandle_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -544,7 +544,7 @@ class  CommandBuffer_GetGpuFenceHandle_Params_Data {
 };
 static_assert(sizeof(CommandBuffer_GetGpuFenceHandle_Params_Data) == 16,
               "Bad sizeof(CommandBuffer_GetGpuFenceHandle_Params_Data)");
-class  CommandBuffer_GetGpuFenceHandle_ResponseParams_Data {
+class GPU_EXPORT CommandBuffer_GetGpuFenceHandle_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -560,7 +560,7 @@ class  CommandBuffer_GetGpuFenceHandle_ResponseParams_Data {
 };
 static_assert(sizeof(CommandBuffer_GetGpuFenceHandle_ResponseParams_Data) == 16,
               "Bad sizeof(CommandBuffer_GetGpuFenceHandle_ResponseParams_Data)");
-class  CommandBuffer_SignalSyncToken_Params_Data {
+class GPU_EXPORT CommandBuffer_SignalSyncToken_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -578,7 +578,7 @@ class  CommandBuffer_SignalSyncToken_Params_Data {
 };
 static_assert(sizeof(CommandBuffer_SignalSyncToken_Params_Data) == 24,
               "Bad sizeof(CommandBuffer_SignalSyncToken_Params_Data)");
-class  CommandBuffer_SignalQuery_Params_Data {
+class GPU_EXPORT CommandBuffer_SignalQuery_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -595,7 +595,7 @@ class  CommandBuffer_SignalQuery_Params_Data {
 };
 static_assert(sizeof(CommandBuffer_SignalQuery_Params_Data) == 16,
               "Bad sizeof(CommandBuffer_SignalQuery_Params_Data)");
-class  CommandBufferClient_OnConsoleMessage_Params_Data {
+class GPU_EXPORT CommandBufferClient_OnConsoleMessage_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -611,7 +611,7 @@ class  CommandBufferClient_OnConsoleMessage_Params_Data {
 };
 static_assert(sizeof(CommandBufferClient_OnConsoleMessage_Params_Data) == 16,
               "Bad sizeof(CommandBufferClient_OnConsoleMessage_Params_Data)");
-class  CommandBufferClient_OnGpuSwitched_Params_Data {
+class GPU_EXPORT CommandBufferClient_OnGpuSwitched_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -626,7 +626,7 @@ class  CommandBufferClient_OnGpuSwitched_Params_Data {
 };
 static_assert(sizeof(CommandBufferClient_OnGpuSwitched_Params_Data) == 8,
               "Bad sizeof(CommandBufferClient_OnGpuSwitched_Params_Data)");
-class  CommandBufferClient_OnDestroyed_Params_Data {
+class GPU_EXPORT CommandBufferClient_OnDestroyed_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -643,7 +643,7 @@ class  CommandBufferClient_OnDestroyed_Params_Data {
 };
 static_assert(sizeof(CommandBufferClient_OnDestroyed_Params_Data) == 16,
               "Bad sizeof(CommandBufferClient_OnDestroyed_Params_Data)");
-class  CommandBufferClient_OnReturnData_Params_Data {
+class GPU_EXPORT CommandBufferClient_OnReturnData_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -659,7 +659,7 @@ class  CommandBufferClient_OnReturnData_Params_Data {
 };
 static_assert(sizeof(CommandBufferClient_OnReturnData_Params_Data) == 16,
               "Bad sizeof(CommandBufferClient_OnReturnData_Params_Data)");
-class  CommandBufferClient_OnSignalAck_Params_Data {
+class GPU_EXPORT CommandBufferClient_OnSignalAck_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -677,7 +677,7 @@ class  CommandBufferClient_OnSignalAck_Params_Data {
 };
 static_assert(sizeof(CommandBufferClient_OnSignalAck_Params_Data) == 24,
               "Bad sizeof(CommandBufferClient_OnSignalAck_Params_Data)");
-class  DCOMPTexture_StartListening_Params_Data {
+class GPU_EXPORT DCOMPTexture_StartListening_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -693,7 +693,7 @@ class  DCOMPTexture_StartListening_Params_Data {
 };
 static_assert(sizeof(DCOMPTexture_StartListening_Params_Data) == 16,
               "Bad sizeof(DCOMPTexture_StartListening_Params_Data)");
-class  DCOMPTexture_SetTextureSize_Params_Data {
+class GPU_EXPORT DCOMPTexture_SetTextureSize_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -709,7 +709,7 @@ class  DCOMPTexture_SetTextureSize_Params_Data {
 };
 static_assert(sizeof(DCOMPTexture_SetTextureSize_Params_Data) == 16,
               "Bad sizeof(DCOMPTexture_SetTextureSize_Params_Data)");
-class  DCOMPTexture_SetDCOMPSurfaceHandle_Params_Data {
+class GPU_EXPORT DCOMPTexture_SetDCOMPSurfaceHandle_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -725,7 +725,7 @@ class  DCOMPTexture_SetDCOMPSurfaceHandle_Params_Data {
 };
 static_assert(sizeof(DCOMPTexture_SetDCOMPSurfaceHandle_Params_Data) == 16,
               "Bad sizeof(DCOMPTexture_SetDCOMPSurfaceHandle_Params_Data)");
-class  DCOMPTexture_SetDCOMPSurfaceHandle_ResponseParams_Data {
+class GPU_EXPORT DCOMPTexture_SetDCOMPSurfaceHandle_ResponseParams_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -742,7 +742,7 @@ class  DCOMPTexture_SetDCOMPSurfaceHandle_ResponseParams_Data {
 };
 static_assert(sizeof(DCOMPTexture_SetDCOMPSurfaceHandle_ResponseParams_Data) == 16,
               "Bad sizeof(DCOMPTexture_SetDCOMPSurfaceHandle_ResponseParams_Data)");
-class  DCOMPTextureClient_OnSharedImageMailboxBound_Params_Data {
+class GPU_EXPORT DCOMPTextureClient_OnSharedImageMailboxBound_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -758,7 +758,7 @@ class  DCOMPTextureClient_OnSharedImageMailboxBound_Params_Data {
 };
 static_assert(sizeof(DCOMPTextureClient_OnSharedImageMailboxBound_Params_Data) == 16,
               "Bad sizeof(DCOMPTextureClient_OnSharedImageMailboxBound_Params_Data)");
-class  DCOMPTextureClient_OnOutputRectChange_Params_Data {
+class GPU_EXPORT DCOMPTextureClient_OnOutputRectChange_Params_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1064,10 +1064,6 @@ class GpuChannel_CreateCommandBuffer_ResponseParamsDataView {
     return mojo::internal::Deserialize<::gpu::mojom::ContextResult>(
         data_value, output);
   }
-  ::gpu::mojom::ContextResult result() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::ContextResult>(data_->result));
-  }
   inline void GetCapabiltiesDataView(
       ::gpu::mojom::CapabilitiesDataView* output);
 
@@ -1191,10 +1187,6 @@ class GpuChannel_CreateGpuMemoryBuffer_ParamsDataView {
     auto data_value = data_->buffer_usage;
     return mojo::internal::Deserialize<::gfx::mojom::BufferUsage>(
         data_value, output);
-  }
-  ::gfx::mojom::BufferUsage buffer_usage() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gfx::mojom::BufferUsage>(data_->buffer_usage));
   }
  private:
   internal::GpuChannel_CreateGpuMemoryBuffer_Params_Data* data_ = nullptr;
@@ -1725,19 +1717,11 @@ class CommandBufferClient_OnDestroyed_ParamsDataView {
     return mojo::internal::Deserialize<::gpu::mojom::ContextLostReason>(
         data_value, output);
   }
-  ::gpu::mojom::ContextLostReason reason() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::ContextLostReason>(data_->reason));
-  }
   template <typename UserType>
   [[nodiscard]] bool ReadError(UserType* output) const {
     auto data_value = data_->error;
     return mojo::internal::Deserialize<::gpu::mojom::Error>(
         data_value, output);
-  }
-  ::gpu::mojom::Error error() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::Error>(data_->error));
   }
  private:
   internal::CommandBufferClient_OnDestroyed_Params_Data* data_ = nullptr;

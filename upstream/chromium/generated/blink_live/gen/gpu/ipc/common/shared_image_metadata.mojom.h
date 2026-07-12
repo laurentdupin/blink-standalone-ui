@@ -35,6 +35,7 @@
 
 
 
+#include "gpu/ipc/common/shared_image_metadata_mojom_traits.h"
 
 
 

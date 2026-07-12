@@ -20,13 +20,13 @@
 #include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "ui/gfx/gpu_extra_info.h"
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 #include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #endif
 
 namespace gfx {
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
 class D3DSharedFence;
 #endif
 
@@ -105,7 +105,7 @@ class GPU_IPC_SERVICE_EXPORT SharedImageStub {
   void OnDestroySharedImage(const Mailbox& mailbox);
   void OnRegisterSharedImageUploadBuffer(base::ReadOnlySharedMemoryRegion shm);
   void OnCopyToGpuMemoryBuffer(const Mailbox& mailbox);
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   void OnRegisterDxgiFence(const Mailbox& mailbox,
                            gfx::DXGIHandleToken dxgi_token,
                            gfx::GpuFenceHandle fence_handle);
@@ -143,7 +143,7 @@ class GPU_IPC_SERVICE_EXPORT SharedImageStub {
   base::ReadOnlySharedMemoryRegion upload_memory_;
   base::ReadOnlySharedMemoryMapping upload_memory_mapping_;
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   // Fences held by external processes. Registered and signaled from ipc
   // channel. Using DXGIHandleToken to identify the fence.
   using DXGITokenToFenceMap =

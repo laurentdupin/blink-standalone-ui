@@ -25,14 +25,14 @@
 #include "gpu/ipc/common/gpu_channel.mojom-features.h"  // IWYU pragma: export
 #include "gpu/ipc/common/gpu_channel.mojom-shared.h"  // IWYU pragma: export
 #include "gpu/ipc/common/gpu_channel.mojom-forward.h"  // IWYU pragma: export
-#include "gpu/ipc/common/capabilities.mojom-forward.h"
-#include "gpu/ipc/common/constants.mojom-forward.h"
-#include "gpu/ipc/common/context_result.mojom-forward.h"
-#include "gpu/ipc/common/context_type.mojom-forward.h"
-#include "gpu/ipc/common/gpu_feature_info.mojom-forward.h"
-#include "gpu/ipc/common/gpu_info.mojom-forward.h"
+#include "gpu/ipc/common/capabilities.mojom.h"
+#include "gpu/ipc/common/constants.mojom.h"
+#include "gpu/ipc/common/context_result.mojom.h"
+#include "gpu/ipc/common/context_type.mojom.h"
+#include "gpu/ipc/common/gpu_feature_info.mojom.h"
+#include "gpu/ipc/common/gpu_info.mojom.h"
 #include "gpu/ipc/common/mailbox.mojom.h"
-#include "gpu/ipc/common/shared_image_capabilities.mojom-forward.h"
+#include "gpu/ipc/common/shared_image_capabilities.mojom.h"
 #include "gpu/ipc/common/shared_image_metadata.mojom.h"
 #include "gpu/ipc/common/shared_image_pool_id.mojom.h"
 #include "gpu/ipc/common/shared_image_pool_client_interface.mojom-forward.h"
@@ -40,8 +40,8 @@
 #include "gpu/ipc/common/sync_token.mojom.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.mojom-forward.h"
 #include "mojo/public/mojom/base/shared_memory.mojom.h"
-#include "mojo/public/mojom/base/unguessable_token.mojom.h"
-#include "services/viz/public/mojom/compositing/shared_image_format.mojom-forward.h"
+#include "mojo/public/mojom/base/unguessable_token.mojom-forward.h"
+#include "services/viz/public/mojom/compositing/shared_image_format.mojom.h"
 #include "skia/public/mojom/image_info.mojom-forward.h"
 #include "skia/public/mojom/surface_origin.mojom-forward.h"
 #include "ui/gfx/geometry/mojom/geometry.mojom.h"
@@ -50,7 +50,7 @@
 #include "ui/gfx/mojom/gpu_fence_handle.mojom.h"
 #include "ui/gfx/mojom/native_handle_types.mojom.h"
 #include "ui/gfx/mojom/presentation_feedback.mojom-forward.h"
-#include "ui/gl/mojom/gpu_preference.mojom-forward.h"
+#include "ui/gl/mojom/gpu_preference.mojom.h"
 #include "url/mojom/url.mojom.h"
 #include <string>
 #include <vector>
@@ -61,6 +61,10 @@
 
 #include "mojo/public/cpp/bindings/lib/native_enum_serialization.h"
 #include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
+#include "gpu/ipc/common/command_buffer_mojom_traits.h"
+#include "gpu/ipc/common/gpu_param_traits_macros.h"
+#include "gpu/ipc/common/scheduling_priority_mojom_traits.h"
+#include "gpu/gpu_export.h"
 
 
 
@@ -76,7 +80,7 @@ class GpuChannelRequestValidator;
 class GpuChannelResponseValidator;
 
 
-class GpuChannel
+class GPU_EXPORT GpuChannel
     : public GpuChannelInterfaceBase {
  public:
   using IPCStableHashFunction = uint32_t(*)();
@@ -183,18 +187,18 @@ class GpuChannel
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
   
-  virtual bool GetChannelToken(::base::UnguessableToken* out_token);
-  using GetChannelTokenCallback = base::OnceCallback<void(const ::base::UnguessableToken&)>;
-  using GetChannelTokenMojoCallback = base::OnceCallback<void(const ::base::UnguessableToken&)>;
+  virtual bool GetChannelToken(::mojo_base::mojom::UnguessableTokenPtr* out_token);
+  using GetChannelTokenCallback = base::OnceCallback<void(::mojo_base::mojom::UnguessableTokenPtr)>;
+  using GetChannelTokenMojoCallback = base::OnceCallback<void(::mojo_base::mojom::UnguessableTokenPtr)>;
 
   virtual void GetChannelToken(GetChannelTokenCallback callback) = 0;
 
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
   
-  virtual bool GetGPUInfo(::gpu::mojom::GpuInfoPtr* out_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities);
-  using GetGPUInfoCallback = base::OnceCallback<void(::gpu::mojom::GpuInfoPtr, ::gpu::mojom::GpuFeatureInfoPtr, ::gpu::mojom::SharedImageCapabilitiesPtr)>;
-  using GetGPUInfoMojoCallback = base::OnceCallback<void(::gpu::mojom::GpuInfoPtr, ::gpu::mojom::GpuFeatureInfoPtr, ::gpu::mojom::SharedImageCapabilitiesPtr)>;
+  virtual bool GetGPUInfo(::gpu::GPUInfo* out_gpu_info, ::gpu::GpuFeatureInfo* out_gpu_feature_info, ::gpu::SharedImageCapabilities* out_shared_image_capabilities);
+  using GetGPUInfoCallback = base::OnceCallback<void(const ::gpu::GPUInfo&, const ::gpu::GpuFeatureInfo&, const ::gpu::SharedImageCapabilities&)>;
+  using GetGPUInfoMojoCallback = base::OnceCallback<void(const ::gpu::GPUInfo&, const ::gpu::GpuFeatureInfo&, const ::gpu::SharedImageCapabilities&)>;
 
   virtual void GetGPUInfo(GetGPUInfoCallback callback) = 0;
 
@@ -219,9 +223,9 @@ class GpuChannel
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
   
-  virtual bool CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::mojom::ContextResult* out_result, ::gpu::mojom::CapabilitiesPtr* out_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities);
-  using CreateCommandBufferCallback = base::OnceCallback<void(::gpu::mojom::ContextResult, ::gpu::mojom::CapabilitiesPtr, ::gpu::mojom::GLCapabilitiesPtr)>;
-  using CreateCommandBufferMojoCallback = base::OnceCallback<void(::gpu::mojom::ContextResult, ::gpu::mojom::CapabilitiesPtr, ::gpu::mojom::GLCapabilitiesPtr)>;
+  virtual bool CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::ContextResult* out_result, ::gpu::Capabilities* out_capabilties, ::gpu::GLCapabilities* out_gl_capabilities);
+  using CreateCommandBufferCallback = base::OnceCallback<void(::gpu::ContextResult, const ::gpu::Capabilities&, const ::gpu::GLCapabilities&)>;
+  using CreateCommandBufferMojoCallback = base::OnceCallback<void(::gpu::ContextResult, const ::gpu::Capabilities&, const ::gpu::GLCapabilities&)>;
 
   virtual void CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, CreateCommandBufferCallback callback) = 0;
 
@@ -239,11 +243,11 @@ class GpuChannel
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
   
-  virtual bool CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle);
+  virtual bool CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle);
   using CreateGpuMemoryBufferCallback = base::OnceCallback<void(::gfx::GpuMemoryBufferHandle)>;
   using CreateGpuMemoryBufferMojoCallback = base::OnceCallback<void(::gfx::GpuMemoryBufferHandle)>;
 
-  virtual void CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) = 0;
+  virtual void CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) = 0;
 
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
@@ -257,25 +261,25 @@ class GpuChannel
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
   
-  virtual bool WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, CommandBufferStatePtr* out_state);
-  using WaitForTokenInRangeCallback = base::OnceCallback<void(CommandBufferStatePtr)>;
-  using WaitForTokenInRangeMojoCallback = base::OnceCallback<void(CommandBufferStatePtr)>;
+  virtual bool WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state);
+  using WaitForTokenInRangeCallback = base::OnceCallback<void(const ::gpu::CommandBuffer::State&)>;
+  using WaitForTokenInRangeMojoCallback = base::OnceCallback<void(const ::gpu::CommandBuffer::State&)>;
 
   virtual void WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, WaitForTokenInRangeCallback callback) = 0;
 
   // Sync method. This signature is used by the client side; the service side
   // should implement the signature with callback below.
   
-  virtual bool WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, CommandBufferStatePtr* out_state);
-  using WaitForGetOffsetInRangeCallback = base::OnceCallback<void(CommandBufferStatePtr)>;
-  using WaitForGetOffsetInRangeMojoCallback = base::OnceCallback<void(CommandBufferStatePtr)>;
+  virtual bool WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state);
+  using WaitForGetOffsetInRangeCallback = base::OnceCallback<void(const ::gpu::CommandBuffer::State&)>;
+  using WaitForGetOffsetInRangeMojoCallback = base::OnceCallback<void(const ::gpu::CommandBuffer::State&)>;
 
   virtual void WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, WaitForGetOffsetInRangeCallback callback) = 0;
 
   using CopyToGpuMemoryBufferAsyncCallback = base::OnceCallback<void(bool)>;
   using CopyToGpuMemoryBufferAsyncMojoCallback = base::OnceCallback<void(bool)>;
 
-  virtual void CopyToGpuMemoryBufferAsync(::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) = 0;
+  virtual void CopyToGpuMemoryBufferAsync(const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) = 0;
 
   using CopyNativeGmbToSharedMemoryAsyncCallback = base::OnceCallback<void(bool)>;
   using CopyNativeGmbToSharedMemoryAsyncMojoCallback = base::OnceCallback<void(bool)>;
@@ -292,7 +296,7 @@ class CommandBufferRequestValidator;
 class CommandBufferResponseValidator;
 
 
-class CommandBuffer
+class GPU_EXPORT CommandBuffer
     : public CommandBufferInterfaceBase {
  public:
   using IPCStableHashFunction = uint32_t(*)();
@@ -350,8 +354,8 @@ class CommandBuffer
 
   virtual void CreateGpuFenceFromHandle(uint32_t gpu_fence_id, ::gfx::GpuFenceHandle fence_handle) = 0;
 
-  using GetGpuFenceHandleCallback = base::OnceCallback<void(std::optional<::gfx::GpuFenceHandle>)>;
-  using GetGpuFenceHandleMojoCallback = base::OnceCallback<void(std::optional<::gfx::GpuFenceHandle>)>;
+  using GetGpuFenceHandleCallback = base::OnceCallback<void(::gfx::GpuFenceHandle)>;
+  using GetGpuFenceHandleMojoCallback = base::OnceCallback<void(::gfx::GpuFenceHandle)>;
 
   virtual void GetGpuFenceHandle(uint32_t id, GetGpuFenceHandleCallback callback) = 0;
 
@@ -368,7 +372,7 @@ class CommandBufferClientStub;
 class CommandBufferClientRequestValidator;
 
 
-class CommandBufferClient
+class GPU_EXPORT CommandBufferClient
     : public CommandBufferClientInterfaceBase {
  public:
   using IPCStableHashFunction = uint32_t(*)();
@@ -420,11 +424,11 @@ class CommandBufferClient
 
   virtual void OnGpuSwitched() = 0;
 
-  virtual void OnDestroyed(::gpu::mojom::ContextLostReason reason, ::gpu::mojom::Error error) = 0;
+  virtual void OnDestroyed(::gpu::error::ContextLostReason reason, ::gpu::error::Error error) = 0;
 
   virtual void OnReturnData(const std::vector<uint8_t>& data) = 0;
 
-  virtual void OnSignalAck(uint32_t signal_id, CommandBufferStatePtr state) = 0;
+  virtual void OnSignalAck(uint32_t signal_id, const ::gpu::CommandBuffer::State& state) = 0;
 };
 
 class DCOMPTextureProxy;
@@ -436,7 +440,7 @@ class DCOMPTextureRequestValidator;
 class DCOMPTextureResponseValidator;
 
 
-class DCOMPTexture
+class GPU_EXPORT DCOMPTexture
     : public DCOMPTextureInterfaceBase {
  public:
   using IPCStableHashFunction = uint32_t(*)();
@@ -483,7 +487,7 @@ class DCOMPTexture
   using SetDCOMPSurfaceHandleCallback = base::OnceCallback<void(bool)>;
   using SetDCOMPSurfaceHandleMojoCallback = base::OnceCallback<void(bool)>;
 
-  virtual void SetDCOMPSurfaceHandle(const ::base::UnguessableToken& token, SetDCOMPSurfaceHandleCallback callback) = 0;
+  virtual void SetDCOMPSurfaceHandle(::mojo_base::mojom::UnguessableTokenPtr token, SetDCOMPSurfaceHandleCallback callback) = 0;
 };
 
 class DCOMPTextureClientProxy;
@@ -494,7 +498,7 @@ class DCOMPTextureClientStub;
 class DCOMPTextureClientRequestValidator;
 
 
-class DCOMPTextureClient
+class GPU_EXPORT DCOMPTextureClient
     : public DCOMPTextureClientInterfaceBase {
  public:
   using IPCStableHashFunction = uint32_t(*)();
@@ -530,14 +534,14 @@ class DCOMPTextureClient
 #endif // !BUILDFLAG(IS_FUCHSIA)
   virtual ~DCOMPTextureClient() = default;
 
-  virtual void OnSharedImageMailboxBound(::gpu::mojom::MailboxPtr mailbox) = 0;
+  virtual void OnSharedImageMailboxBound(const ::gpu::Mailbox& mailbox) = 0;
 
-  virtual void OnOutputRectChange(const ::gfx::Rect& output_rect) = 0;
+  virtual void OnOutputRectChange(::gfx::mojom::RectPtr output_rect) = 0;
 };
 
 
 
-class  GpuChannelProxy
+class GPU_EXPORT GpuChannelProxy
     : public GpuChannel {
  public:
   using InterfaceType = GpuChannel;
@@ -548,11 +552,11 @@ class  GpuChannelProxy
   
   void TerminateForTesting() final;
   
-  bool GetChannelToken(::base::UnguessableToken* out_token) final;
+  bool GetChannelToken(::mojo_base::mojom::UnguessableTokenPtr* out_token) final;
   
   void GetChannelToken(GetChannelTokenCallback callback) final;
   
-  bool GetGPUInfo(::gpu::mojom::GpuInfoPtr* out_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities) final;
+  bool GetGPUInfo(::gpu::GPUInfo* out_gpu_info, ::gpu::GpuFeatureInfo* out_gpu_feature_info, ::gpu::SharedImageCapabilities* out_shared_image_capabilities) final;
   
   void GetGPUInfo(GetGPUInfoCallback callback) final;
   
@@ -564,7 +568,7 @@ class  GpuChannelProxy
   
   void GetSharedMemoryForFlushId(GetSharedMemoryForFlushIdCallback callback) final;
   
-  bool CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::mojom::ContextResult* out_result, ::gpu::mojom::CapabilitiesPtr* out_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities) final;
+  bool CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::ContextResult* out_result, ::gpu::Capabilities* out_capabilties, ::gpu::GLCapabilities* out_gl_capabilities) final;
   
   void CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, CreateCommandBufferCallback callback) final;
   
@@ -574,23 +578,23 @@ class  GpuChannelProxy
   
   void FlushDeferredRequests(std::vector<DeferredRequestPtr> requests, uint32_t flushed_deferred_message_id) final;
   
-  bool CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle) final;
+  bool CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle) final;
   
-  void CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) final;
+  void CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) final;
   
   bool CreateDCOMPTexture(int32_t route_id, ::mojo::PendingAssociatedReceiver<DCOMPTexture> receiver, bool* out_success) final;
   
   void CreateDCOMPTexture(int32_t route_id, ::mojo::PendingAssociatedReceiver<DCOMPTexture> receiver, CreateDCOMPTextureCallback callback) final;
   
-  bool WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, CommandBufferStatePtr* out_state) final;
+  bool WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state) final;
   
   void WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, WaitForTokenInRangeCallback callback) final;
   
-  bool WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, CommandBufferStatePtr* out_state) final;
+  bool WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state) final;
   
   void WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, WaitForGetOffsetInRangeCallback callback) final;
   
-  void CopyToGpuMemoryBufferAsync(::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) final;
+  void CopyToGpuMemoryBufferAsync(const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) final;
   
   void CopyNativeGmbToSharedMemoryAsync(::gfx::GpuMemoryBufferHandle buffer_handle, ::base::UnsafeSharedMemoryRegion shared_memory, CopyNativeGmbToSharedMemoryAsyncCallback callback) final;
 
@@ -600,7 +604,7 @@ class  GpuChannelProxy
 
 
 
-class  CommandBufferProxy
+class GPU_EXPORT CommandBufferProxy
     : public CommandBuffer {
  public:
   using InterfaceType = CommandBuffer;
@@ -625,7 +629,7 @@ class  CommandBufferProxy
 
 
 
-class  CommandBufferClientProxy
+class GPU_EXPORT CommandBufferClientProxy
     : public CommandBufferClient {
  public:
   using InterfaceType = CommandBufferClient;
@@ -636,11 +640,11 @@ class  CommandBufferClientProxy
   
   void OnGpuSwitched() final;
   
-  void OnDestroyed(::gpu::mojom::ContextLostReason reason, ::gpu::mojom::Error error) final;
+  void OnDestroyed(::gpu::error::ContextLostReason reason, ::gpu::error::Error error) final;
   
   void OnReturnData(const std::vector<uint8_t>& data) final;
   
-  void OnSignalAck(uint32_t signal_id, CommandBufferStatePtr state) final;
+  void OnSignalAck(uint32_t signal_id, const ::gpu::CommandBuffer::State& state) final;
 
  private:
   mojo::MessageReceiverWithResponder* receiver_;
@@ -648,7 +652,7 @@ class  CommandBufferClientProxy
 
 
 
-class  DCOMPTextureProxy
+class GPU_EXPORT DCOMPTextureProxy
     : public DCOMPTexture {
  public:
   using InterfaceType = DCOMPTexture;
@@ -659,7 +663,7 @@ class  DCOMPTextureProxy
   
   void SetTextureSize(const ::gfx::Size& size) final;
   
-  void SetDCOMPSurfaceHandle(const ::base::UnguessableToken& token, SetDCOMPSurfaceHandleCallback callback) final;
+  void SetDCOMPSurfaceHandle(::mojo_base::mojom::UnguessableTokenPtr token, SetDCOMPSurfaceHandleCallback callback) final;
 
  private:
   mojo::MessageReceiverWithResponder* receiver_;
@@ -667,21 +671,21 @@ class  DCOMPTextureProxy
 
 
 
-class  DCOMPTextureClientProxy
+class GPU_EXPORT DCOMPTextureClientProxy
     : public DCOMPTextureClient {
  public:
   using InterfaceType = DCOMPTextureClient;
 
   explicit DCOMPTextureClientProxy(mojo::MessageReceiverWithResponder* receiver);
   
-  void OnSharedImageMailboxBound(::gpu::mojom::MailboxPtr mailbox) final;
+  void OnSharedImageMailboxBound(const ::gpu::Mailbox& mailbox) final;
   
-  void OnOutputRectChange(const ::gfx::Rect& output_rect) final;
+  void OnOutputRectChange(::gfx::mojom::RectPtr output_rect) final;
 
  private:
   mojo::MessageReceiverWithResponder* receiver_;
 };
-class  GpuChannelStubDispatch {
+class GPU_EXPORT GpuChannelStubDispatch {
  public:
   static bool Accept(GpuChannel* impl, mojo::Message* message);
   static bool AcceptWithResponder(
@@ -722,7 +726,7 @@ class GpuChannelStub
  private:
   ImplPointerType sink_;
 };
-class  CommandBufferStubDispatch {
+class GPU_EXPORT CommandBufferStubDispatch {
  public:
   static bool Accept(CommandBuffer* impl, mojo::Message* message);
   static bool AcceptWithResponder(
@@ -763,7 +767,7 @@ class CommandBufferStub
  private:
   ImplPointerType sink_;
 };
-class  CommandBufferClientStubDispatch {
+class GPU_EXPORT CommandBufferClientStubDispatch {
  public:
   static bool Accept(CommandBufferClient* impl, mojo::Message* message);
   static bool AcceptWithResponder(
@@ -804,7 +808,7 @@ class CommandBufferClientStub
  private:
   ImplPointerType sink_;
 };
-class  DCOMPTextureStubDispatch {
+class GPU_EXPORT DCOMPTextureStubDispatch {
  public:
   static bool Accept(DCOMPTexture* impl, mojo::Message* message);
   static bool AcceptWithResponder(
@@ -845,7 +849,7 @@ class DCOMPTextureStub
  private:
   ImplPointerType sink_;
 };
-class  DCOMPTextureClientStubDispatch {
+class GPU_EXPORT DCOMPTextureClientStubDispatch {
  public:
   static bool Accept(DCOMPTextureClient* impl, mojo::Message* message);
   static bool AcceptWithResponder(
@@ -886,35 +890,35 @@ class DCOMPTextureClientStub
  private:
   ImplPointerType sink_;
 };
-class  GpuChannelRequestValidator : public mojo::MessageReceiver {
+class GPU_EXPORT GpuChannelRequestValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  CommandBufferRequestValidator : public mojo::MessageReceiver {
+class GPU_EXPORT CommandBufferRequestValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  CommandBufferClientRequestValidator : public mojo::MessageReceiver {
+class GPU_EXPORT CommandBufferClientRequestValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  DCOMPTextureRequestValidator : public mojo::MessageReceiver {
+class GPU_EXPORT DCOMPTextureRequestValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  DCOMPTextureClientRequestValidator : public mojo::MessageReceiver {
+class GPU_EXPORT DCOMPTextureClientRequestValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  GpuChannelResponseValidator : public mojo::MessageReceiver {
+class GPU_EXPORT GpuChannelResponseValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  CommandBufferResponseValidator : public mojo::MessageReceiver {
+class GPU_EXPORT CommandBufferResponseValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
-class  DCOMPTextureResponseValidator : public mojo::MessageReceiver {
+class GPU_EXPORT DCOMPTextureResponseValidator : public mojo::MessageReceiver {
  public:
   bool Accept(mojo::Message* message) override;
 };
@@ -923,7 +927,7 @@ class  DCOMPTextureResponseValidator : public mojo::MessageReceiver {
 
 
 
-class  RasterCreationAttribs {
+class GPU_EXPORT RasterCreationAttribs {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<RasterCreationAttribs, T>::value>;
@@ -1066,7 +1070,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  GLESCreationAttribs {
+class GPU_EXPORT GLESCreationAttribs {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<GLESCreationAttribs, T>::value>;
@@ -1093,9 +1097,9 @@ class  GLESCreationAttribs {
   GLESCreationAttribs();
 
   GLESCreationAttribs(
-      ::gl::mojom::GpuPreference gpu_preference,
+      ::gl::GpuPreference gpu_preference,
       bool fail_if_major_perf_caveat,
-      ::gpu::mojom::ContextType context_type);
+      ::gpu::ContextType context_type);
 
 
   ~GLESCreationAttribs();
@@ -1117,7 +1121,6 @@ class  GLESCreationAttribs {
 
   template <typename T, GLESCreationAttribs::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
-  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -1181,11 +1184,11 @@ class  GLESCreationAttribs {
   }
 
   
-  ::gl::mojom::GpuPreference gpu_preference;
+  ::gl::GpuPreference gpu_preference;
   
   bool fail_if_major_perf_caveat;
   
-  ::gpu::mojom::ContextType context_type;
+  ::gpu::ContextType context_type;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -1220,7 +1223,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  WebGPUCreationAttribs {
+class GPU_EXPORT WebGPUCreationAttribs {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<WebGPUCreationAttribs, T>::value>;
@@ -1381,7 +1384,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  ContextCreationAttribs {
+class GPU_EXPORT ContextCreationAttribs {
  public:
   using DataView = ContextCreationAttribsDataView;
   using Data_ = internal::ContextCreationAttribs_Data;
@@ -1442,7 +1445,6 @@ class  ContextCreationAttribs {
             typename std::enable_if<std::is_same<
                 T, ContextCreationAttribs>::value>::type* = nullptr>
   bool operator==(const T& rhs) const { return Equals(rhs); }
-  size_t Hash(size_t seed) const;
 
   Tag which() const {
     return tag_;
@@ -1538,7 +1540,7 @@ class  ContextCreationAttribs {
 
 
 
-class  DeferredRequestParams {
+class GPU_EXPORT DeferredRequestParams {
  public:
   using DataView = DeferredRequestParamsDataView;
   using Data_ = internal::DeferredRequestParams_Data;
@@ -1690,7 +1692,7 @@ class  DeferredRequestParams {
 
 
 
-class  DeferredCommandBufferRequestParams {
+class GPU_EXPORT DeferredCommandBufferRequestParams {
  public:
   using DataView = DeferredCommandBufferRequestParamsDataView;
   using Data_ = internal::DeferredCommandBufferRequestParams_Data;
@@ -1821,7 +1823,7 @@ class  DeferredCommandBufferRequestParams {
 
 
 
-class  DeferredSharedImageRequest {
+class GPU_EXPORT DeferredSharedImageRequest {
  public:
   using DataView = DeferredSharedImageRequestDataView;
   using Data_ = internal::DeferredSharedImageRequest_Data;
@@ -1861,7 +1863,7 @@ class  DeferredSharedImageRequest {
       CopyToGpuMemoryBufferParamsPtr value);
   // Construct an instance holding |destroy_shared_image|.
   static DeferredSharedImageRequestPtr NewDestroySharedImage(
-      ::gpu::mojom::MailboxPtr value);
+      const ::gpu::Mailbox& value);
   // Construct an instance holding |add_reference_to_shared_image|.
   static DeferredSharedImageRequestPtr NewAddReferenceToSharedImage(
       AddReferenceToSharedImageParamsPtr value);
@@ -1994,15 +1996,15 @@ class  DeferredSharedImageRequest {
   void set_copy_to_gpu_memory_buffer(CopyToGpuMemoryBufferParamsPtr copy_to_gpu_memory_buffer);
 
   bool is_destroy_shared_image() const { return tag_ == Tag::kDestroySharedImage; }
-  const ::gpu::mojom::MailboxPtr& get_destroy_shared_image() const {
+  const ::gpu::Mailbox& get_destroy_shared_image() const {
     CHECK(tag_ == Tag::kDestroySharedImage);
     return data_.destroy_shared_image;
   }
-  ::gpu::mojom::MailboxPtr& get_destroy_shared_image() {
+  ::gpu::Mailbox& get_destroy_shared_image() {
     CHECK(tag_ == Tag::kDestroySharedImage);
     return data_.destroy_shared_image;
   }
-  void set_destroy_shared_image(::gpu::mojom::MailboxPtr destroy_shared_image);
+  void set_destroy_shared_image(const ::gpu::Mailbox& destroy_shared_image);
 
   bool is_add_reference_to_shared_image() const { return tag_ == Tag::kAddReferenceToSharedImage; }
   const AddReferenceToSharedImageParamsPtr& get_add_reference_to_shared_image() const {
@@ -2113,7 +2115,7 @@ class  DeferredSharedImageRequest {
         CopyToGpuMemoryBufferParamsPtr value);
     Union_(
         std::in_place_index_t<static_cast<size_t>(Tag::kDestroySharedImage)>,
-        ::gpu::mojom::MailboxPtr value);
+        const ::gpu::Mailbox& value);
     Union_(
         std::in_place_index_t<static_cast<size_t>(Tag::kAddReferenceToSharedImage)>,
         AddReferenceToSharedImageParamsPtr value);
@@ -2142,7 +2144,7 @@ class  DeferredSharedImageRequest {
     ::base::ReadOnlySharedMemoryRegion register_upload_buffer;
     UpdateSharedImageParamsPtr update_shared_image;
     CopyToGpuMemoryBufferParamsPtr copy_to_gpu_memory_buffer;
-    ::gpu::mojom::MailboxPtr destroy_shared_image;
+    ::gpu::Mailbox destroy_shared_image;
     AddReferenceToSharedImageParamsPtr add_reference_to_shared_image;
     RegisterDxgiFenceParamsPtr register_dxgi_fence;
     UpdateDxgiFenceParamsPtr update_dxgi_fence;
@@ -2174,7 +2176,7 @@ class  DeferredSharedImageRequest {
       CopyToGpuMemoryBufferParamsPtr value);
   DeferredSharedImageRequest(
       std::in_place_index_t<static_cast<size_t>(Tag::kDestroySharedImage)>,
-      ::gpu::mojom::MailboxPtr value);
+      const ::gpu::Mailbox& value);
   DeferredSharedImageRequest(
       std::in_place_index_t<static_cast<size_t>(Tag::kAddReferenceToSharedImage)>,
       AddReferenceToSharedImageParamsPtr value);
@@ -2209,7 +2211,7 @@ class  DeferredSharedImageRequest {
 
 
 
-class  CreateCommandBufferParams {
+class GPU_EXPORT CreateCommandBufferParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CreateCommandBufferParams, T>::value>;
@@ -2237,9 +2239,9 @@ class  CreateCommandBufferParams {
 
   CreateCommandBufferParams(
       int32_t stream_id,
-      SchedulingPriority stream_priority,
+      ::gpu::SchedulingPriority stream_priority,
       ContextCreationAttribsPtr attribs,
-      const ::GURL& active_url,
+      const GURL& active_url,
       const std::string& label);
 
 CreateCommandBufferParams(const CreateCommandBufferParams&) = delete;
@@ -2329,11 +2331,11 @@ CreateCommandBufferParams& operator=(const CreateCommandBufferParams&) = delete;
   
   int32_t stream_id;
   
-  SchedulingPriority stream_priority;
+  ::gpu::SchedulingPriority stream_priority;
   
   ContextCreationAttribsPtr attribs;
   
-  ::GURL active_url;
+  GURL active_url;
   
   std::string label;
 
@@ -2370,7 +2372,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  CommandBufferState {
+class GPU_EXPORT CommandBufferState {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CommandBufferState, T>::value>;
@@ -2400,8 +2402,8 @@ class  CommandBufferState {
       int32_t get_offset,
       int32_t token,
       uint64_t release_count,
-      ::gpu::mojom::Error error,
-      ::gpu::mojom::ContextLostReason context_lost_reason,
+      ::gpu::error::Error error,
+      ::gpu::error::ContextLostReason context_lost_reason,
       uint32_t generation,
       uint32_t set_get_buffer_count);
 
@@ -2425,7 +2427,6 @@ class  CommandBufferState {
 
   template <typename T, CommandBufferState::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
-  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -2495,9 +2496,9 @@ class  CommandBufferState {
   
   uint64_t release_count;
   
-  ::gpu::mojom::Error error;
+  ::gpu::error::Error error;
   
-  ::gpu::mojom::ContextLostReason context_lost_reason;
+  ::gpu::error::ContextLostReason context_lost_reason;
   
   uint32_t generation;
   
@@ -2537,7 +2538,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  DeferredRequest {
+class GPU_EXPORT DeferredRequest {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<DeferredRequest, T>::value>;
@@ -2680,7 +2681,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  DeferredCommandBufferRequest {
+class GPU_EXPORT DeferredCommandBufferRequest {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<DeferredCommandBufferRequest, T>::value>;
@@ -2832,7 +2833,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  AsyncFlushParams {
+class GPU_EXPORT AsyncFlushParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<AsyncFlushParams, T>::value>;
@@ -2985,7 +2986,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  SharedImageInfo {
+class GPU_EXPORT SharedImageInfo {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<SharedImageInfo, T>::value>;
@@ -3012,11 +3013,9 @@ class  SharedImageInfo {
   SharedImageInfo();
 
   SharedImageInfo(
-      ::gpu::mojom::SharedImageMetadataPtr meta,
+      const ::gpu::SharedImageMetadata& meta,
       const std::string& debug_label);
 
-SharedImageInfo(const SharedImageInfo&) = delete;
-SharedImageInfo& operator=(const SharedImageInfo&) = delete;
 
   ~SharedImageInfo();
 
@@ -3100,7 +3099,7 @@ SharedImageInfo& operator=(const SharedImageInfo&) = delete;
   }
 
   
-  ::gpu::mojom::SharedImageMetadataPtr meta;
+  ::gpu::SharedImageMetadata meta;
   
   std::string debug_label;
 
@@ -3137,7 +3136,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  CreateSharedImageParams {
+class GPU_EXPORT CreateSharedImageParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CreateSharedImageParams, T>::value>;
@@ -3164,9 +3163,9 @@ class  CreateSharedImageParams {
   CreateSharedImageParams();
 
   CreateSharedImageParams(
-      ::gpu::mojom::MailboxPtr mailbox,
+      const ::gpu::Mailbox& mailbox,
       SharedImageInfoPtr si_info,
-      ::gpu::mojom::SharedImagePoolIdPtr pool_id);
+      const std::optional<::gpu::SharedImagePoolId>& pool_id);
 
 CreateSharedImageParams(const CreateSharedImageParams&) = delete;
 CreateSharedImageParams& operator=(const CreateSharedImageParams&) = delete;
@@ -3253,11 +3252,11 @@ CreateSharedImageParams& operator=(const CreateSharedImageParams&) = delete;
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
   SharedImageInfoPtr si_info;
   
-  ::gpu::mojom::SharedImagePoolIdPtr pool_id;
+  std::optional<::gpu::SharedImagePoolId> pool_id;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -3292,7 +3291,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  CreateSharedImageWithDataParams {
+class GPU_EXPORT CreateSharedImageWithDataParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CreateSharedImageWithDataParams, T>::value>;
@@ -3319,7 +3318,7 @@ class  CreateSharedImageWithDataParams {
   CreateSharedImageWithDataParams();
 
   CreateSharedImageWithDataParams(
-      ::gpu::mojom::MailboxPtr mailbox,
+      const ::gpu::Mailbox& mailbox,
       SharedImageInfoPtr si_info,
       uint32_t pixel_data_offset,
       uint32_t pixel_data_size,
@@ -3410,7 +3409,7 @@ CreateSharedImageWithDataParams& operator=(const CreateSharedImageWithDataParams
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
   SharedImageInfoPtr si_info;
   
@@ -3453,7 +3452,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  CreateSharedImageWithBufferParams {
+class GPU_EXPORT CreateSharedImageWithBufferParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CreateSharedImageWithBufferParams, T>::value>;
@@ -3480,10 +3479,10 @@ class  CreateSharedImageWithBufferParams {
   CreateSharedImageWithBufferParams();
 
   CreateSharedImageWithBufferParams(
-      ::gpu::mojom::MailboxPtr mailbox,
+      const ::gpu::Mailbox& mailbox,
       SharedImageInfoPtr si_info,
       ::gfx::GpuMemoryBufferHandle buffer_handle,
-      ::gpu::mojom::SharedImagePoolIdPtr pool_id);
+      const std::optional<::gpu::SharedImagePoolId>& pool_id);
 
 CreateSharedImageWithBufferParams(const CreateSharedImageWithBufferParams&) = delete;
 CreateSharedImageWithBufferParams& operator=(const CreateSharedImageWithBufferParams&) = delete;
@@ -3558,13 +3557,13 @@ CreateSharedImageWithBufferParams& operator=(const CreateSharedImageWithBufferPa
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
   SharedImageInfoPtr si_info;
   
   ::gfx::GpuMemoryBufferHandle buffer_handle;
   
-  ::gpu::mojom::SharedImagePoolIdPtr pool_id;
+  std::optional<::gpu::SharedImagePoolId> pool_id;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -3599,7 +3598,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  UpdateSharedImageParams {
+class GPU_EXPORT UpdateSharedImageParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<UpdateSharedImageParams, T>::value>;
@@ -3626,8 +3625,8 @@ class  UpdateSharedImageParams {
   UpdateSharedImageParams();
 
   UpdateSharedImageParams(
-      ::gpu::mojom::MailboxPtr mailbox,
-      std::optional<::gfx::GpuFenceHandle> in_fence_handle);
+      const ::gpu::Mailbox& mailbox,
+      ::gfx::GpuFenceHandle in_fence_handle);
 
 UpdateSharedImageParams(const UpdateSharedImageParams&) = delete;
 UpdateSharedImageParams& operator=(const UpdateSharedImageParams&) = delete;
@@ -3702,9 +3701,9 @@ UpdateSharedImageParams& operator=(const UpdateSharedImageParams&) = delete;
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
-  std::optional<::gfx::GpuFenceHandle> in_fence_handle;
+  ::gfx::GpuFenceHandle in_fence_handle;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -3739,7 +3738,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  AddReferenceToSharedImageParams {
+class GPU_EXPORT AddReferenceToSharedImageParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<AddReferenceToSharedImageParams, T>::value>;
@@ -3766,10 +3765,8 @@ class  AddReferenceToSharedImageParams {
   AddReferenceToSharedImageParams();
 
   explicit AddReferenceToSharedImageParams(
-      ::gpu::mojom::MailboxPtr mailbox);
+      const ::gpu::Mailbox& mailbox);
 
-AddReferenceToSharedImageParams(const AddReferenceToSharedImageParams&) = delete;
-AddReferenceToSharedImageParams& operator=(const AddReferenceToSharedImageParams&) = delete;
 
   ~AddReferenceToSharedImageParams();
 
@@ -3853,7 +3850,7 @@ AddReferenceToSharedImageParams& operator=(const AddReferenceToSharedImageParams
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -3888,7 +3885,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  CopyToGpuMemoryBufferParams {
+class GPU_EXPORT CopyToGpuMemoryBufferParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CopyToGpuMemoryBufferParams, T>::value>;
@@ -3915,10 +3912,8 @@ class  CopyToGpuMemoryBufferParams {
   CopyToGpuMemoryBufferParams();
 
   explicit CopyToGpuMemoryBufferParams(
-      ::gpu::mojom::MailboxPtr mailbox);
+      const ::gpu::Mailbox& mailbox);
 
-CopyToGpuMemoryBufferParams(const CopyToGpuMemoryBufferParams&) = delete;
-CopyToGpuMemoryBufferParams& operator=(const CopyToGpuMemoryBufferParams&) = delete;
 
   ~CopyToGpuMemoryBufferParams();
 
@@ -4002,7 +3997,7 @@ CopyToGpuMemoryBufferParams& operator=(const CopyToGpuMemoryBufferParams&) = del
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -4037,7 +4032,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  RegisterDxgiFenceParams {
+class GPU_EXPORT RegisterDxgiFenceParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<RegisterDxgiFenceParams, T>::value>;
@@ -4064,7 +4059,7 @@ class  RegisterDxgiFenceParams {
   RegisterDxgiFenceParams();
 
   RegisterDxgiFenceParams(
-      ::gpu::mojom::MailboxPtr mailbox,
+      const ::gpu::Mailbox& mailbox,
       const ::gfx::DXGIHandleToken& dxgi_token,
       ::gfx::GpuFenceHandle fence_handle);
 
@@ -4141,7 +4136,7 @@ RegisterDxgiFenceParams& operator=(const RegisterDxgiFenceParams&) = delete;
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
   ::gfx::DXGIHandleToken dxgi_token;
   
@@ -4180,7 +4175,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  UpdateDxgiFenceParams {
+class GPU_EXPORT UpdateDxgiFenceParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<UpdateDxgiFenceParams, T>::value>;
@@ -4207,12 +4202,10 @@ class  UpdateDxgiFenceParams {
   UpdateDxgiFenceParams();
 
   UpdateDxgiFenceParams(
-      ::gpu::mojom::MailboxPtr mailbox,
+      const ::gpu::Mailbox& mailbox,
       const ::gfx::DXGIHandleToken& dxgi_token,
       uint64_t fence_value);
 
-UpdateDxgiFenceParams(const UpdateDxgiFenceParams&) = delete;
-UpdateDxgiFenceParams& operator=(const UpdateDxgiFenceParams&) = delete;
 
   ~UpdateDxgiFenceParams();
 
@@ -4296,7 +4289,7 @@ UpdateDxgiFenceParams& operator=(const UpdateDxgiFenceParams&) = delete;
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
   ::gfx::DXGIHandleToken dxgi_token;
   
@@ -4335,7 +4328,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  UnregisterDxgiFenceParams {
+class GPU_EXPORT UnregisterDxgiFenceParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<UnregisterDxgiFenceParams, T>::value>;
@@ -4362,11 +4355,9 @@ class  UnregisterDxgiFenceParams {
   UnregisterDxgiFenceParams();
 
   UnregisterDxgiFenceParams(
-      ::gpu::mojom::MailboxPtr mailbox,
+      const ::gpu::Mailbox& mailbox,
       const ::gfx::DXGIHandleToken& dxgi_token);
 
-UnregisterDxgiFenceParams(const UnregisterDxgiFenceParams&) = delete;
-UnregisterDxgiFenceParams& operator=(const UnregisterDxgiFenceParams&) = delete;
 
   ~UnregisterDxgiFenceParams();
 
@@ -4450,7 +4441,7 @@ UnregisterDxgiFenceParams& operator=(const UnregisterDxgiFenceParams&) = delete;
   }
 
   
-  ::gpu::mojom::MailboxPtr mailbox;
+  ::gpu::Mailbox mailbox;
   
   ::gfx::DXGIHandleToken dxgi_token;
 
@@ -4487,7 +4478,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  CreateSharedImagePoolParams {
+class GPU_EXPORT CreateSharedImagePoolParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<CreateSharedImagePoolParams, T>::value>;
@@ -4514,7 +4505,7 @@ class  CreateSharedImagePoolParams {
   CreateSharedImagePoolParams();
 
   CreateSharedImagePoolParams(
-      ::gpu::mojom::SharedImagePoolIdPtr pool_id,
+      const ::gpu::SharedImagePoolId& pool_id,
       ::mojo::PendingRemote<::gpu::mojom::SharedImagePoolClientInterface> client_remote);
 
 CreateSharedImagePoolParams(const CreateSharedImagePoolParams&) = delete;
@@ -4590,7 +4581,7 @@ CreateSharedImagePoolParams& operator=(const CreateSharedImagePoolParams&) = del
   }
 
   
-  ::gpu::mojom::SharedImagePoolIdPtr pool_id;
+  ::gpu::SharedImagePoolId pool_id;
   
   ::mojo::PendingRemote<::gpu::mojom::SharedImagePoolClientInterface> client_remote;
 
@@ -4627,7 +4618,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  DestroySharedImagePoolParams {
+class GPU_EXPORT DestroySharedImagePoolParams {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<DestroySharedImagePoolParams, T>::value>;
@@ -4654,10 +4645,8 @@ class  DestroySharedImagePoolParams {
   DestroySharedImagePoolParams();
 
   explicit DestroySharedImagePoolParams(
-      ::gpu::mojom::SharedImagePoolIdPtr pool_id);
+      const ::gpu::SharedImagePoolId& pool_id);
 
-DestroySharedImagePoolParams(const DestroySharedImagePoolParams&) = delete;
-DestroySharedImagePoolParams& operator=(const DestroySharedImagePoolParams&) = delete;
 
   ~DestroySharedImagePoolParams();
 
@@ -4741,7 +4730,7 @@ DestroySharedImagePoolParams& operator=(const DestroySharedImagePoolParams&) = d
   }
 
   
-  ::gpu::mojom::SharedImagePoolIdPtr pool_id;
+  ::gpu::SharedImagePoolId pool_id;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -5630,7 +5619,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::gpu::mojom::RasterCreationAttribs::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::RasterCreationAttribs::DataView,
                                          ::gpu::mojom::RasterCreationAttribsPtr> {
   static bool IsNull(const ::gpu::mojom::RasterCreationAttribsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::RasterCreationAttribsPtr* output) { output->reset(); }
@@ -5640,7 +5629,7 @@ struct  StructTraits<::gpu::mojom::RasterCreationAttribs::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::GLESCreationAttribs::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::GLESCreationAttribs::DataView,
                                          ::gpu::mojom::GLESCreationAttribsPtr> {
   static bool IsNull(const ::gpu::mojom::GLESCreationAttribsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::GLESCreationAttribsPtr* output) { output->reset(); }
@@ -5665,7 +5654,7 @@ struct  StructTraits<::gpu::mojom::GLESCreationAttribs::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::WebGPUCreationAttribs::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::WebGPUCreationAttribs::DataView,
                                          ::gpu::mojom::WebGPUCreationAttribsPtr> {
   static bool IsNull(const ::gpu::mojom::WebGPUCreationAttribsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::WebGPUCreationAttribsPtr* output) { output->reset(); }
@@ -5675,7 +5664,7 @@ struct  StructTraits<::gpu::mojom::WebGPUCreationAttribs::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CreateCommandBufferParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CreateCommandBufferParams::DataView,
                                          ::gpu::mojom::CreateCommandBufferParamsPtr> {
   static bool IsNull(const ::gpu::mojom::CreateCommandBufferParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CreateCommandBufferParamsPtr* output) { output->reset(); }
@@ -5710,7 +5699,7 @@ struct  StructTraits<::gpu::mojom::CreateCommandBufferParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CommandBufferState::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CommandBufferState::DataView,
                                          ::gpu::mojom::CommandBufferStatePtr> {
   static bool IsNull(const ::gpu::mojom::CommandBufferStatePtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CommandBufferStatePtr* output) { output->reset(); }
@@ -5755,7 +5744,7 @@ struct  StructTraits<::gpu::mojom::CommandBufferState::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::DeferredRequest::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::DeferredRequest::DataView,
                                          ::gpu::mojom::DeferredRequestPtr> {
   static bool IsNull(const ::gpu::mojom::DeferredRequestPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::DeferredRequestPtr* output) { output->reset(); }
@@ -5780,7 +5769,7 @@ struct  StructTraits<::gpu::mojom::DeferredRequest::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::DeferredCommandBufferRequest::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::DeferredCommandBufferRequest::DataView,
                                          ::gpu::mojom::DeferredCommandBufferRequestPtr> {
   static bool IsNull(const ::gpu::mojom::DeferredCommandBufferRequestPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::DeferredCommandBufferRequestPtr* output) { output->reset(); }
@@ -5800,7 +5789,7 @@ struct  StructTraits<::gpu::mojom::DeferredCommandBufferRequest::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::AsyncFlushParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::AsyncFlushParams::DataView,
                                          ::gpu::mojom::AsyncFlushParamsPtr> {
   static bool IsNull(const ::gpu::mojom::AsyncFlushParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::AsyncFlushParamsPtr* output) { output->reset(); }
@@ -5825,7 +5814,7 @@ struct  StructTraits<::gpu::mojom::AsyncFlushParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::SharedImageInfo::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::SharedImageInfo::DataView,
                                          ::gpu::mojom::SharedImageInfoPtr> {
   static bool IsNull(const ::gpu::mojom::SharedImageInfoPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::SharedImageInfoPtr* output) { output->reset(); }
@@ -5845,7 +5834,7 @@ struct  StructTraits<::gpu::mojom::SharedImageInfo::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CreateSharedImageParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CreateSharedImageParams::DataView,
                                          ::gpu::mojom::CreateSharedImageParamsPtr> {
   static bool IsNull(const ::gpu::mojom::CreateSharedImageParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CreateSharedImageParamsPtr* output) { output->reset(); }
@@ -5870,7 +5859,7 @@ struct  StructTraits<::gpu::mojom::CreateSharedImageParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CreateSharedImageWithDataParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CreateSharedImageWithDataParams::DataView,
                                          ::gpu::mojom::CreateSharedImageWithDataParamsPtr> {
   static bool IsNull(const ::gpu::mojom::CreateSharedImageWithDataParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CreateSharedImageWithDataParamsPtr* output) { output->reset(); }
@@ -5905,7 +5894,7 @@ struct  StructTraits<::gpu::mojom::CreateSharedImageWithDataParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CreateSharedImageWithBufferParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CreateSharedImageWithBufferParams::DataView,
                                          ::gpu::mojom::CreateSharedImageWithBufferParamsPtr> {
   static bool IsNull(const ::gpu::mojom::CreateSharedImageWithBufferParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CreateSharedImageWithBufferParamsPtr* output) { output->reset(); }
@@ -5935,7 +5924,7 @@ struct  StructTraits<::gpu::mojom::CreateSharedImageWithBufferParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::UpdateSharedImageParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::UpdateSharedImageParams::DataView,
                                          ::gpu::mojom::UpdateSharedImageParamsPtr> {
   static bool IsNull(const ::gpu::mojom::UpdateSharedImageParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::UpdateSharedImageParamsPtr* output) { output->reset(); }
@@ -5955,7 +5944,7 @@ struct  StructTraits<::gpu::mojom::UpdateSharedImageParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::AddReferenceToSharedImageParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::AddReferenceToSharedImageParams::DataView,
                                          ::gpu::mojom::AddReferenceToSharedImageParamsPtr> {
   static bool IsNull(const ::gpu::mojom::AddReferenceToSharedImageParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::AddReferenceToSharedImageParamsPtr* output) { output->reset(); }
@@ -5970,7 +5959,7 @@ struct  StructTraits<::gpu::mojom::AddReferenceToSharedImageParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CopyToGpuMemoryBufferParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CopyToGpuMemoryBufferParams::DataView,
                                          ::gpu::mojom::CopyToGpuMemoryBufferParamsPtr> {
   static bool IsNull(const ::gpu::mojom::CopyToGpuMemoryBufferParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CopyToGpuMemoryBufferParamsPtr* output) { output->reset(); }
@@ -5985,7 +5974,7 @@ struct  StructTraits<::gpu::mojom::CopyToGpuMemoryBufferParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::RegisterDxgiFenceParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::RegisterDxgiFenceParams::DataView,
                                          ::gpu::mojom::RegisterDxgiFenceParamsPtr> {
   static bool IsNull(const ::gpu::mojom::RegisterDxgiFenceParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::RegisterDxgiFenceParamsPtr* output) { output->reset(); }
@@ -6010,7 +5999,7 @@ struct  StructTraits<::gpu::mojom::RegisterDxgiFenceParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::UpdateDxgiFenceParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::UpdateDxgiFenceParams::DataView,
                                          ::gpu::mojom::UpdateDxgiFenceParamsPtr> {
   static bool IsNull(const ::gpu::mojom::UpdateDxgiFenceParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::UpdateDxgiFenceParamsPtr* output) { output->reset(); }
@@ -6035,7 +6024,7 @@ struct  StructTraits<::gpu::mojom::UpdateDxgiFenceParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::UnregisterDxgiFenceParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::UnregisterDxgiFenceParams::DataView,
                                          ::gpu::mojom::UnregisterDxgiFenceParamsPtr> {
   static bool IsNull(const ::gpu::mojom::UnregisterDxgiFenceParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::UnregisterDxgiFenceParamsPtr* output) { output->reset(); }
@@ -6055,7 +6044,7 @@ struct  StructTraits<::gpu::mojom::UnregisterDxgiFenceParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::CreateSharedImagePoolParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::CreateSharedImagePoolParams::DataView,
                                          ::gpu::mojom::CreateSharedImagePoolParamsPtr> {
   static bool IsNull(const ::gpu::mojom::CreateSharedImagePoolParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::CreateSharedImagePoolParamsPtr* output) { output->reset(); }
@@ -6075,7 +6064,7 @@ struct  StructTraits<::gpu::mojom::CreateSharedImagePoolParams::DataView,
 
 
 template <>
-struct  StructTraits<::gpu::mojom::DestroySharedImagePoolParams::DataView,
+struct GPU_EXPORT StructTraits<::gpu::mojom::DestroySharedImagePoolParams::DataView,
                                          ::gpu::mojom::DestroySharedImagePoolParamsPtr> {
   static bool IsNull(const ::gpu::mojom::DestroySharedImagePoolParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::DestroySharedImagePoolParamsPtr* output) { output->reset(); }
@@ -6090,7 +6079,7 @@ struct  StructTraits<::gpu::mojom::DestroySharedImagePoolParams::DataView,
 
 
 template <>
-struct  UnionTraits<::gpu::mojom::ContextCreationAttribs::DataView,
+struct GPU_EXPORT UnionTraits<::gpu::mojom::ContextCreationAttribs::DataView,
                                         ::gpu::mojom::ContextCreationAttribsPtr> {
   static bool IsNull(const ::gpu::mojom::ContextCreationAttribsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::ContextCreationAttribsPtr* output) { output->reset(); }
@@ -6116,7 +6105,7 @@ struct  UnionTraits<::gpu::mojom::ContextCreationAttribs::DataView,
 
 
 template <>
-struct  UnionTraits<::gpu::mojom::DeferredRequestParams::DataView,
+struct GPU_EXPORT UnionTraits<::gpu::mojom::DeferredRequestParams::DataView,
                                         ::gpu::mojom::DeferredRequestParamsPtr> {
   static bool IsNull(const ::gpu::mojom::DeferredRequestParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::DeferredRequestParamsPtr* output) { output->reset(); }
@@ -6142,7 +6131,7 @@ struct  UnionTraits<::gpu::mojom::DeferredRequestParams::DataView,
 
 
 template <>
-struct  UnionTraits<::gpu::mojom::DeferredCommandBufferRequestParams::DataView,
+struct GPU_EXPORT UnionTraits<::gpu::mojom::DeferredCommandBufferRequestParams::DataView,
                                         ::gpu::mojom::DeferredCommandBufferRequestParamsPtr> {
   static bool IsNull(const ::gpu::mojom::DeferredCommandBufferRequestParamsPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::DeferredCommandBufferRequestParamsPtr* output) { output->reset(); }
@@ -6164,7 +6153,7 @@ struct  UnionTraits<::gpu::mojom::DeferredCommandBufferRequestParams::DataView,
 
 
 template <>
-struct  UnionTraits<::gpu::mojom::DeferredSharedImageRequest::DataView,
+struct GPU_EXPORT UnionTraits<::gpu::mojom::DeferredSharedImageRequest::DataView,
                                         ::gpu::mojom::DeferredSharedImageRequestPtr> {
   static bool IsNull(const ::gpu::mojom::DeferredSharedImageRequestPtr& input) { return !input; }
   static void SetToNull(::gpu::mojom::DeferredSharedImageRequestPtr* output) { output->reset(); }
@@ -6201,7 +6190,7 @@ struct  UnionTraits<::gpu::mojom::DeferredSharedImageRequest::DataView,
     return input->get_copy_to_gpu_memory_buffer();
   }
 
-  static const ::gpu::mojom::MailboxPtr& destroy_shared_image(const ::gpu::mojom::DeferredSharedImageRequestPtr& input) {
+  static const ::gpu::Mailbox& destroy_shared_image(const ::gpu::mojom::DeferredSharedImageRequestPtr& input) {
     return input->get_destroy_shared_image();
   }
 

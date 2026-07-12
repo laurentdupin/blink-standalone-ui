@@ -36,8 +36,11 @@
 #include "gpu/command_buffer/client/raster_implementation.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
+#include "gpu/command_buffer/client/webgpu_interface.h"
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
 #include "gpu/command_buffer/client/webgpu_cmd_helper.h"
 #include "gpu/command_buffer/client/webgpu_implementation.h"
+#endif
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/skia_utils.h"
 #include "gpu/config/skia_limits.h"
@@ -268,6 +271,7 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentSequence() {
 
   switch (attributes_->which()) {
     case gpu::mojom::ContextCreationAttribs::Tag::kWebgpu: {
+#if HTML_CSS_RENDERER_ENABLE_WEBGPU
       auto webgpu_helper =
           std::make_unique<gpu::webgpu::WebGPUCmdHelper>(command_buffer_.get());
       webgpu_helper->SetAutomaticFlushes(automatic_flushes_);
@@ -304,6 +308,10 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentSequence() {
       webgpu_interface_ = std::move(webgpu_impl);
       transfer_buffer_ = std::move(transfer_buffer);
       helper_ = std::move(webgpu_helper);
+#else
+      bind_result_ = gpu::ContextResult::kFatalFailure;
+      return bind_result_;
+#endif
     } break;
     case gpu::mojom::ContextCreationAttribs::Tag::kRaster: {
       // The raster helper writes the command buffer protocol.

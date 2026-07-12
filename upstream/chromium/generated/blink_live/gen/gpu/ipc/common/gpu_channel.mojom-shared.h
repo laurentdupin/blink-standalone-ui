@@ -56,6 +56,7 @@
 #include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
 
 #include "gpu/ipc/common/gpu_channel.mojom-data-view.h"  // IWYU pragma: export
+#include "gpu/gpu_export.h"
 
 
 
@@ -2207,7 +2208,7 @@ inline void DeferredSharedImageRequestDataView::GetDestroySharedImagePoolDataVie
 namespace perfetto {
 
 template <>
-struct  TraceFormatTraits<::gpu::mojom::SchedulingPriority> {
+struct GPU_EXPORT TraceFormatTraits<::gpu::mojom::SchedulingPriority> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::gpu::mojom::SchedulingPriority value);
 };
 

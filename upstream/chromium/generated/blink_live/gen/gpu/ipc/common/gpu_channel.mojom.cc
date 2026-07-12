@@ -39,18 +39,6 @@
 
 #include "gpu/ipc/common/gpu_channel.mojom-import-headers.h"
 #include "gpu/ipc/common/gpu_channel.mojom-test-utils.h"
-#include "gpu/ipc/common/sync_token_mojom_traits.h"
-#include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
-#include "mojo/public/cpp/base/time_mojom_traits.h"
-#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
-#include "skia/public/mojom/image_info_mojom_traits.h"
-#include "skia/public/mojom/surface_origin_mojom_traits.h"
-#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
-#include "ui/gfx/mojom/buffer_types_mojom_traits.h"
-#include "ui/gfx/mojom/color_space_mojom_traits.h"
-#include "ui/gfx/mojom/gpu_fence_handle_mojom_traits.h"
-#include "ui/gfx/mojom/native_handle_types_mojom_traits.h"
-#include "url/mojom/url_gurl_mojom_traits.h"
 
 
 namespace gpu::mojom {
@@ -72,25 +60,19 @@ bool RasterCreationAttribs::Validate(
   return Data_::Validate(data, validation_context);
 }
 GLESCreationAttribs::GLESCreationAttribs()
-    : gpu_preference(::gl::mojom::GpuPreference::kLowPower),
+    : gpu_preference(mojo::internal::ConvertEnumValue<::gl::mojom::GpuPreference, ::gl::GpuPreference>(::gl::mojom::GpuPreference::kLowPower)),
       fail_if_major_perf_caveat(false),
-      context_type(::gpu::mojom::ContextType::kOpenGLES2) {}
+      context_type(mojo::internal::ConvertEnumValue<::gpu::mojom::ContextType, ::gpu::ContextType>(::gpu::mojom::ContextType::kOpenGLES2)) {}
 
 GLESCreationAttribs::GLESCreationAttribs(
-    ::gl::mojom::GpuPreference gpu_preference_in,
+    ::gl::GpuPreference gpu_preference_in,
     bool fail_if_major_perf_caveat_in,
-    ::gpu::mojom::ContextType context_type_in)
+    ::gpu::ContextType context_type_in)
     : gpu_preference(std::move(gpu_preference_in)),
       fail_if_major_perf_caveat(std::move(fail_if_major_perf_caveat_in)),
       context_type(std::move(context_type_in)) {}
 
 GLESCreationAttribs::~GLESCreationAttribs() = default;
-size_t GLESCreationAttribs::Hash(size_t seed) const {
-  seed = mojo::internal::Hash(seed, this->gpu_preference);
-  seed = mojo::internal::Hash(seed, this->fail_if_major_perf_caveat);
-  seed = mojo::internal::Hash(seed, this->context_type);
-  return seed;
-}
 
 void GLESCreationAttribs::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
@@ -99,7 +81,7 @@ void GLESCreationAttribs::WriteIntoTrace(
     dict.AddItem(
       "gpu_preference"), this->gpu_preference,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gl::mojom::GpuPreference>"
+      "<value of type ::gl::GpuPreference>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -117,7 +99,7 @@ void GLESCreationAttribs::WriteIntoTrace(
     dict.AddItem(
       "context_type"), this->context_type,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::ContextType>"
+      "<value of type ::gpu::ContextType>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -155,9 +137,9 @@ CreateCommandBufferParams::CreateCommandBufferParams()
 
 CreateCommandBufferParams::CreateCommandBufferParams(
     int32_t stream_id_in,
-    SchedulingPriority stream_priority_in,
+    ::gpu::SchedulingPriority stream_priority_in,
     ContextCreationAttribsPtr attribs_in,
-    const ::GURL& active_url_in,
+    const GURL& active_url_in,
     const std::string& label_in)
     : stream_id(std::move(stream_id_in)),
       stream_priority(std::move(stream_priority_in)),
@@ -183,7 +165,7 @@ void CreateCommandBufferParams::WriteIntoTrace(
     dict.AddItem(
       "stream_priority"), this->stream_priority,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type SchedulingPriority>"
+      "<value of type ::gpu::SchedulingPriority>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -201,7 +183,7 @@ void CreateCommandBufferParams::WriteIntoTrace(
     dict.AddItem(
       "active_url"), this->active_url,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type const ::GURL&>"
+      "<value of type const GURL&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -235,8 +217,8 @@ CommandBufferState::CommandBufferState(
     int32_t get_offset_in,
     int32_t token_in,
     uint64_t release_count_in,
-    ::gpu::mojom::Error error_in,
-    ::gpu::mojom::ContextLostReason context_lost_reason_in,
+    ::gpu::error::Error error_in,
+    ::gpu::error::ContextLostReason context_lost_reason_in,
     uint32_t generation_in,
     uint32_t set_get_buffer_count_in)
     : get_offset(std::move(get_offset_in)),
@@ -248,16 +230,6 @@ CommandBufferState::CommandBufferState(
       set_get_buffer_count(std::move(set_get_buffer_count_in)) {}
 
 CommandBufferState::~CommandBufferState() = default;
-size_t CommandBufferState::Hash(size_t seed) const {
-  seed = mojo::internal::Hash(seed, this->get_offset);
-  seed = mojo::internal::Hash(seed, this->token);
-  seed = mojo::internal::Hash(seed, this->release_count);
-  seed = mojo::internal::Hash(seed, this->error);
-  seed = mojo::internal::Hash(seed, this->context_lost_reason);
-  seed = mojo::internal::Hash(seed, this->generation);
-  seed = mojo::internal::Hash(seed, this->set_get_buffer_count);
-  return seed;
-}
 
 void CommandBufferState::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
@@ -293,7 +265,7 @@ void CommandBufferState::WriteIntoTrace(
     dict.AddItem(
       "error"), this->error,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::Error>"
+      "<value of type ::gpu::error::Error>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -302,7 +274,7 @@ void CommandBufferState::WriteIntoTrace(
     dict.AddItem(
       "context_lost_reason"), this->context_lost_reason,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::ContextLostReason>"
+      "<value of type ::gpu::error::ContextLostReason>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -481,7 +453,7 @@ SharedImageInfo::SharedImageInfo()
       debug_label() {}
 
 SharedImageInfo::SharedImageInfo(
-    ::gpu::mojom::SharedImageMetadataPtr meta_in,
+    const ::gpu::SharedImageMetadata& meta_in,
     const std::string& debug_label_in)
     : meta(std::move(meta_in)),
       debug_label(std::move(debug_label_in)) {}
@@ -495,7 +467,7 @@ void SharedImageInfo::WriteIntoTrace(
     dict.AddItem(
       "meta"), this->meta,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::SharedImageMetadataPtr>"
+      "<value of type const ::gpu::SharedImageMetadata&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -522,9 +494,9 @@ CreateSharedImageParams::CreateSharedImageParams()
       pool_id() {}
 
 CreateSharedImageParams::CreateSharedImageParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const ::gpu::Mailbox& mailbox_in,
     SharedImageInfoPtr si_info_in,
-    ::gpu::mojom::SharedImagePoolIdPtr pool_id_in)
+    const std::optional<::gpu::SharedImagePoolId>& pool_id_in)
     : mailbox(std::move(mailbox_in)),
       si_info(std::move(si_info_in)),
       pool_id(std::move(pool_id_in)) {}
@@ -538,7 +510,7 @@ void CreateSharedImageParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -556,7 +528,7 @@ void CreateSharedImageParams::WriteIntoTrace(
     dict.AddItem(
       "pool_id"), this->pool_id,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::SharedImagePoolIdPtr>"
+      "<value of type const std::optional<::gpu::SharedImagePoolId>&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -576,7 +548,7 @@ CreateSharedImageWithDataParams::CreateSharedImageWithDataParams()
       done_with_shm() {}
 
 CreateSharedImageWithDataParams::CreateSharedImageWithDataParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const ::gpu::Mailbox& mailbox_in,
     SharedImageInfoPtr si_info_in,
     uint32_t pixel_data_offset_in,
     uint32_t pixel_data_size_in,
@@ -596,7 +568,7 @@ void CreateSharedImageWithDataParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -651,10 +623,10 @@ CreateSharedImageWithBufferParams::CreateSharedImageWithBufferParams()
       pool_id() {}
 
 CreateSharedImageWithBufferParams::CreateSharedImageWithBufferParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const ::gpu::Mailbox& mailbox_in,
     SharedImageInfoPtr si_info_in,
     ::gfx::GpuMemoryBufferHandle buffer_handle_in,
-    ::gpu::mojom::SharedImagePoolIdPtr pool_id_in)
+    const std::optional<::gpu::SharedImagePoolId>& pool_id_in)
     : mailbox(std::move(mailbox_in)),
       si_info(std::move(si_info_in)),
       buffer_handle(std::move(buffer_handle_in)),
@@ -669,7 +641,7 @@ void CreateSharedImageWithBufferParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -696,7 +668,7 @@ void CreateSharedImageWithBufferParams::WriteIntoTrace(
     dict.AddItem(
       "pool_id"), this->pool_id,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::SharedImagePoolIdPtr>"
+      "<value of type const std::optional<::gpu::SharedImagePoolId>&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -713,8 +685,8 @@ UpdateSharedImageParams::UpdateSharedImageParams()
       in_fence_handle() {}
 
 UpdateSharedImageParams::UpdateSharedImageParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
-    std::optional<::gfx::GpuFenceHandle> in_fence_handle_in)
+    const ::gpu::Mailbox& mailbox_in,
+    ::gfx::GpuFenceHandle in_fence_handle_in)
     : mailbox(std::move(mailbox_in)),
       in_fence_handle(std::move(in_fence_handle_in)) {}
 
@@ -727,7 +699,7 @@ void UpdateSharedImageParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -736,7 +708,7 @@ void UpdateSharedImageParams::WriteIntoTrace(
     dict.AddItem(
       "in_fence_handle"), this->in_fence_handle,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type std::optional<::gfx::GpuFenceHandle>>"
+      "<value of type ::gfx::GpuFenceHandle>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -752,7 +724,7 @@ AddReferenceToSharedImageParams::AddReferenceToSharedImageParams()
     : mailbox() {}
 
 AddReferenceToSharedImageParams::AddReferenceToSharedImageParams(
-    ::gpu::mojom::MailboxPtr mailbox_in)
+    const ::gpu::Mailbox& mailbox_in)
     : mailbox(std::move(mailbox_in)) {}
 
 AddReferenceToSharedImageParams::~AddReferenceToSharedImageParams() = default;
@@ -764,7 +736,7 @@ void AddReferenceToSharedImageParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -780,7 +752,7 @@ CopyToGpuMemoryBufferParams::CopyToGpuMemoryBufferParams()
     : mailbox() {}
 
 CopyToGpuMemoryBufferParams::CopyToGpuMemoryBufferParams(
-    ::gpu::mojom::MailboxPtr mailbox_in)
+    const ::gpu::Mailbox& mailbox_in)
     : mailbox(std::move(mailbox_in)) {}
 
 CopyToGpuMemoryBufferParams::~CopyToGpuMemoryBufferParams() = default;
@@ -792,7 +764,7 @@ void CopyToGpuMemoryBufferParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -810,7 +782,7 @@ RegisterDxgiFenceParams::RegisterDxgiFenceParams()
       fence_handle() {}
 
 RegisterDxgiFenceParams::RegisterDxgiFenceParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const ::gpu::Mailbox& mailbox_in,
     const ::gfx::DXGIHandleToken& dxgi_token_in,
     ::gfx::GpuFenceHandle fence_handle_in)
     : mailbox(std::move(mailbox_in)),
@@ -826,7 +798,7 @@ void RegisterDxgiFenceParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -862,7 +834,7 @@ UpdateDxgiFenceParams::UpdateDxgiFenceParams()
       fence_value() {}
 
 UpdateDxgiFenceParams::UpdateDxgiFenceParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const ::gpu::Mailbox& mailbox_in,
     const ::gfx::DXGIHandleToken& dxgi_token_in,
     uint64_t fence_value_in)
     : mailbox(std::move(mailbox_in)),
@@ -878,7 +850,7 @@ void UpdateDxgiFenceParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -913,7 +885,7 @@ UnregisterDxgiFenceParams::UnregisterDxgiFenceParams()
       dxgi_token() {}
 
 UnregisterDxgiFenceParams::UnregisterDxgiFenceParams(
-    ::gpu::mojom::MailboxPtr mailbox_in,
+    const ::gpu::Mailbox& mailbox_in,
     const ::gfx::DXGIHandleToken& dxgi_token_in)
     : mailbox(std::move(mailbox_in)),
       dxgi_token(std::move(dxgi_token_in)) {}
@@ -927,7 +899,7 @@ void UnregisterDxgiFenceParams::WriteIntoTrace(
     dict.AddItem(
       "mailbox"), this->mailbox,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::MailboxPtr>"
+      "<value of type const ::gpu::Mailbox&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -953,7 +925,7 @@ CreateSharedImagePoolParams::CreateSharedImagePoolParams()
       client_remote() {}
 
 CreateSharedImagePoolParams::CreateSharedImagePoolParams(
-    ::gpu::mojom::SharedImagePoolIdPtr pool_id_in,
+    const ::gpu::SharedImagePoolId& pool_id_in,
     ::mojo::PendingRemote<::gpu::mojom::SharedImagePoolClientInterface> client_remote_in)
     : pool_id(std::move(pool_id_in)),
       client_remote(std::move(client_remote_in)) {}
@@ -967,7 +939,7 @@ void CreateSharedImagePoolParams::WriteIntoTrace(
     dict.AddItem(
       "pool_id"), this->pool_id,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::SharedImagePoolIdPtr>"
+      "<value of type const ::gpu::SharedImagePoolId&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -992,7 +964,7 @@ DestroySharedImagePoolParams::DestroySharedImagePoolParams()
     : pool_id() {}
 
 DestroySharedImagePoolParams::DestroySharedImagePoolParams(
-    ::gpu::mojom::SharedImagePoolIdPtr pool_id_in)
+    const ::gpu::SharedImagePoolId& pool_id_in)
     : pool_id(std::move(pool_id_in)) {}
 
 DestroySharedImagePoolParams::~DestroySharedImagePoolParams() = default;
@@ -1004,7 +976,7 @@ void DestroySharedImagePoolParams::WriteIntoTrace(
     dict.AddItem(
       "pool_id"), this->pool_id,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type ::gpu::mojom::SharedImagePoolIdPtr>"
+      "<value of type const ::gpu::SharedImagePoolId&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -1128,20 +1100,6 @@ void ContextCreationAttribs::DestroyActive() {
     case Tag::kWebgpu:
       std::destroy_at(&data_.webgpu);
       break;
-  }
-}
-size_t ContextCreationAttribs::Hash(size_t seed) const {
-  seed = mojo::internal::HashCombine(seed, static_cast<uint32_t>(tag_));
-  switch (tag_) {
-
-    case Tag::kGles:
-      return mojo::internal::Hash(seed, data_.gles);
-    case Tag::kRaster:
-      return mojo::internal::Hash(seed, data_.raster);
-    case Tag::kWebgpu:
-      return mojo::internal::Hash(seed, data_.webgpu);
-    default:
-      NOTREACHED();
   }
 }
 
@@ -1414,7 +1372,7 @@ DeferredSharedImageRequest::NewCopyToGpuMemoryBuffer(
 
 DeferredSharedImageRequestPtr
 DeferredSharedImageRequest::NewDestroySharedImage(
-    ::gpu::mojom::MailboxPtr value) {
+    const ::gpu::Mailbox& value) {
   return DeferredSharedImageRequestPtr(
       std::in_place,
       std::in_place_index<static_cast<size_t>(Tag::kDestroySharedImage)>,
@@ -1526,7 +1484,7 @@ DeferredSharedImageRequest::DeferredSharedImageRequest(
 
 DeferredSharedImageRequest::DeferredSharedImageRequest(
     std::in_place_index_t<static_cast<size_t>(Tag::kDestroySharedImage)>,
-    ::gpu::mojom::MailboxPtr value)
+    const ::gpu::Mailbox& value)
     : tag_(Tag::kDestroySharedImage),
       data_(std::in_place_index<static_cast<size_t>(Tag::kDestroySharedImage)>,
             std::move(value)) {}
@@ -1650,13 +1608,13 @@ void DeferredSharedImageRequest::set_copy_to_gpu_memory_buffer(CopyToGpuMemoryBu
   }
 }
 
-void DeferredSharedImageRequest::set_destroy_shared_image(::gpu::mojom::MailboxPtr destroy_shared_image) {
+void DeferredSharedImageRequest::set_destroy_shared_image(const ::gpu::Mailbox& destroy_shared_image) {
   if (tag_ == Tag::kDestroySharedImage) {
     data_.destroy_shared_image = std::move(destroy_shared_image);
   } else {
     DestroyActive();
     tag_ = Tag::kDestroySharedImage;
-    new (&data_.destroy_shared_image) ::gpu::mojom::MailboxPtr(
+    new (&data_.destroy_shared_image) ::gpu::Mailbox(
         std::move(destroy_shared_image));
   }
 }
@@ -1765,7 +1723,7 @@ DeferredSharedImageRequest::Union_::Union_(
 
 DeferredSharedImageRequest::Union_::Union_(
     std::in_place_index_t<static_cast<size_t>(Tag::kDestroySharedImage)>,
-    ::gpu::mojom::MailboxPtr value)
+    const ::gpu::Mailbox& value)
     : destroy_shared_image(std::move(value)) {}
 
 DeferredSharedImageRequest::Union_::Union_(
@@ -2170,10 +2128,10 @@ uint32_t GpuChannel::CopyNativeGmbToSharedMemoryAsync_Sym::IPCStableHash() {
   return hash;
 }
 # endif // !BUILDFLAG(IS_FUCHSIA)
-bool GpuChannel::GetChannelToken(::base::UnguessableToken* out_token) {
+bool GpuChannel::GetChannelToken(::mojo_base::mojom::UnguessableTokenPtr* out_token) {
   NOTREACHED();
 }
-bool GpuChannel::GetGPUInfo(::gpu::mojom::GpuInfoPtr* out_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities) {
+bool GpuChannel::GetGPUInfo(::gpu::GPUInfo* out_gpu_info, ::gpu::GpuFeatureInfo* out_gpu_feature_info, ::gpu::SharedImageCapabilities* out_shared_image_capabilities) {
   NOTREACHED();
 }
 bool GpuChannel::Flush() {
@@ -2182,29 +2140,29 @@ bool GpuChannel::Flush() {
 bool GpuChannel::GetSharedMemoryForFlushId(::base::ReadOnlySharedMemoryRegion* out_version_buffer) {
   NOTREACHED();
 }
-bool GpuChannel::CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::mojom::ContextResult* out_result, ::gpu::mojom::CapabilitiesPtr* out_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities) {
+bool GpuChannel::CreateCommandBuffer(CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::ContextResult* out_result, ::gpu::Capabilities* out_capabilties, ::gpu::GLCapabilities* out_gl_capabilities) {
   NOTREACHED();
 }
 bool GpuChannel::DestroyCommandBuffer(int32_t routing_id) {
   NOTREACHED();
 }
-bool GpuChannel::CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle) {
+bool GpuChannel::CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle) {
   NOTREACHED();
 }
 bool GpuChannel::CreateDCOMPTexture(int32_t route_id, ::mojo::PendingAssociatedReceiver<DCOMPTexture> receiver, bool* out_success) {
   NOTREACHED();
 }
-bool GpuChannel::WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, CommandBufferStatePtr* out_state) {
+bool GpuChannel::WaitForTokenInRange(int32_t routing_id, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state) {
   NOTREACHED();
 }
-bool GpuChannel::WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, CommandBufferStatePtr* out_state) {
+bool GpuChannel::WaitForGetOffsetInRange(int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state) {
   NOTREACHED();
 }
 class GpuChannel_GetChannelToken_HandleSyncResponse
     : public mojo::MessageReceiver {
  public:
   GpuChannel_GetChannelToken_HandleSyncResponse(
-      bool* result, ::base::UnguessableToken* out_token)
+      bool* result, ::mojo_base::mojom::UnguessableTokenPtr* out_token)
       : result_(result), out_token_(out_token) {
     DCHECK(!*result_);
   }
@@ -2215,7 +2173,7 @@ class GpuChannel_GetChannelToken_HandleSyncResponse
   bool Accept(mojo::Message* message) override;
  private:
   bool* result_;
-  ::base::UnguessableToken* out_token_;};
+  ::mojo_base::mojom::UnguessableTokenPtr* out_token_;};
 
 class GpuChannel_GetChannelToken_ForwardToCallback
     : public mojo::MessageReceiver {
@@ -2236,7 +2194,7 @@ class GpuChannel_GetGPUInfo_HandleSyncResponse
     : public mojo::MessageReceiver {
  public:
   GpuChannel_GetGPUInfo_HandleSyncResponse(
-      bool* result, ::gpu::mojom::GpuInfoPtr* out_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities)
+      bool* result, ::gpu::GPUInfo* out_gpu_info, ::gpu::GpuFeatureInfo* out_gpu_feature_info, ::gpu::SharedImageCapabilities* out_shared_image_capabilities)
       : result_(result), out_gpu_info_(out_gpu_info), out_gpu_feature_info_(out_gpu_feature_info), out_shared_image_capabilities_(out_shared_image_capabilities) {
     DCHECK(!*result_);
   }
@@ -2247,9 +2205,9 @@ class GpuChannel_GetGPUInfo_HandleSyncResponse
   bool Accept(mojo::Message* message) override;
  private:
   bool* result_;
-  ::gpu::mojom::GpuInfoPtr* out_gpu_info_;
-  ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info_;
-  ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities_;};
+  ::gpu::GPUInfo* out_gpu_info_;
+  ::gpu::GpuFeatureInfo* out_gpu_feature_info_;
+  ::gpu::SharedImageCapabilities* out_shared_image_capabilities_;};
 
 class GpuChannel_GetGPUInfo_ForwardToCallback
     : public mojo::MessageReceiver {
@@ -2333,7 +2291,7 @@ class GpuChannel_CreateCommandBuffer_HandleSyncResponse
     : public mojo::MessageReceiver {
  public:
   GpuChannel_CreateCommandBuffer_HandleSyncResponse(
-      bool* result, ::gpu::mojom::ContextResult* out_result, ::gpu::mojom::CapabilitiesPtr* out_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities)
+      bool* result, ::gpu::ContextResult* out_result, ::gpu::Capabilities* out_capabilties, ::gpu::GLCapabilities* out_gl_capabilities)
       : result_(result), out_result_(out_result), out_capabilties_(out_capabilties), out_gl_capabilities_(out_gl_capabilities) {
     DCHECK(!*result_);
   }
@@ -2344,9 +2302,9 @@ class GpuChannel_CreateCommandBuffer_HandleSyncResponse
   bool Accept(mojo::Message* message) override;
  private:
   bool* result_;
-  ::gpu::mojom::ContextResult* out_result_;
-  ::gpu::mojom::CapabilitiesPtr* out_capabilties_;
-  ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities_;};
+  ::gpu::ContextResult* out_result_;
+  ::gpu::Capabilities* out_capabilties_;
+  ::gpu::GLCapabilities* out_gl_capabilities_;};
 
 class GpuChannel_CreateCommandBuffer_ForwardToCallback
     : public mojo::MessageReceiver {
@@ -2462,7 +2420,7 @@ class GpuChannel_WaitForTokenInRange_HandleSyncResponse
     : public mojo::MessageReceiver {
  public:
   GpuChannel_WaitForTokenInRange_HandleSyncResponse(
-      bool* result, CommandBufferStatePtr* out_state)
+      bool* result, ::gpu::CommandBuffer::State* out_state)
       : result_(result), out_state_(out_state) {
     DCHECK(!*result_);
   }
@@ -2473,7 +2431,7 @@ class GpuChannel_WaitForTokenInRange_HandleSyncResponse
   bool Accept(mojo::Message* message) override;
  private:
   bool* result_;
-  CommandBufferStatePtr* out_state_;};
+  ::gpu::CommandBuffer::State* out_state_;};
 
 class GpuChannel_WaitForTokenInRange_ForwardToCallback
     : public mojo::MessageReceiver {
@@ -2494,7 +2452,7 @@ class GpuChannel_WaitForGetOffsetInRange_HandleSyncResponse
     : public mojo::MessageReceiver {
  public:
   GpuChannel_WaitForGetOffsetInRange_HandleSyncResponse(
-      bool* result, CommandBufferStatePtr* out_state)
+      bool* result, ::gpu::CommandBuffer::State* out_state)
       : result_(result), out_state_(out_state) {
     DCHECK(!*result_);
   }
@@ -2505,7 +2463,7 @@ class GpuChannel_WaitForGetOffsetInRange_HandleSyncResponse
   bool Accept(mojo::Message* message) override;
  private:
   bool* result_;
-  CommandBufferStatePtr* out_state_;};
+  ::gpu::CommandBuffer::State* out_state_;};
 
 class GpuChannel_WaitForGetOffsetInRange_ForwardToCallback
     : public mojo::MessageReceiver {
@@ -2629,7 +2587,7 @@ void GpuChannelProxy::TerminateForTesting(
   ::mojo::internal::SendMojoMessage(*receiver_, message);
 }
 bool GpuChannelProxy::GetChannelToken(
-    ::base::UnguessableToken* out_param_token) {
+    ::mojo_base::mojom::UnguessableTokenPtr* out_param_token) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT_BEGIN0("mojom", "Call gpu::mojom::GpuChannel::GetChannelToken (sync)");
 #else
@@ -2674,7 +2632,7 @@ bool GpuChannelProxy::GetChannelToken(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("token"), out_param_token,
-                        "<value of type const ::base::UnguessableToken&>");
+                        "<value of type ::mojo_base::mojom::UnguessableTokenPtr>");
    });
 #endif
   return result;
@@ -2716,7 +2674,7 @@ void GpuChannelProxy::GetChannelToken(
   ::mojo::internal::SendMojoMessage(*receiver_, message, std::move(responder));
 }
 bool GpuChannelProxy::GetGPUInfo(
-    ::gpu::mojom::GpuInfoPtr* out_param_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_param_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_param_shared_image_capabilities) {
+    ::gpu::GPUInfo* out_param_gpu_info, ::gpu::GpuFeatureInfo* out_param_gpu_feature_info, ::gpu::SharedImageCapabilities* out_param_shared_image_capabilities) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT_BEGIN0("mojom", "Call gpu::mojom::GpuChannel::GetGPUInfo (sync)");
 #else
@@ -2761,13 +2719,13 @@ bool GpuChannelProxy::GetGPUInfo(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("gpu_info"), out_param_gpu_info,
-                        "<value of type ::gpu::mojom::GpuInfoPtr>");
+                        "<value of type const ::gpu::GPUInfo&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("gpu_feature_info"), out_param_gpu_feature_info,
-                        "<value of type ::gpu::mojom::GpuFeatureInfoPtr>");
+                        "<value of type const ::gpu::GpuFeatureInfo&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("shared_image_capabilities"), out_param_shared_image_capabilities,
-                        "<value of type ::gpu::mojom::SharedImageCapabilitiesPtr>");
+                        "<value of type const ::gpu::SharedImageCapabilities&>");
    });
 #endif
   return result;
@@ -2976,7 +2934,7 @@ void GpuChannelProxy::GetSharedMemoryForFlushId(
   ::mojo::internal::SendMojoMessage(*receiver_, message, std::move(responder));
 }
 bool GpuChannelProxy::CreateCommandBuffer(
-    CreateCommandBufferParamsPtr param_params, int32_t param_routing_id, ::base::UnsafeSharedMemoryRegion param_shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> param_receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> param_client, ::gpu::mojom::ContextResult* out_param_result, ::gpu::mojom::CapabilitiesPtr* out_param_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_param_gl_capabilities) {
+    CreateCommandBufferParamsPtr param_params, int32_t param_routing_id, ::base::UnsafeSharedMemoryRegion param_shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> param_receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> param_client, ::gpu::ContextResult* out_param_result, ::gpu::Capabilities* out_param_capabilties, ::gpu::GLCapabilities* out_param_gl_capabilities) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT_BEGIN1(
     "mojom", "Call gpu::mojom::GpuChannel::CreateCommandBuffer (sync)", "input_parameters",
@@ -3102,13 +3060,13 @@ bool GpuChannelProxy::CreateCommandBuffer(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("result"), out_param_result,
-                        "<value of type ::gpu::mojom::ContextResult>");
+                        "<value of type ::gpu::ContextResult>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("capabilties"), out_param_capabilties,
-                        "<value of type ::gpu::mojom::CapabilitiesPtr>");
+                        "<value of type const ::gpu::Capabilities&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("gl_capabilities"), out_param_gl_capabilities,
-                        "<value of type ::gpu::mojom::GLCapabilitiesPtr>");
+                        "<value of type const ::gpu::GLCapabilities&>");
    });
 #endif
   return result;
@@ -3396,7 +3354,7 @@ void GpuChannelProxy::FlushDeferredRequests(
   ::mojo::internal::SendMojoMessage(*receiver_, message);
 }
 bool GpuChannelProxy::CreateGpuMemoryBuffer(
-    const ::gfx::Size& param_size, ::viz::mojom::SharedImageFormatPtr param_format, ::gfx::mojom::BufferUsage param_buffer_usage, ::gfx::GpuMemoryBufferHandle* out_param_buffer_handle) {
+    const ::gfx::Size& param_size, const ::viz::SharedImageFormat& param_format, ::gfx::BufferUsage param_buffer_usage, ::gfx::GpuMemoryBufferHandle* out_param_buffer_handle) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT_BEGIN1(
     "mojom", "Call gpu::mojom::GpuChannel::CreateGpuMemoryBuffer (sync)", "input_parameters",
@@ -3407,10 +3365,10 @@ bool GpuChannelProxy::CreateGpuMemoryBuffer(
                         "<value of type const ::gfx::Size&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("format"), param_format,
-                        "<value of type ::viz::mojom::SharedImageFormatPtr>");
+                        "<value of type const ::viz::SharedImageFormat&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("buffer_usage"), param_buffer_usage,
-                        "<value of type ::gfx::mojom::BufferUsage>");
+                        "<value of type ::gfx::BufferUsage>");
    });
 #else
   TRACE_EVENT0("mojom", "GpuChannel::CreateGpuMemoryBuffer");
@@ -3498,7 +3456,7 @@ bool GpuChannelProxy::CreateGpuMemoryBuffer(
 }
 
 void GpuChannelProxy::CreateGpuMemoryBuffer(
-    const ::gfx::Size& in_size, ::viz::mojom::SharedImageFormatPtr in_format, ::gfx::mojom::BufferUsage in_buffer_usage, CreateGpuMemoryBufferCallback callback) {
+    const ::gfx::Size& in_size, const ::viz::SharedImageFormat& in_format, ::gfx::BufferUsage in_buffer_usage, CreateGpuMemoryBufferCallback callback) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::GpuChannel::CreateGpuMemoryBuffer", "input_parameters",
@@ -3509,10 +3467,10 @@ void GpuChannelProxy::CreateGpuMemoryBuffer(
                         "<value of type const ::gfx::Size&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("format"), in_format,
-                        "<value of type ::viz::mojom::SharedImageFormatPtr>");
+                        "<value of type const ::viz::SharedImageFormat&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("buffer_usage"), in_buffer_usage,
-                        "<value of type ::gfx::mojom::BufferUsage>");
+                        "<value of type ::gfx::BufferUsage>");
    });
 #endif
 
@@ -3720,7 +3678,7 @@ void GpuChannelProxy::CreateDCOMPTexture(
   ::mojo::internal::SendMojoMessage(*receiver_, message, std::move(responder));
 }
 bool GpuChannelProxy::WaitForTokenInRange(
-    int32_t param_routing_id, int32_t param_start, int32_t param_end, CommandBufferStatePtr* out_param_state) {
+    int32_t param_routing_id, int32_t param_start, int32_t param_end, ::gpu::CommandBuffer::State* out_param_state) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT_BEGIN1(
     "mojom", "Call gpu::mojom::GpuChannel::WaitForTokenInRange (sync)", "input_parameters",
@@ -3784,7 +3742,7 @@ bool GpuChannelProxy::WaitForTokenInRange(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("state"), out_param_state,
-                        "<value of type CommandBufferStatePtr>");
+                        "<value of type const ::gpu::CommandBuffer::State&>");
    });
 #endif
   return result;
@@ -3845,7 +3803,7 @@ void GpuChannelProxy::WaitForTokenInRange(
   ::mojo::internal::SendMojoMessage(*receiver_, message, std::move(responder));
 }
 bool GpuChannelProxy::WaitForGetOffsetInRange(
-    int32_t param_routing_id, uint32_t param_set_get_buffer_count, int32_t param_start, int32_t param_end, CommandBufferStatePtr* out_param_state) {
+    int32_t param_routing_id, uint32_t param_set_get_buffer_count, int32_t param_start, int32_t param_end, ::gpu::CommandBuffer::State* out_param_state) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT_BEGIN1(
     "mojom", "Call gpu::mojom::GpuChannel::WaitForGetOffsetInRange (sync)", "input_parameters",
@@ -3914,7 +3872,7 @@ bool GpuChannelProxy::WaitForGetOffsetInRange(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("state"), out_param_state,
-                        "<value of type CommandBufferStatePtr>");
+                        "<value of type const ::gpu::CommandBuffer::State&>");
    });
 #endif
   return result;
@@ -3981,7 +3939,7 @@ void GpuChannelProxy::WaitForGetOffsetInRange(
 }
 
 void GpuChannelProxy::CopyToGpuMemoryBufferAsync(
-    ::gpu::mojom::MailboxPtr in_mailbox, const std::vector<::gpu::SyncToken>& in_sync_token_dependencies, uint64_t in_release_count, CopyToGpuMemoryBufferAsyncCallback callback) {
+    const ::gpu::Mailbox& in_mailbox, const std::vector<::gpu::SyncToken>& in_sync_token_dependencies, uint64_t in_release_count, CopyToGpuMemoryBufferAsyncCallback callback) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::GpuChannel::CopyToGpuMemoryBufferAsync", "input_parameters",
@@ -3989,7 +3947,7 @@ void GpuChannelProxy::CopyToGpuMemoryBufferAsync(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("mailbox"), in_mailbox,
-                        "<value of type ::gpu::mojom::MailboxPtr>");
+                        "<value of type const ::gpu::Mailbox&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("sync_token_dependencies"), in_sync_token_dependencies,
                         "<value of type const std::vector<::gpu::SyncToken>&>");
@@ -4193,7 +4151,7 @@ class GpuChannel_GetChannelToken_ProxyToResponder : public ::mojo::internal::Pro
 #endif
 
   void Run(
-      const ::base::UnguessableToken& in_token);
+      ::mojo_base::mojom::UnguessableTokenPtr in_token);
 };
 
 bool GpuChannel_GetChannelToken_ForwardToCallback::Accept(
@@ -4207,7 +4165,7 @@ bool GpuChannel_GetChannelToken_ForwardToCallback::Accept(
 
   // Validation for GpuChannel.2
   bool success = true;
-  ::base::UnguessableToken p_token{};
+  ::mojo_base::mojom::UnguessableTokenPtr p_token{};
   GpuChannel_GetChannelToken_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadToken(&p_token))
@@ -4227,7 +4185,7 @@ std::move(p_token));
 }
 
 void GpuChannel_GetChannelToken_ProxyToResponder::Run(
-    const ::base::UnguessableToken& in_token) {
+    ::mojo_base::mojom::UnguessableTokenPtr in_token) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send reply gpu::mojom::GpuChannel::GetChannelToken", "async_response_parameters",
@@ -4235,7 +4193,7 @@ void GpuChannel_GetChannelToken_ProxyToResponder::Run(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("token"), in_token,
-                        "<value of type const ::base::UnguessableToken&>");
+                        "<value of type ::mojo_base::mojom::UnguessableTokenPtr>");
    });
 #endif
 
@@ -4296,7 +4254,7 @@ bool GpuChannel_GetChannelToken_HandleSyncResponse::Accept(
 
   // Validation for GpuChannel.2
   bool success = true;
-  ::base::UnguessableToken p_token{};
+  ::mojo_base::mojom::UnguessableTokenPtr p_token{};
   GpuChannel_GetChannelToken_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadToken(&p_token))
@@ -4358,7 +4316,7 @@ class GpuChannel_GetGPUInfo_ProxyToResponder : public ::mojo::internal::ProxyToR
 #endif
 
   void Run(
-      ::gpu::mojom::GpuInfoPtr in_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr in_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr in_shared_image_capabilities);
+      const ::gpu::GPUInfo& in_gpu_info, const ::gpu::GpuFeatureInfo& in_gpu_feature_info, const ::gpu::SharedImageCapabilities& in_shared_image_capabilities);
 };
 
 bool GpuChannel_GetGPUInfo_ForwardToCallback::Accept(
@@ -4372,9 +4330,9 @@ bool GpuChannel_GetGPUInfo_ForwardToCallback::Accept(
 
   // Validation for GpuChannel.3
   bool success = true;
-  ::gpu::mojom::GpuInfoPtr p_gpu_info{};
-  ::gpu::mojom::GpuFeatureInfoPtr p_gpu_feature_info{};
-  ::gpu::mojom::SharedImageCapabilitiesPtr p_shared_image_capabilities{};
+  ::gpu::GPUInfo p_gpu_info{};
+  ::gpu::GpuFeatureInfo p_gpu_feature_info{};
+  ::gpu::SharedImageCapabilities p_shared_image_capabilities{};
   GpuChannel_GetGPUInfo_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadGpuInfo(&p_gpu_info))
@@ -4400,7 +4358,7 @@ std::move(p_shared_image_capabilities));
 }
 
 void GpuChannel_GetGPUInfo_ProxyToResponder::Run(
-    ::gpu::mojom::GpuInfoPtr in_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr in_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr in_shared_image_capabilities) {
+    const ::gpu::GPUInfo& in_gpu_info, const ::gpu::GpuFeatureInfo& in_gpu_feature_info, const ::gpu::SharedImageCapabilities& in_shared_image_capabilities) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send reply gpu::mojom::GpuChannel::GetGPUInfo", "async_response_parameters",
@@ -4408,13 +4366,13 @@ void GpuChannel_GetGPUInfo_ProxyToResponder::Run(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("gpu_info"), in_gpu_info,
-                        "<value of type ::gpu::mojom::GpuInfoPtr>");
+                        "<value of type const ::gpu::GPUInfo&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("gpu_feature_info"), in_gpu_feature_info,
-                        "<value of type ::gpu::mojom::GpuFeatureInfoPtr>");
+                        "<value of type const ::gpu::GpuFeatureInfo&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("shared_image_capabilities"), in_shared_image_capabilities,
-                        "<value of type ::gpu::mojom::SharedImageCapabilitiesPtr>");
+                        "<value of type const ::gpu::SharedImageCapabilities&>");
    });
 #endif
 
@@ -4509,9 +4467,9 @@ bool GpuChannel_GetGPUInfo_HandleSyncResponse::Accept(
 
   // Validation for GpuChannel.3
   bool success = true;
-  ::gpu::mojom::GpuInfoPtr p_gpu_info{};
-  ::gpu::mojom::GpuFeatureInfoPtr p_gpu_feature_info{};
-  ::gpu::mojom::SharedImageCapabilitiesPtr p_shared_image_capabilities{};
+  ::gpu::GPUInfo p_gpu_info{};
+  ::gpu::GpuFeatureInfo p_gpu_feature_info{};
+  ::gpu::SharedImageCapabilities p_shared_image_capabilities{};
   GpuChannel_GetGPUInfo_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadGpuInfo(&p_gpu_info))
@@ -4870,7 +4828,7 @@ class GpuChannel_CreateCommandBuffer_ProxyToResponder : public ::mojo::internal:
 #endif
 
   void Run(
-      ::gpu::mojom::ContextResult in_result, ::gpu::mojom::CapabilitiesPtr in_capabilties, ::gpu::mojom::GLCapabilitiesPtr in_gl_capabilities);
+      ::gpu::ContextResult in_result, const ::gpu::Capabilities& in_capabilties, const ::gpu::GLCapabilities& in_gl_capabilities);
 };
 
 bool GpuChannel_CreateCommandBuffer_ForwardToCallback::Accept(
@@ -4884,9 +4842,9 @@ bool GpuChannel_CreateCommandBuffer_ForwardToCallback::Accept(
 
   // Validation for GpuChannel.6
   bool success = true;
-  ::gpu::mojom::ContextResult p_result{};
-  ::gpu::mojom::CapabilitiesPtr p_capabilties{};
-  ::gpu::mojom::GLCapabilitiesPtr p_gl_capabilities{};
+  ::gpu::ContextResult p_result{};
+  ::gpu::Capabilities p_capabilties{};
+  ::gpu::GLCapabilities p_gl_capabilities{};
   GpuChannel_CreateCommandBuffer_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadResult(&p_result))
@@ -4912,7 +4870,7 @@ std::move(p_gl_capabilities));
 }
 
 void GpuChannel_CreateCommandBuffer_ProxyToResponder::Run(
-    ::gpu::mojom::ContextResult in_result, ::gpu::mojom::CapabilitiesPtr in_capabilties, ::gpu::mojom::GLCapabilitiesPtr in_gl_capabilities) {
+    ::gpu::ContextResult in_result, const ::gpu::Capabilities& in_capabilties, const ::gpu::GLCapabilities& in_gl_capabilities) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send reply gpu::mojom::GpuChannel::CreateCommandBuffer", "async_response_parameters",
@@ -4920,13 +4878,13 @@ void GpuChannel_CreateCommandBuffer_ProxyToResponder::Run(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("result"), in_result,
-                        "<value of type ::gpu::mojom::ContextResult>");
+                        "<value of type ::gpu::ContextResult>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("capabilties"), in_capabilties,
-                        "<value of type ::gpu::mojom::CapabilitiesPtr>");
+                        "<value of type const ::gpu::Capabilities&>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("gl_capabilities"), in_gl_capabilities,
-                        "<value of type ::gpu::mojom::GLCapabilitiesPtr>");
+                        "<value of type const ::gpu::GLCapabilities&>");
    });
 #endif
 
@@ -5009,9 +4967,9 @@ bool GpuChannel_CreateCommandBuffer_HandleSyncResponse::Accept(
 
   // Validation for GpuChannel.6
   bool success = true;
-  ::gpu::mojom::ContextResult p_result{};
-  ::gpu::mojom::CapabilitiesPtr p_capabilties{};
-  ::gpu::mojom::GLCapabilitiesPtr p_gl_capabilities{};
+  ::gpu::ContextResult p_result{};
+  ::gpu::Capabilities p_capabilties{};
+  ::gpu::GLCapabilities p_gl_capabilities{};
   GpuChannel_CreateCommandBuffer_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadResult(&p_result))
@@ -5527,7 +5485,7 @@ class GpuChannel_WaitForTokenInRange_ProxyToResponder : public ::mojo::internal:
 #endif
 
   void Run(
-      CommandBufferStatePtr in_state);
+      const ::gpu::CommandBuffer::State& in_state);
 };
 
 bool GpuChannel_WaitForTokenInRange_ForwardToCallback::Accept(
@@ -5541,7 +5499,7 @@ bool GpuChannel_WaitForTokenInRange_ForwardToCallback::Accept(
 
   // Validation for GpuChannel.11
   bool success = true;
-  CommandBufferStatePtr p_state{};
+  ::gpu::CommandBuffer::State p_state{};
   GpuChannel_WaitForTokenInRange_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadState(&p_state))
@@ -5561,7 +5519,7 @@ std::move(p_state));
 }
 
 void GpuChannel_WaitForTokenInRange_ProxyToResponder::Run(
-    CommandBufferStatePtr in_state) {
+    const ::gpu::CommandBuffer::State& in_state) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send reply gpu::mojom::GpuChannel::WaitForTokenInRange", "async_response_parameters",
@@ -5569,7 +5527,7 @@ void GpuChannel_WaitForTokenInRange_ProxyToResponder::Run(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("state"), in_state,
-                        "<value of type CommandBufferStatePtr>");
+                        "<value of type const ::gpu::CommandBuffer::State&>");
    });
 #endif
 
@@ -5630,7 +5588,7 @@ bool GpuChannel_WaitForTokenInRange_HandleSyncResponse::Accept(
 
   // Validation for GpuChannel.11
   bool success = true;
-  CommandBufferStatePtr p_state{};
+  ::gpu::CommandBuffer::State p_state{};
   GpuChannel_WaitForTokenInRange_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadState(&p_state))
@@ -5692,7 +5650,7 @@ class GpuChannel_WaitForGetOffsetInRange_ProxyToResponder : public ::mojo::inter
 #endif
 
   void Run(
-      CommandBufferStatePtr in_state);
+      const ::gpu::CommandBuffer::State& in_state);
 };
 
 bool GpuChannel_WaitForGetOffsetInRange_ForwardToCallback::Accept(
@@ -5706,7 +5664,7 @@ bool GpuChannel_WaitForGetOffsetInRange_ForwardToCallback::Accept(
 
   // Validation for GpuChannel.12
   bool success = true;
-  CommandBufferStatePtr p_state{};
+  ::gpu::CommandBuffer::State p_state{};
   GpuChannel_WaitForGetOffsetInRange_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadState(&p_state))
@@ -5726,7 +5684,7 @@ std::move(p_state));
 }
 
 void GpuChannel_WaitForGetOffsetInRange_ProxyToResponder::Run(
-    CommandBufferStatePtr in_state) {
+    const ::gpu::CommandBuffer::State& in_state) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send reply gpu::mojom::GpuChannel::WaitForGetOffsetInRange", "async_response_parameters",
@@ -5734,7 +5692,7 @@ void GpuChannel_WaitForGetOffsetInRange_ProxyToResponder::Run(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("state"), in_state,
-                        "<value of type CommandBufferStatePtr>");
+                        "<value of type const ::gpu::CommandBuffer::State&>");
    });
 #endif
 
@@ -5795,7 +5753,7 @@ bool GpuChannel_WaitForGetOffsetInRange_HandleSyncResponse::Accept(
 
   // Validation for GpuChannel.12
   bool success = true;
-  CommandBufferStatePtr p_state{};
+  ::gpu::CommandBuffer::State p_state{};
   GpuChannel_WaitForGetOffsetInRange_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadState(&p_state))
@@ -6394,8 +6352,8 @@ bool GpuChannelStubDispatch::AcceptWithResponder(
       // Validation for GpuChannel.9
       bool success = true;
       ::gfx::Size p_size{};
-      ::viz::mojom::SharedImageFormatPtr p_format{};
-      ::gfx::mojom::BufferUsage p_buffer_usage{};
+      ::viz::SharedImageFormat p_format{};
+      ::gfx::BufferUsage p_buffer_usage{};
       GpuChannel_CreateGpuMemoryBuffer_ParamsDataView input_data_view(params, message);
       
       if (success && !input_data_view.ReadSize(&p_size))
@@ -6547,7 +6505,7 @@ bool GpuChannelStubDispatch::AcceptWithResponder(
 
       // Validation for GpuChannel.13
       bool success = true;
-      ::gpu::mojom::MailboxPtr p_mailbox{};
+      ::gpu::Mailbox p_mailbox{};
       std::vector<::gpu::SyncToken> p_sync_token_dependencies{};
       uint64_t p_release_count{};
       GpuChannel_CopyToGpuMemoryBufferAsync_ParamsDataView input_data_view(params, message);
@@ -7205,7 +7163,7 @@ class CommandBuffer_GetGpuFenceHandle_ProxyToResponder : public ::mojo::internal
 #endif
 
   void Run(
-      std::optional<::gfx::GpuFenceHandle> in_fence_handle);
+      ::gfx::GpuFenceHandle in_fence_handle);
 };
 
 bool CommandBuffer_GetGpuFenceHandle_ForwardToCallback::Accept(
@@ -7219,7 +7177,7 @@ bool CommandBuffer_GetGpuFenceHandle_ForwardToCallback::Accept(
 
   // Validation for CommandBuffer.3
   bool success = true;
-  std::optional<::gfx::GpuFenceHandle> p_fence_handle{};
+  ::gfx::GpuFenceHandle p_fence_handle{};
   CommandBuffer_GetGpuFenceHandle_ResponseParamsDataView input_data_view(params, message);
   
   if (success && !input_data_view.ReadFenceHandle(&p_fence_handle))
@@ -7239,7 +7197,7 @@ std::move(p_fence_handle));
 }
 
 void CommandBuffer_GetGpuFenceHandle_ProxyToResponder::Run(
-    std::optional<::gfx::GpuFenceHandle> in_fence_handle) {
+    ::gfx::GpuFenceHandle in_fence_handle) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send reply gpu::mojom::CommandBuffer::GetGpuFenceHandle", "async_response_parameters",
@@ -7247,7 +7205,7 @@ void CommandBuffer_GetGpuFenceHandle_ProxyToResponder::Run(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("fence_handle"), in_fence_handle,
-                        "<value of type std::optional<::gfx::GpuFenceHandle>>");
+                        "<value of type ::gfx::GpuFenceHandle>");
    });
 #endif
 
@@ -7771,7 +7729,7 @@ void CommandBufferClientProxy::OnGpuSwitched(
 }
 
 void CommandBufferClientProxy::OnDestroyed(
-    ::gpu::mojom::ContextLostReason in_reason, ::gpu::mojom::Error in_error) {
+    ::gpu::error::ContextLostReason in_reason, ::gpu::error::Error in_error) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::CommandBufferClient::OnDestroyed", "input_parameters",
@@ -7779,10 +7737,10 @@ void CommandBufferClientProxy::OnDestroyed(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("reason"), in_reason,
-                        "<value of type ::gpu::mojom::ContextLostReason>");
+                        "<value of type ::gpu::error::ContextLostReason>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("error"), in_error,
-                        "<value of type ::gpu::mojom::Error>");
+                        "<value of type ::gpu::error::Error>");
    });
 #endif
 
@@ -7888,7 +7846,7 @@ void CommandBufferClientProxy::OnReturnData(
 }
 
 void CommandBufferClientProxy::OnSignalAck(
-    uint32_t in_signal_id, CommandBufferStatePtr in_state) {
+    uint32_t in_signal_id, const ::gpu::CommandBuffer::State& in_state) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::CommandBufferClient::OnSignalAck", "input_parameters",
@@ -7899,7 +7857,7 @@ void CommandBufferClientProxy::OnSignalAck(
                         "<value of type uint32_t>");
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("state"), in_state,
-                        "<value of type CommandBufferStatePtr>");
+                        "<value of type const ::gpu::CommandBuffer::State&>");
    });
 #endif
 
@@ -8015,8 +7973,8 @@ bool CommandBufferClientStubDispatch::Accept(
 
       // Validation for CommandBufferClient.2
       bool success = true;
-      ::gpu::mojom::ContextLostReason p_reason{};
-      ::gpu::mojom::Error p_error{};
+      ::gpu::error::ContextLostReason p_reason{};
+      ::gpu::error::Error p_error{};
       CommandBufferClient_OnDestroyed_ParamsDataView input_data_view(params, message);
       
       if (success && !input_data_view.ReadReason(&p_reason))
@@ -8074,7 +8032,7 @@ bool CommandBufferClientStubDispatch::Accept(
       // Validation for CommandBufferClient.4
       bool success = true;
       uint32_t p_signal_id{};
-      CommandBufferStatePtr p_state{};
+      ::gpu::CommandBuffer::State p_state{};
       CommandBufferClient_OnSignalAck_ParamsDataView input_data_view(params, message);
       
       if (success)
@@ -8375,7 +8333,7 @@ void DCOMPTextureProxy::SetTextureSize(
 }
 
 void DCOMPTextureProxy::SetDCOMPSurfaceHandle(
-    const ::base::UnguessableToken& in_token, SetDCOMPSurfaceHandleCallback callback) {
+    ::mojo_base::mojom::UnguessableTokenPtr in_token, SetDCOMPSurfaceHandleCallback callback) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::DCOMPTexture::SetDCOMPSurfaceHandle", "input_parameters",
@@ -8383,7 +8341,7 @@ void DCOMPTextureProxy::SetDCOMPSurfaceHandle(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("token"), in_token,
-                        "<value of type const ::base::UnguessableToken&>");
+                        "<value of type ::mojo_base::mojom::UnguessableTokenPtr>");
    });
 #endif
 
@@ -8650,7 +8608,7 @@ bool DCOMPTextureStubDispatch::AcceptWithResponder(
 
       // Validation for DCOMPTexture.2
       bool success = true;
-      ::base::UnguessableToken p_token{};
+      ::mojo_base::mojom::UnguessableTokenPtr p_token{};
       DCOMPTexture_SetDCOMPSurfaceHandle_ParamsDataView input_data_view(params, message);
       
       if (success && !input_data_view.ReadToken(&p_token))
@@ -8776,7 +8734,7 @@ DCOMPTextureClientProxy::DCOMPTextureClientProxy(mojo::MessageReceiverWithRespon
 }
 
 void DCOMPTextureClientProxy::OnSharedImageMailboxBound(
-    ::gpu::mojom::MailboxPtr in_mailbox) {
+    const ::gpu::Mailbox& in_mailbox) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::DCOMPTextureClient::OnSharedImageMailboxBound", "input_parameters",
@@ -8784,7 +8742,7 @@ void DCOMPTextureClientProxy::OnSharedImageMailboxBound(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("mailbox"), in_mailbox,
-                        "<value of type ::gpu::mojom::MailboxPtr>");
+                        "<value of type const ::gpu::Mailbox&>");
    });
 #endif
 
@@ -8835,7 +8793,7 @@ void DCOMPTextureClientProxy::OnSharedImageMailboxBound(
 }
 
 void DCOMPTextureClientProxy::OnOutputRectChange(
-    const ::gfx::Rect& in_output_rect) {
+    ::gfx::mojom::RectPtr in_output_rect) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
   TRACE_EVENT1(
     "mojom", "Send gpu::mojom::DCOMPTextureClient::OnOutputRectChange", "input_parameters",
@@ -8843,7 +8801,7 @@ void DCOMPTextureClientProxy::OnOutputRectChange(
       auto dict = std::move(context).WriteDictionary();
       perfetto::WriteIntoTracedValueWithFallback(
            dict.AddItem("output_rect"), in_output_rect,
-                        "<value of type const ::gfx::Rect&>");
+                        "<value of type ::gfx::mojom::RectPtr>");
    });
 #endif
 
@@ -8907,7 +8865,7 @@ bool DCOMPTextureClientStubDispatch::Accept(
 
       // Validation for DCOMPTextureClient.0
       bool success = true;
-      ::gpu::mojom::MailboxPtr p_mailbox{};
+      ::gpu::Mailbox p_mailbox{};
       DCOMPTextureClient_OnSharedImageMailboxBound_ParamsDataView input_data_view(params, message);
       
       if (success && !input_data_view.ReadMailbox(&p_mailbox))
@@ -8934,7 +8892,7 @@ bool DCOMPTextureClientStubDispatch::Accept(
 
       // Validation for DCOMPTextureClient.1
       bool success = true;
-      ::gfx::Rect p_output_rect{};
+      ::gfx::mojom::RectPtr p_output_rect{};
       DCOMPTextureClient_OnOutputRectChange_ParamsDataView input_data_view(params, message);
       
       if (success && !input_data_view.ReadOutputRect(&p_output_rect))
@@ -9517,7 +9475,7 @@ bool UnionTraits<::gpu::mojom::DeferredSharedImageRequest::DataView, ::gpu::mojo
       break;
     }
     case Tag::kDestroySharedImage: {
-      ::gpu::mojom::MailboxPtr result_destroy_shared_image{};
+      ::gpu::Mailbox result_destroy_shared_image{};
       if (!input.ReadDestroySharedImage(&result_destroy_shared_image))
         return false;
 
@@ -9639,7 +9597,7 @@ void GpuChannelInterceptorForTesting::FlushDeferredRequests(std::vector<Deferred
     std::move(flushed_deferred_message_id)
     );
 }
-void GpuChannelInterceptorForTesting::CreateGpuMemoryBuffer(const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) {
+void GpuChannelInterceptorForTesting::CreateGpuMemoryBuffer(const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, CreateGpuMemoryBufferCallback callback) {
   GetForwardingInterface()->CreateGpuMemoryBuffer(
     std::move(size)
     , 
@@ -9675,7 +9633,7 @@ void GpuChannelInterceptorForTesting::WaitForGetOffsetInRange(int32_t routing_id
     std::move(end)
     , std::move(callback));
 }
-void GpuChannelInterceptorForTesting::CopyToGpuMemoryBufferAsync(::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) {
+void GpuChannelInterceptorForTesting::CopyToGpuMemoryBufferAsync(const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, CopyToGpuMemoryBufferAsyncCallback callback) {
   GetForwardingInterface()->CopyToGpuMemoryBufferAsync(
     std::move(mailbox)
     , 
@@ -9698,14 +9656,14 @@ GpuChannelAsyncWaiter::~GpuChannelAsyncWaiter() = default;
 
 
 void GpuChannelAsyncWaiter::GetChannelToken(
-    ::base::UnguessableToken* out_token) {
+    ::mojo_base::mojom::UnguessableTokenPtr* out_token) {
   base::RunLoop loop;
   proxy_->GetChannelToken(
       base::BindOnce(
           [](base::RunLoop* loop,
-             ::base::UnguessableToken* out_token
+             ::mojo_base::mojom::UnguessableTokenPtr* out_token
 ,
-             const ::base::UnguessableToken& token) {*out_token = std::move(token);
+             ::mojo_base::mojom::UnguessableTokenPtr token) {*out_token = std::move(token);
             loop->Quit();
           },
           &loop,
@@ -9713,28 +9671,28 @@ void GpuChannelAsyncWaiter::GetChannelToken(
   loop.Run();
 }
 
-::base::UnguessableToken GpuChannelAsyncWaiter::GetChannelToken(
+::mojo_base::mojom::UnguessableTokenPtr GpuChannelAsyncWaiter::GetChannelToken(
     ) {
-  ::base::UnguessableToken async_wait_result;
+  ::mojo_base::mojom::UnguessableTokenPtr async_wait_result;
   GetChannelToken(&async_wait_result);
   return async_wait_result;
 }
 
 void GpuChannelAsyncWaiter::GetGPUInfo(
-    ::gpu::mojom::GpuInfoPtr* out_gpu_info, ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info, ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities) {
+    ::gpu::GPUInfo* out_gpu_info, ::gpu::GpuFeatureInfo* out_gpu_feature_info, ::gpu::SharedImageCapabilities* out_shared_image_capabilities) {
   base::RunLoop loop;
   proxy_->GetGPUInfo(
       base::BindOnce(
           [](base::RunLoop* loop,
-             ::gpu::mojom::GpuInfoPtr* out_gpu_info
+             ::gpu::GPUInfo* out_gpu_info
 ,
-             ::gpu::mojom::GpuFeatureInfoPtr* out_gpu_feature_info
+             ::gpu::GpuFeatureInfo* out_gpu_feature_info
 ,
-             ::gpu::mojom::SharedImageCapabilitiesPtr* out_shared_image_capabilities
+             ::gpu::SharedImageCapabilities* out_shared_image_capabilities
 ,
-             ::gpu::mojom::GpuInfoPtr gpu_info,
-             ::gpu::mojom::GpuFeatureInfoPtr gpu_feature_info,
-             ::gpu::mojom::SharedImageCapabilitiesPtr shared_image_capabilities) {*out_gpu_info = std::move(gpu_info);*out_gpu_feature_info = std::move(gpu_feature_info);*out_shared_image_capabilities = std::move(shared_image_capabilities);
+             const ::gpu::GPUInfo& gpu_info,
+             const ::gpu::GpuFeatureInfo& gpu_feature_info,
+             const ::gpu::SharedImageCapabilities& shared_image_capabilities) {*out_gpu_info = std::move(gpu_info);*out_gpu_feature_info = std::move(gpu_feature_info);*out_shared_image_capabilities = std::move(shared_image_capabilities);
             loop->Quit();
           },
           &loop,
@@ -9784,7 +9742,7 @@ void GpuChannelAsyncWaiter::GetSharedMemoryForFlushId(
 }
 
 void GpuChannelAsyncWaiter::CreateCommandBuffer(
-    CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::mojom::ContextResult* out_result, ::gpu::mojom::CapabilitiesPtr* out_capabilties, ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities) {
+    CreateCommandBufferParamsPtr params, int32_t routing_id, ::base::UnsafeSharedMemoryRegion shared_state, ::mojo::PendingAssociatedReceiver<CommandBuffer> receiver, ::mojo::PendingAssociatedRemote<CommandBufferClient> client, ::gpu::ContextResult* out_result, ::gpu::Capabilities* out_capabilties, ::gpu::GLCapabilities* out_gl_capabilities) {
   base::RunLoop loop;
   proxy_->CreateCommandBuffer(
       std::move(params),
@@ -9794,15 +9752,15 @@ void GpuChannelAsyncWaiter::CreateCommandBuffer(
       std::move(client),
       base::BindOnce(
           [](base::RunLoop* loop,
-             ::gpu::mojom::ContextResult* out_result
+             ::gpu::ContextResult* out_result
 ,
-             ::gpu::mojom::CapabilitiesPtr* out_capabilties
+             ::gpu::Capabilities* out_capabilties
 ,
-             ::gpu::mojom::GLCapabilitiesPtr* out_gl_capabilities
+             ::gpu::GLCapabilities* out_gl_capabilities
 ,
-             ::gpu::mojom::ContextResult result,
-             ::gpu::mojom::CapabilitiesPtr capabilties,
-             ::gpu::mojom::GLCapabilitiesPtr gl_capabilities) {*out_result = std::move(result);*out_capabilties = std::move(capabilties);*out_gl_capabilities = std::move(gl_capabilities);
+             ::gpu::ContextResult result,
+             const ::gpu::Capabilities& capabilties,
+             const ::gpu::GLCapabilities& gl_capabilities) {*out_result = std::move(result);*out_capabilties = std::move(capabilties);*out_gl_capabilities = std::move(gl_capabilities);
             loop->Quit();
           },
           &loop,
@@ -9830,7 +9788,7 @@ void GpuChannelAsyncWaiter::DestroyCommandBuffer(
 
 
 void GpuChannelAsyncWaiter::CreateGpuMemoryBuffer(
-    const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle) {
+    const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage, ::gfx::GpuMemoryBufferHandle* out_buffer_handle) {
   base::RunLoop loop;
   proxy_->CreateGpuMemoryBuffer(
       std::move(size),
@@ -9849,7 +9807,7 @@ void GpuChannelAsyncWaiter::CreateGpuMemoryBuffer(
 }
 
 ::gfx::GpuMemoryBufferHandle GpuChannelAsyncWaiter::CreateGpuMemoryBuffer(
-    const ::gfx::Size& size, ::viz::mojom::SharedImageFormatPtr format, ::gfx::mojom::BufferUsage buffer_usage) {
+    const ::gfx::Size& size, const ::viz::SharedImageFormat& format, ::gfx::BufferUsage buffer_usage) {
   ::gfx::GpuMemoryBufferHandle async_wait_result;
   CreateGpuMemoryBuffer(std::move(size),std::move(format),std::move(buffer_usage),&async_wait_result);
   return async_wait_result;
@@ -9881,7 +9839,7 @@ bool GpuChannelAsyncWaiter::CreateDCOMPTexture(
 }
 
 void GpuChannelAsyncWaiter::WaitForTokenInRange(
-    int32_t routing_id, int32_t start, int32_t end, CommandBufferStatePtr* out_state) {
+    int32_t routing_id, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state) {
   base::RunLoop loop;
   proxy_->WaitForTokenInRange(
       std::move(routing_id),
@@ -9889,9 +9847,9 @@ void GpuChannelAsyncWaiter::WaitForTokenInRange(
       std::move(end),
       base::BindOnce(
           [](base::RunLoop* loop,
-             CommandBufferStatePtr* out_state
+             ::gpu::CommandBuffer::State* out_state
 ,
-             CommandBufferStatePtr state) {*out_state = std::move(state);
+             const ::gpu::CommandBuffer::State& state) {*out_state = std::move(state);
             loop->Quit();
           },
           &loop,
@@ -9899,15 +9857,15 @@ void GpuChannelAsyncWaiter::WaitForTokenInRange(
   loop.Run();
 }
 
-CommandBufferStatePtr GpuChannelAsyncWaiter::WaitForTokenInRange(
+::gpu::CommandBuffer::State GpuChannelAsyncWaiter::WaitForTokenInRange(
     int32_t routing_id, int32_t start, int32_t end) {
-  CommandBufferStatePtr async_wait_result;
+  ::gpu::CommandBuffer::State async_wait_result;
   WaitForTokenInRange(std::move(routing_id),std::move(start),std::move(end),&async_wait_result);
   return async_wait_result;
 }
 
 void GpuChannelAsyncWaiter::WaitForGetOffsetInRange(
-    int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, CommandBufferStatePtr* out_state) {
+    int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end, ::gpu::CommandBuffer::State* out_state) {
   base::RunLoop loop;
   proxy_->WaitForGetOffsetInRange(
       std::move(routing_id),
@@ -9916,9 +9874,9 @@ void GpuChannelAsyncWaiter::WaitForGetOffsetInRange(
       std::move(end),
       base::BindOnce(
           [](base::RunLoop* loop,
-             CommandBufferStatePtr* out_state
+             ::gpu::CommandBuffer::State* out_state
 ,
-             CommandBufferStatePtr state) {*out_state = std::move(state);
+             const ::gpu::CommandBuffer::State& state) {*out_state = std::move(state);
             loop->Quit();
           },
           &loop,
@@ -9926,15 +9884,15 @@ void GpuChannelAsyncWaiter::WaitForGetOffsetInRange(
   loop.Run();
 }
 
-CommandBufferStatePtr GpuChannelAsyncWaiter::WaitForGetOffsetInRange(
+::gpu::CommandBuffer::State GpuChannelAsyncWaiter::WaitForGetOffsetInRange(
     int32_t routing_id, uint32_t set_get_buffer_count, int32_t start, int32_t end) {
-  CommandBufferStatePtr async_wait_result;
+  ::gpu::CommandBuffer::State async_wait_result;
   WaitForGetOffsetInRange(std::move(routing_id),std::move(set_get_buffer_count),std::move(start),std::move(end),&async_wait_result);
   return async_wait_result;
 }
 
 void GpuChannelAsyncWaiter::CopyToGpuMemoryBufferAsync(
-    ::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, bool* out_success) {
+    const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count, bool* out_success) {
   base::RunLoop loop;
   proxy_->CopyToGpuMemoryBufferAsync(
       std::move(mailbox),
@@ -9953,7 +9911,7 @@ void GpuChannelAsyncWaiter::CopyToGpuMemoryBufferAsync(
 }
 
 bool GpuChannelAsyncWaiter::CopyToGpuMemoryBufferAsync(
-    ::gpu::mojom::MailboxPtr mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count) {
+    const ::gpu::Mailbox& mailbox, const std::vector<::gpu::SyncToken>& sync_token_dependencies, uint64_t release_count) {
   bool async_wait_result;
   CopyToGpuMemoryBufferAsync(std::move(mailbox),std::move(sync_token_dependencies),std::move(release_count),&async_wait_result);
   return async_wait_result;
@@ -10032,15 +9990,15 @@ CommandBufferAsyncWaiter::~CommandBufferAsyncWaiter() = default;
 
 
 void CommandBufferAsyncWaiter::GetGpuFenceHandle(
-    uint32_t id, std::optional<::gfx::GpuFenceHandle>* out_fence_handle) {
+    uint32_t id, ::gfx::GpuFenceHandle* out_fence_handle) {
   base::RunLoop loop;
   proxy_->GetGpuFenceHandle(
       std::move(id),
       base::BindOnce(
           [](base::RunLoop* loop,
-             std::optional<::gfx::GpuFenceHandle>* out_fence_handle
+             ::gfx::GpuFenceHandle* out_fence_handle
 ,
-             std::optional<::gfx::GpuFenceHandle> fence_handle) {*out_fence_handle = std::move(fence_handle);
+             ::gfx::GpuFenceHandle fence_handle) {*out_fence_handle = std::move(fence_handle);
             loop->Quit();
           },
           &loop,
@@ -10048,9 +10006,9 @@ void CommandBufferAsyncWaiter::GetGpuFenceHandle(
   loop.Run();
 }
 
-std::optional<::gfx::GpuFenceHandle> CommandBufferAsyncWaiter::GetGpuFenceHandle(
+::gfx::GpuFenceHandle CommandBufferAsyncWaiter::GetGpuFenceHandle(
     uint32_t id) {
-  std::optional<::gfx::GpuFenceHandle> async_wait_result;
+  ::gfx::GpuFenceHandle async_wait_result;
   GetGpuFenceHandle(std::move(id),&async_wait_result);
   return async_wait_result;
 }
@@ -10066,7 +10024,7 @@ void CommandBufferClientInterceptorForTesting::OnConsoleMessage(const std::strin
 void CommandBufferClientInterceptorForTesting::OnGpuSwitched() {
   GetForwardingInterface()->OnGpuSwitched();
 }
-void CommandBufferClientInterceptorForTesting::OnDestroyed(::gpu::mojom::ContextLostReason reason, ::gpu::mojom::Error error) {
+void CommandBufferClientInterceptorForTesting::OnDestroyed(::gpu::error::ContextLostReason reason, ::gpu::error::Error error) {
   GetForwardingInterface()->OnDestroyed(
     std::move(reason)
     , 
@@ -10078,7 +10036,7 @@ void CommandBufferClientInterceptorForTesting::OnReturnData(const std::vector<ui
     std::move(data)
     );
 }
-void CommandBufferClientInterceptorForTesting::OnSignalAck(uint32_t signal_id, CommandBufferStatePtr state) {
+void CommandBufferClientInterceptorForTesting::OnSignalAck(uint32_t signal_id, const ::gpu::CommandBuffer::State& state) {
   GetForwardingInterface()->OnSignalAck(
     std::move(signal_id)
     , 
@@ -10104,7 +10062,7 @@ void DCOMPTextureInterceptorForTesting::SetTextureSize(const ::gfx::Size& size) 
     std::move(size)
     );
 }
-void DCOMPTextureInterceptorForTesting::SetDCOMPSurfaceHandle(const ::base::UnguessableToken& token, SetDCOMPSurfaceHandleCallback callback) {
+void DCOMPTextureInterceptorForTesting::SetDCOMPSurfaceHandle(::mojo_base::mojom::UnguessableTokenPtr token, SetDCOMPSurfaceHandleCallback callback) {
   GetForwardingInterface()->SetDCOMPSurfaceHandle(
     std::move(token)
     , std::move(callback));
@@ -10116,7 +10074,7 @@ DCOMPTextureAsyncWaiter::~DCOMPTextureAsyncWaiter() = default;
 
 
 void DCOMPTextureAsyncWaiter::SetDCOMPSurfaceHandle(
-    const ::base::UnguessableToken& token, bool* out_success) {
+    ::mojo_base::mojom::UnguessableTokenPtr token, bool* out_success) {
   base::RunLoop loop;
   proxy_->SetDCOMPSurfaceHandle(
       std::move(token),
@@ -10133,7 +10091,7 @@ void DCOMPTextureAsyncWaiter::SetDCOMPSurfaceHandle(
 }
 
 bool DCOMPTextureAsyncWaiter::SetDCOMPSurfaceHandle(
-    const ::base::UnguessableToken& token) {
+    ::mojo_base::mojom::UnguessableTokenPtr token) {
   bool async_wait_result;
   SetDCOMPSurfaceHandle(std::move(token),&async_wait_result);
   return async_wait_result;
@@ -10142,12 +10100,12 @@ bool DCOMPTextureAsyncWaiter::SetDCOMPSurfaceHandle(
 
 
 
-void DCOMPTextureClientInterceptorForTesting::OnSharedImageMailboxBound(::gpu::mojom::MailboxPtr mailbox) {
+void DCOMPTextureClientInterceptorForTesting::OnSharedImageMailboxBound(const ::gpu::Mailbox& mailbox) {
   GetForwardingInterface()->OnSharedImageMailboxBound(
     std::move(mailbox)
     );
 }
-void DCOMPTextureClientInterceptorForTesting::OnOutputRectChange(const ::gfx::Rect& output_rect) {
+void DCOMPTextureClientInterceptorForTesting::OnOutputRectChange(::gfx::mojom::RectPtr output_rect) {
   GetForwardingInterface()->OnOutputRectChange(
     std::move(output_rect)
     );

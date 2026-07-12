@@ -31,16 +31,13 @@
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/config/gpu_crash_keys.h"
-#include "gpu/ipc/common/command_buffer_mojom_traits.h"
 #include "gpu/ipc/common/command_buffer_trace_utils.h"
-#include "gpu/ipc/common/constants_mojom_traits.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "ipc/ipc_mojo_bootstrap.h"
-#include "mojo/public/cpp/bindings/enum_traits.h"
 #include "third_party/perfetto/include/perfetto/tracing/track_event_args.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
@@ -108,20 +105,11 @@ bool IsStateful(const mojom::ContextCreationAttribs& attribs) {
     case mojom::ContextCreationAttribs::Tag::kWebgpu:
       return true;
     case mojom::ContextCreationAttribs::Tag::kGles:
-      return attribs.get_gles()->context_type ==
-                 mojom::ContextType::kWebGL1 ||
-             attribs.get_gles()->context_type == mojom::ContextType::kWebGL2;
+      return attribs.get_gles()->context_type == CONTEXT_TYPE_WEBGL1 ||
+             attribs.get_gles()->context_type == CONTEXT_TYPE_WEBGL2;
     case mojom::ContextCreationAttribs::Tag::kRaster:
       return false;
   }
-}
-
-gpu::mojom::CommandBufferStatePtr ToMojomCommandBufferState(
-    const gpu::CommandBuffer::State& state) {
-  gpu::mojom::CommandBufferStatePtr output;
-  CHECK(gpu::mojom::CommandBufferState::DeserializeFromMessage(
-      gpu::mojom::CommandBufferState::SerializeAsMessage(&state), &output));
-  return output;
 }
 
 }  // namespace
@@ -404,12 +392,7 @@ void CommandBufferStub::OnParseError() {
   TRACE_EVENT0("gpu", "CommandBufferStub::OnParseError");
   DCHECK(command_buffer_.get());
   gpu::CommandBuffer::State state = command_buffer_->GetState();
-  client_->OnDestroyed(
-      mojo::EnumTraits<gpu::mojom::ContextLostReason,
-                       gpu::error::ContextLostReason>::
-          ToMojom(state.context_lost_reason),
-      mojo::EnumTraits<gpu::mojom::Error, gpu::error::Error>::ToMojom(
-          state.error));
+  client_->OnDestroyed(state.context_lost_reason, state.error);
 
   // Tell the browser about this context loss as well, so it can
   // determine whether client APIs like WebGL need to be immediately
@@ -603,7 +586,7 @@ void CommandBufferStub::SignalSyncToken(const SyncToken& sync_token,
 void CommandBufferStub::OnSignalAck(uint32_t id) {
   gpu::CommandBuffer::State state = command_buffer_->GetState();
   ReportState();
-  client_->OnSignalAck(id, ToMojomCommandBufferState(state));
+  client_->OnSignalAck(id, state);
 }
 
 void CommandBufferStub::SignalQuery(uint32_t query_id, uint32_t id) {

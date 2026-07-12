@@ -30,6 +30,7 @@
 
 
 
+#include "gpu/ipc/common/shared_image_capabilities_mojom_traits.h"
 
 
 

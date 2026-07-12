@@ -295,7 +295,7 @@ enum class SchedulingPriority : int32_t {
   kMaxValue = 2,
 };
 
- std::ostream& operator<<(std::ostream& os, SchedulingPriority value);
+GPU_EXPORT std::ostream& operator<<(std::ostream& os, SchedulingPriority value);
 inline bool IsKnownEnumValue(SchedulingPriority value) {
   return internal::SchedulingPriority_Data::IsKnownValue(
       static_cast<int32_t>(value));
@@ -389,10 +389,6 @@ class GLESCreationAttribsDataView {
     return mojo::internal::Deserialize<::gl::mojom::GpuPreference>(
         data_value, output);
   }
-  ::gl::mojom::GpuPreference gpu_preference() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gl::mojom::GpuPreference>(data_->gpu_preference));
-  }
   bool fail_if_major_perf_caveat() const {
     return data_->fail_if_major_perf_caveat;
   }
@@ -401,10 +397,6 @@ class GLESCreationAttribsDataView {
     auto data_value = data_->context_type;
     return mojo::internal::Deserialize<::gpu::mojom::ContextType>(
         data_value, output);
-  }
-  ::gpu::mojom::ContextType context_type() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::ContextType>(data_->context_type));
   }
  private:
   internal::GLESCreationAttribs_Data* data_ = nullptr;
@@ -444,10 +436,6 @@ class CreateCommandBufferParamsDataView {
     auto data_value = data_->stream_priority;
     return mojo::internal::Deserialize<::gpu::mojom::SchedulingPriority>(
         data_value, output);
-  }
-  SchedulingPriority stream_priority() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::SchedulingPriority>(data_->stream_priority));
   }
   inline void GetAttribsDataView(
       ContextCreationAttribsDataView* output);
@@ -510,19 +498,11 @@ class CommandBufferStateDataView {
     return mojo::internal::Deserialize<::gpu::mojom::Error>(
         data_value, output);
   }
-  ::gpu::mojom::Error error() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::Error>(data_->error));
-  }
   template <typename UserType>
   [[nodiscard]] bool ReadContextLostReason(UserType* output) const {
     auto data_value = data_->context_lost_reason;
     return mojo::internal::Deserialize<::gpu::mojom::ContextLostReason>(
         data_value, output);
-  }
-  ::gpu::mojom::ContextLostReason context_lost_reason() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gpu::mojom::ContextLostReason>(data_->context_lost_reason));
   }
   uint32_t generation() const {
     return data_->generation;

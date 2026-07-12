@@ -23,10 +23,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/context_result.h"
-#include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/service/isolation_key_provider.h"
-#include "gpu/config/gpu_feature_info.h"
-#include "gpu/config/gpu_info.h"
 #include "gpu/ipc/common/gpu_channel.mojom.h"
 #include "gpu/ipc/common/gpu_disk_cache_type.h"
 #include "gpu/ipc/service/command_buffer_stub.h"
@@ -45,9 +42,7 @@ class WaitableEvent;
 }
 
 namespace gpu {
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
 class DCOMPTexture;
-#endif
 class FenceSyncReleaseDelegate;
 class GpuChannelManager;
 class GpuChannelMessageFilter;
@@ -187,7 +182,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
   const CommandBufferStub* GetOneStub() const;
 #endif
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   bool CreateDCOMPTexture(
       int32_t route_id,
       mojo::PendingAssociatedReceiver<mojom::DCOMPTexture> receiver);
@@ -195,7 +190,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
   // Called by DCOMPTexture to remove the GpuChannel's reference to the
   // DCOMPTexture.
   void DestroyDCOMPTexture(int32_t route_id);
-#endif  // BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif  // BUILDFLAG(IS_WIN)
 
   SharedImageStub* shared_image_stub() const {
     return shared_image_stub_.get();
@@ -303,7 +298,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
   const bool is_gpu_host_;
   const bool enable_extra_handles_validation_;
 
-#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(IS_WIN)
   // Set of active DCOMPTextures.
   base::flat_map<int32_t, scoped_refptr<DCOMPTexture>> dcomp_textures_;
 #endif
